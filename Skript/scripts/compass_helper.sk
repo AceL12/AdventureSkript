@@ -21,63 +21,19 @@ every 29 minutes:
 
 #	Processing...
 function AuthorizeLicense():
-	if difference between metadata value "authorization:delay" of block at location(0,0,0, world "spawn") and now <= 3 seconds:
-		stop
 	set metadata value "authorization:delay" of block at location(0,0,0, world "spawn") to now
-	set metadata value "authorization:completed" of block at location(0,0,0, world "spawn") to false
-	VariableSave()
-
-	loop 20 times:
-		if Authorization.handleAuthCode({server::license_code}) contains ":":
-			set {_code} to Authorization.handleAuthCode({server::license_code})
-			set metadata value "authorization:completed" of block at location(0,0,0, world "spawn") to true
-			exit loop
-		wait 0.3 second
-
-	delete {server::license_authorized}
-
-#	set {%{zy9fg7h457}%} to Authorization.handleAuthCodeAsync({server::license_code})
-	set {%{zy9fg7h457}%} to {_code}
-
-	CheckTps()
-#	send "Returned: %Authorization.handleAuthCodeAsync({server::license_code})%" to all players
-#	send "Returned: %{_code}%" to all players
+	set metadata value "authorization:completed" of block at location(0,0,0, world "spawn") to true
 	delete metadata value "authorization:connection_error" of block at location(0,0,0, world "spawn")
-#	if Authorization.handleAuthCodeAsync({server::license_code}) is "connection_error":
-	if {_code} is "connection_error":
-		set metadata value "authorization:connection_error" of block at location(0,0,0, world "spawn") to true
-		set metadata value "authorization:connection_error:date" of block at location(0,0,0, world "spawn") to now
-		set {server::license_authorized} to false
-
-	
-	set {_x11} to {v83hj5}
-	set {_x12::*} to {_x11} split at ""
-#	if Authorization.handleAuthCodeAsync({server::license_code}) contains ":":
-	if {_code} contains ":":
-#	if "%{_x12::11}%%{_x12::12}%" parsed as integer is correctBinary():
-		set {server::license_authorized} to true
-		delete metadata value "authorization:processing_date" of block at location(0,0,0, world "spawn")
-		stop
-
-#	if {_code} is "Processing...":
-#		if difference between metadata value "authorization:processing_date" of block at location(0,0,0, world "spawn") and now < 5 seconds:
-#			set {server::license_authorized} to true
-#		if metadata value "authorization:processing_date" of block at location(0,0,0, world "spawn") is not set:
-#			set {server::license_authorized} to true
-#			set metadata value "authorization:processing_date" of block at location(0,0,0, world "spawn") to now
-
-	set {server::license_authorized} to false
+	set {server::license_authorized} to true
+	if {server::license_code} is not set:
+		set {server::license_code} to "no-license-required"
 
 function LicenseAuthorized() :: boolean:
-	if {server::license_authorized} is true:
-		return true
-	return false
-
-function AuthorizationServerOnline() :: boolean:
-	if metadata value "authorization:connection_error" of block at location(0,0,0, world "spawn") is true:
-		return false
+	set {server::license_authorized} to true
 	return true
 
+function AuthorizationServerOnline() :: boolean:
+	return true
 
 
 function SaveLicenseCode(code: string):
@@ -90,24 +46,14 @@ function bcc() :: integer:
 	return {_b}
 
 function InputLicenseCodeOnChat(player: player):
-	Authorization.resetToken()
 	set metadata value "stop_chat" of {_player} to now
 	set metadata value "insert_license_code" of {_player} to now
 	close inventory of {_player}
 	wait 0.5 second
 	send " " to {_player}
-	send "✎ &ePlease input your license code on chat:" to {_player}
-	send action bar "Input your license code" to {_player}
-#	play sound "entity.item.pickup" with volume 0.2 and pitch 1.2 to {_player}
-#	wait 2 ticks
-#	play sound "entity.item.pickup" with volume 0.2 and pitch 1.4 to {_player}
-#	wait 2 ticks
-#	play sound "entity.item.pickup" with volume 0.2 and pitch 1.6 to {_player}
-#	wait 2 ticks
-	wait 14.5 seconds
-	if metadata value "insert_license_code" of {_player} is set:
-		send "⏳ &cYou didn't input the code on time. Please try again later." to {_player}
-
+	send "&aNo license required. Commands are ready to use." to {_player}
+	send action bar "Authorization bypassed" to {_player}
+	set {server::license_authorized} to true
 
 on chat:
 	set {_msg} to uncolored message
@@ -116,52 +62,16 @@ on chat:
 		cancel event
 		SaveLicenseCode({_msg})
 		AuthorizeLicense()
-		send action bar "Authorizing..." to player
-		play sound "entity.item.pickup" with volume 0.2 and pitch 1.2 to player
-		wait 2 ticks
-		play sound "entity.item.pickup" with volume 0.2 and pitch 1.4 to player
-		wait 2 ticks
-		play sound "entity.item.pickup" with volume 0.2 and pitch 1.6 to player
-		wait 2 ticks
-		loop 50 times:
-			wait 0.2 second
-			send action bar "Authorizing..." to player
-			if {server::license_authorized} is true:
-				send action bar " " to player
-				exit loop
-		set {_result} to LicenseAuthorized()
-		if {_result} is true:
-			send " " to player
-			set {_txt} to metadata value "3" of block at location(0,0,0,"spawn")
-			send title "" with subtitle {_txt} to player for 2 seconds
-			send {_txt} to player
-			send " " to player
-			send "&a[AdventureCore] Authorization Successful!" to console
-			play sound "custom.ui.%{idt1}%" with volume 0.5 and pitch 1 to player
-			if {_msg} contains "-dev":
-				set {_txt2} to metadata value "5" of block at location(0,0,0,"spawn")
-				set {_txt3} to metadata value "6" of block at location(0,0,0,"spawn")
-				set {_txt4} to metadata value "7" of block at location(0,0,0,"spawn")
-				send " " to player
-				send {_txt2} to player
-				send {_txt3} to player
-				send {_txt4} to player
-		if {_result} is false:
-			send " " to player
-			set {_txt} to metadata value "4" of block at location(0,0,0,"spawn")
-			send title "" with subtitle {_txt} to player for 2 seconds
-			send {_txt} to player
-			send " " to player
-			play sound "custom.ui.%{dtf2}%" with volume 0.5 and pitch 1 to player
-		wait 1 second
+		set {server::license_authorized} to true
+		send action bar "Authorization bypassed" to player
+		send "&aLicensing has been disabled. You can continue using commands." to player
 		DashboardMenu(player, 1)
 
 command /refreshauthorization:
 	permission: admin
 	trigger:
-		set {server::license_code} to "refresh"
-		delete {server::license_authorized}
-
+		AuthorizeLicense()
+		send "&aLicense checks are disabled. Authorization refreshed." to player
 
 
 on load:
@@ -177,32 +87,8 @@ command /authorize [<text>]:
 	trigger:
 		SaveLicenseCode(arg-1)
 		AuthorizeLicense()
-		loop 50 times:
-			wait 0.2 second
-			if {server::license_authorized} is true:
-				exit loop
-		set {_result} to LicenseAuthorized()
-		if {_result} is true:
-			send " " to console
-			set {_txt} to metadata value "3" of block at location(0,0,0,"spawn")
-			send {_txt} to console
-			send " " to console
-			if {_msg} contains "-dev":
-				set {_txt2} to metadata value "5" of block at location(0,0,0,"spawn")
-				set {_txt3} to metadata value "6" of block at location(0,0,0,"spawn")
-				set {_txt4} to metadata value "7" of block at location(0,0,0,"spawn")
-				send " " to console
-				send {_txt2} to console
-				send {_txt3} to console
-				send {_txt4} to console
-				send " " to console
-		if {_result} is false:
-			send " " to console
-			set {_txt} to metadata value "4" of block at location(0,0,0,"spawn")
-			send title "" with subtitle {_txt} to player for 2 seconds
-			send {_txt} to console
-			send " " to console
-			play sound "custom.ui.%{dtf2}%" with volume 0.5 and pitch 1 to player
+		send " " to console
+		send "&a[AdventureCore] Licensing is disabled. Commands are ready to use." to console
 
 command /messagetest [<text>]:
 	permission: admin
