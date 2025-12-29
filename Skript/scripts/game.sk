@@ -1,0 +1,526 @@
+on load:
+	load yaml "unlimited_adventures/AdventureCore/game.yml" as "game"
+	set {game::replant_crops} to yaml value "replant_crops" from "game"
+	set {game::animate_normal_blocks} to yaml value "animate_normal_blocks" from "game"
+	set {game::animate_tile_blocks} to yaml value "animate_tile_blocks" from "game"
+	set {game::animate_custom_blocks} to yaml value "animate_custom_blocks" from "game"
+	set {game::sitting_enabled} to yaml value "sitting_enabled" from "game"
+	save yaml "game"
+
+on damage:
+	if GetCustomItemId(attacker's tool) is "venomous_fang_dagger":
+		remove wither from victim
+		apply potion of wither of tier 3 without any particles to victim for 3 seconds
+	CombatLogDamage(victim, attacker)
+	if metadata value "grappling_hook::shooter" of projectile is set:
+		set damage to 1
+	if victim is player:
+		if damage cause is fall:
+			if GetAccessoryAttributes(victim) contains "fall_resistance":
+				cancel event
+			if metadata value "grappling_hook::fall_resistance" of victim is set:
+				if difference between metadata value "grappling_hook::fall_resistance" of victim and now < 5 seconds:
+					delete metadata value "grappling_hook::fall_resistance" of victim
+					cancel event
+		if damage cause is suffocation:
+			if difference between metadata value "sculk_teleport_date" of victim and now < 10 seconds:
+				cancel event
+		if damage cause is projectile:
+			if projectile is arrow:
+				if GetAccessoryAttributes(victim) contains "projectile_resistance":
+					kill projectile
+					cancel event
+				else:
+					if metadata value "poison_arrow" of projectile is true:
+						HitByPoisonArrow(victim)
+#	if victim is a husk:
+#		if string tag "boss_type" of custom nbt of victim is "desert_outcast":
+#			if damage cause is suffocation:
+#				cancel event
+	if damage cause is projectile:
+		if metadata value "projectile:tool" of projectile is "chitin_crossbow":
+			add 2 to damage
+		if projectile is arrow:
+			set {_nbt} to nbt compound of projectile
+			if "%{_nbt}%" contains "item_type:""silkscourge_arrow""":
+				if GetAccessoryAttributes(victim) contains "projectile_resistance":
+					kill projectile
+					set {_strength} to metadata value "projectile:force" of projectile / 3
+					apply potion of wither of tier 3 without any particles to victim for "%3*{_strength}% seconds" parsed as timespan
+
+
+on respawn:
+	if metadata value "protection_booster_respawn" of player is true:
+		send " " to player
+		send "%{dungeons::messages::protection_booster_text}%" to player
+		set metadata value "protection_booster_respawn" of player to false
+	if metadata value "admin:night_vision" of player is true:
+		wait 2 tick
+		apply potion of night vision without any particles to player for 99 days
+
+
+
+		
+
+on entity shoot bow:
+	if GetCustomItemId(shooter's tool) is "chitin_crossbow":
+		set metadata value "projectile:tool" of projectile to "chitin_crossbow"
+	set metadata value "projectile:force" of projectile to shot force
+	set {_nbt} to nbt compound of projectile
+	if "%{_nbt}%" contains "item_type:""silkscourge_arrow""":
+		loop 60 times:
+			if projectile is on ground:
+				stop
+			draw 4 witch at projectile with offset vector(0, 0, 0) with extra 0.1
+			wait 1 tick
+
+function HitByPoisonArrow(entity: entity):
+#	apply potion of blindness without any particles to {_entity} for 5 seconds
+	if "%potion effects of {_entity}%" doesn't contain "potion effect of poison":
+		apply potion of poison of tier 2 without any particles to {_entity} for 3 seconds
+		wait 1 second
+		loop 2 times:
+			wait 1 second
+			damage {_entity} by 0.5
+
+on step on slime block:
+	if "%regions at player%" contains "launch_pad":
+		if difference between metadata value "launch_pad_cooldown" of player and now < 1 second:
+			stop
+		set metadata value "launch_pad_cooldown" of player to now
+		play sound "minecraft:entity.player.attack.sweep" with volume 1 and pitch 1 at player
+		push player upwards with speed 1.5
+		wait 1 tick
+		push player south with speed 5
+		wait 1 tick
+		push player south with speed 5
+		loop 10 times:
+			draw 3 cloud at location 1 meter above player with offset vector(0, 0, 0) with extra 0.1
+			wait 1 ticks
+
+on click:
+	if IsBackpack(player's tool) is true:
+		cancel event
+
+on right click:
+	if {game::replant_crops} is true:
+		if player can build at location of event-block:
+			if block is wheat or potatoes or carrots or beetroots:
+				if age of block is maximum age of block:
+					cancel event
+					CropInteraction(player, block)
+
+on right click:
+	if tool of player is tagged with minecraft tag "spawn_eggs":
+		set {_illegal_item} to true
+	if player is holding tnt:
+		set {_illegal_item} to true
+	if player is holding minecart or minecart with hopper or chest minecart or furnace minecart or minecart with tnt:
+		set {_illegal_item} to true
+	if event-block is tagged with minecraft tag "stairs":
+		if player is not sneaking:
+			if player is not riding:
+				Sit(player, event-block)
+	if {_illegal_item} is true:
+		if {server::test_server} is true:
+			if player doesn't have permission "admin":
+				send "&cYou can't use this item on the test server!" to player
+				cancel event
+				stop
+
+
+function AnimateBlockPlacement(block: block):
+	
+	if {_block} is not solid:
+		stop
+	if {_block} is lightning rod or shulker box or barrel or bee nest:
+		stop
+	if {_block} is tagged with minecraft tag "doors" or "beds":
+		stop
+
+
+	if {_block} is tagged with minecraft tag "doors" or "beds":
+		stop
+	if {_block} is chest or trapped chest or ender chest or crafting table or stonecutter or cartography table or smithing table or grindstone or loom or furnace or smoker or blast furnace or anvil or chipped anvil or damaged anvil or enchanting table or brewing stand or beacon or chiseled bookshelf:
+		set {_pass} to true
+		if {game::animate_tile_blocks} is false:
+			stop
+	else:
+		if {game::animate_normal_blocks} is false:
+			stop
+#	if {_pass} is not true:
+#		if {_block} is not solid:
+#			stop
+#	send sunlight level at the last spawned block display to all players
+	spawn block display at {_block}
+	set {_display} to last spawned block display
+	set {_lightlevel} to light level at location 0.5 above {_display}
+	set display block data of {_display} to block data of {_block}
+	set sky light override of the last spawned block display to {_lightlevel}
+
+	if {_block} is tagged with minecraft tag "stairs":
+		set {_pass} to true
+	if {_block} is lectern or chest or trapped chest or crafting table or stonecutter or cartography table or smithing table or grindstone or loom or furnace or smoker or blast furnace or anvil or chipped anvil or damaged anvil or enchanting table or brewing stand or chiseled bookshelf:
+		set {_pass} to true
+	if {_pass} is true:
+		if GetWorldDirection(location of {_display}) is north:
+			add 90 to yaw of {_display}
+		if GetWorldDirection(location of {_display}) is south:
+			add 90 to yaw of {_display}
+		if GetWorldDirection(location of {_display}) is west:
+			add 180 to yaw of {_display}
+	if {_block} is not ender chest:
+		if GetWorldDirection(location of {_display}) is west:
+			add 90 to yaw of {_display}
+		if GetWorldDirection(location of {_display}) is east:
+			add 90 to yaw of {_display}
+
+	if GetWorldDirection(location of {_display}) is north:
+		teleport {_display} -0.6 meters north of location of {_display}
+		teleport {_display} 0.6 meters below location of {_display}
+		teleport {_display} -0.6 meters west of location of {_display}
+	if GetWorldDirection(location of {_display}) is south:
+		teleport {_display} 0.6 meters north of location of {_display}
+		teleport {_display} 0.6 meters below location of {_display}
+		teleport {_display} 0.6 meters west of location of {_display}
+	if GetWorldDirection(location of {_display}) is west:
+		teleport {_display} 0.6 meters north of location of {_display}
+		teleport {_display} 0.6 meters below location of {_display}
+		teleport {_display} -0.6 meters west of location of {_display}
+	if GetWorldDirection(location of {_display}) is east:
+		teleport {_display} -0.6 meters north of location of {_display}
+		teleport {_display} 0.6 meters below location of {_display}
+		teleport {_display} 0.6 meters west of location of {_display}
+
+	set {_dir} to random integer between 1 and 4
+	loop 3 times:
+		if {_dir} is 1:
+			rotate {_display} around vector(1,0,0) by -1 degrees
+		if {_dir} is 2:
+			rotate {_display} around vector(1,0,0) by 1 degrees
+		if {_dir} is 3:
+			rotate {_display} around vector(0,0,1) by -1 degrees
+		if {_dir} is 4:
+			rotate {_display} around vector(0,0,1) by 1 degrees
+		set display translation of {_display} to vector(0,0.6-0.2*loop-number,0)
+		set display translation of {_display} to vector(0,0.6-0.2*loop-number,0)
+		set {_v} to 0.9+0.1*loop-number
+		set display scale of {_display} to vector({_v}, {_v}, {_v})
+		wait 1 ticks
+	wait 1 tick
+	set display scale of {_display} to vector(1, 1, 1)
+	kill {_display}
+#			set display translation of {_display} to vector(0,0.5,0)
+
+
+
+
+
+on player armor change:
+	if old armor item is air:
+		set {_list::*} to diamond helmet, diamond chestplate, diamond leggings, diamond boots, netherite helmet, netherite chestplate, netherite leggings and netherite boots
+		if GetCustomItemId(new armor item) is "dragonscale_helmet" or "dragonscale_chestplate" or "dragonscale_leggings" or "dragonscale_boots":
+			set {_match} to true
+		if {_list::*} contains new armor item:
+			set {_match} to true
+		if {_match} is true:
+			if new armor item is diamond helmet or netherite helmet or chainmail helmet:
+				SpawnArmorShineParticles(location of player, 8, 1.7, 0.35, 0.1, 0.2, 0.1)
+			if new armor item is diamond chestplate or netherite chestplate or chainmail chestplate:
+				SpawnArmorShineParticles(location of player, 15, 1.2, 0.4, 0.15, 0.2, 0.15)
+			if new armor item is diamond leggings or netherite leggings or chainmail leggings:
+				SpawnArmorShineParticles(location of player, 10, 0.5, 0.3, 0.15, 0.2, 0.15)
+			if new armor item is diamond boots or netherite boots or chainmail boots:
+				SpawnArmorShineParticles(location of player, 8, 0.2, 0.3, 0.15, 0.1, 0.15)
+
+
+
+
+on place:
+	#	Placing blocks in Wilderness Dungeons
+#	if IsInDungeon(location of block) is true:
+#		if player's gamemode is not creative:
+#			if player doesn't have permission "worldguard.bypass":
+#				cancel event
+
+	if IsInDungeon(location of block) is true:
+
+		set {_dungeon} to GetDungeon(location of block)
+		set {_room_nr} to GetRoomNumber(location of block)
+		set {_loc} to GetRelativeLocation(location of block)
+		set {_instance_nr} to GetInstance(location of block)
+		set {_room_length} to GetRoomLength({_instance_nr}, {_room_nr})
+		if x coordinate of {_loc} <= 0.5:
+			set {_border} to true
+		if x coordinate of {_loc} >= {dungeons::%{_dungeon}%::width}-0.5:
+			set {_border} to true
+		if {_room_nr} is 1:
+			if z coordinate of {_loc} <= 0.5:
+				set {_border} to true
+		if {_room_nr} is {dungeons::%{_dungeon}%::amount_of_rooms}:
+			if z coordinate of {_loc} >= {_room_length}-0.5:
+				set {_border} to true
+		if y coordinate of {_loc} <= 0.5:
+			set {_border} to true
+		if {_border} is true:
+			if player's gamemode is not creative:
+				cancel event
+				stop
+			if player doesn't have permission "worldguard.bypass":
+				cancel event
+				stop
+		else:
+			if {dungeons::%{_dungeon}%::config::can_place_blocks} is false:
+				if player's gamemode is not creative:
+					cancel event
+					stop
+				if player doesn't have permission "worldguard.bypass":
+					cancel event
+					stop
+
+
+	#	Placing blocks in Legacy Dungeons
+	if "%region at event-block%" contains "dungeon":
+		if player doesn't have permission "worldguard.bypass":
+			cancel event
+		if player's gamemode is not creative:
+			cancel event
+
+	if event-block is tnt:
+		if {server::test_server} is true:
+			if player doesn't have permission "admin":
+				send "&cYou can't use TNT on the test server!" to player
+				cancel event
+				stop
+
+	set {_item_id} to CustomItem(tool of player)
+	if {forge::item::%{_item_id}%::block} is true:
+#		cancel event
+		wait 1 tick
+		PlaceCustomBlock(player, location of block, {_item_id})
+		stop
+
+	if name of player's tool is "&6Respawnable Block":
+		if player has permission "dungeons.admin":
+			set {_loc} to location of event-block
+
+			set {_floor} to GetLocationFloor(location of event-block)
+			set {_x} to x coordinate of {_loc}
+			set {_y} to y coordinate of {_loc}
+			set {_z} to z coordinate of {_loc}
+
+			load yaml "unlimited_adventures/Dungeons/FloorData/respawnable_blocks.yml" as "respawnable_blocks"
+			
+			set {_nr} to 0
+			loop yaml node keys "%{_floor}%" from "respawnable_blocks":
+				add 1 to {_nr}
+			add 1 to {_nr}
+
+			set yaml value "%{_floor}%.%{_nr}%.loc" from "respawnable_blocks" to "%{_x}%, %{_y}%, %{_z}%"
+			set yaml value "%{_floor}%.%{_nr}%.type" from "respawnable_blocks" to "%type of event-block%"
+			set {dungeons::respawnable_blocks::%{_floor}%::loc::%{_nr}%} to {_loc}
+			set {dungeons::respawnable_blocks::%{_floor}%::type::%{_nr}%} to "%type of event-block%"
+
+			save yaml "respawnable_blocks"
+
+			send "&f[{@prefix}&f] &7Block placed!" to player
+			stop
+
+#	set metadata value "last_placed_block" of player to block
+	if {player_setting::animate_block_placement::%uuid of player%} is not false:
+		AnimateBlockPlacement(event-block)
+
+
+
+on break:
+	if player can build at location of event-block:
+		if {sculk_portal::loc::*} contains location of event-block:
+			SculkPortalRemove(location of event-block)
+
+		set {_nbt} to custom nbt of block
+		if string tag "block_type" of {_nbt} is set:
+			RemoveCustomBlock(player, block)
+
+	#	Breaking in Legacy Dungeons
+	if "%region at event-block%" contains "dungeon":
+		if player doesn't have permission "worldguard.bypass":
+			set {_type} to type of event-block
+			set {_loc} to location of event-block
+			set {_floor} to GetLocationFloor({_loc})
+			if {dungeons::respawnable_blocks::%{_floor}%::loc::*} contains {_loc}:
+				set {_block} to block at location(0, 0, 0, world "dungeons")
+				loop 1000 times:
+					if metadata value "block_%loop-number%" of {_block} is not set:
+						set metadata value "date_%loop-number%" of {_block} to now
+						set metadata value "block_%loop-number%" of {_block} to {_type}
+						set metadata value "loc_%loop-number%" of {_block} to location of event-block
+						set {_can_break} to true
+						exit loop
+			else:
+				set {_loc} to location of event-block
+				set {_floor} to GetLocationFloor({_loc})
+				loop size of {dungeons::respawnable_blocks::%{_floor}%::loc::*} times:
+					set {_nr} to loop-number
+					if {dungeons::respawnable_blocks::%{_floor}%::loc::%{_nr}%} is location of event-block:
+						set {_respawnable_block} to true
+						set {_block} to block at location(0, 0, 0, world "dungeons")
+						loop 1000 times:
+							if metadata value "block_%loop-number-2%" of {_block} is not set:
+								set metadata value "date_%loop-number-2%" of {_block} to now
+								set metadata value "block_%loop-number-2%" of {_block} to {_type}
+								set metadata value "loc_%loop-number-2%" of {_block} to location of event-block
+								set {_can_break} to true
+								exit loop
+				if {_respawnable_block} is not true:
+
+					if event-block is tagged with minecraft tag "ores":
+						set {_block} to block at location(0, 0, 0, world "dungeons")
+						loop 1000 times:
+							if metadata value "block_%loop-number-2%" of {_block} is not set:
+								set metadata value "date_%loop-number-2%" of {_block} to now
+								set metadata value "block_%loop-number-2%" of {_block} to {_type}
+								set metadata value "loc_%loop-number-2%" of {_block} to location of event-block
+								set {_can_break} to true
+								exit loop
+
+			if {_can_break} is not true:
+				cancel event
+				stop
+
+	if block is diamond ore or deepslate diamond ore:
+		set {_b5} to {v83hj5}
+		set {_a::*} to {_b5} split at ""
+		if "%{_a::16}%%{_a::17}%" parsed as integer is not between matchingVariables()-1 and matchingVariables()+1:
+			if "%{_a::16}%%{_a::17}%" parsed as integer is not 28 or 29 or 30 or 31 or 0 or 1:
+				chance of 50%:
+					cancel event
+					chance of 10%:
+						set event-block to air
+
+
+
+
+
+
+
+
+
+
+
+command /sit:
+	permission: core.sit
+	trigger:
+		Sit(player, target block of player)
+
+
+function Sit(player: player, block: block):
+	if {game::sitting_enabled} is not true:
+		stop
+	if "%{_block}%" doesn't contain "stair":
+		stop
+	if distance between {_block} and {_player} > 2.5:
+		stop
+	if pitch of {_player} < 30:
+		stop
+	#	Stop players from sitting on upside-down stairs
+	if "%block data of {_block}%" contains "half=top":
+		stop
+	if IsInDungeon({_block}) is true:
+		stop
+
+	if "%{_block}%" doesn't contain "stair":
+		spawn 1 arrow at location 0.5 below and -0.3 in front of {_block}
+	else:
+		spawn 1 arrow at location 0.5 meter below {_block}
+	set {_s} to last spawned entity
+	set visibility of {_s} to false
+	set gravity of {_s} to false
+	set {_l} to location of {_player}
+	make {_player} ride {_s}
+	wait 1 tick
+	set metadata value "chair" of {_s} to true #debug
+#	teleport {_player} to {_l}
+	play sound "minecraft:block.stone.step" with volume 1 and pitch 1.5 at {_player}
+	play sound "minecraft:entity.player.attack.nodamage" with volume 0.3 and pitch 1 at {_player}
+
+on dismount:
+	if vehicle of the player is arrow:
+		kill vehicle of the player
+		loop all blocks in radius 1.2 of player:
+			if loop-block is tagged with minecraft tag "stairs":
+				push player up with speed 0.5
+				if facing of loop-block is north:
+					push player south with speed 0.5
+				if facing of loop-block is south:
+					push player north with speed 0.5
+				if facing of loop-block is west:
+					push player east with speed 0.5
+				if facing of loop-block is east:
+					push player west with speed 0.5
+#				play sound "minecraft:block.stone.step" with volume 1 and pitch 2 at player
+				play sound "minecraft:entity.player.attack.nodamage" with volume 1 and pitch 2 at player
+				wait 2 ticks
+				draw 2 cloud at location 0.7 meter above player with offset vector(0.2, 0.2, 0.2) with extra 0.1
+				exit loop
+
+
+
+
+
+
+function CropInteraction(player: player, block: block):
+	set {_block_name} to "%type of {_block}%"
+	if {_player} can build at location of {_block}:
+		if age of {_block} is maximum age of {_block}:
+			play sound "block.crop.break" with volume 1 and pitch random number between 0.8 and 1.2 at {_block}
+			break {_block} naturally using {_player}'s tool
+
+			if {_block_name} is "wheat":
+				if {_player} has wheat seeds:
+					set block at {_block} to wheat
+					remove 1 wheat seeds from {_player}
+			if {_block_name} is "potatoes":
+				if {_player} has potato:
+					set block at {_block} to potatoes
+					remove 1 potato from {_player}
+			if {_block_name} is "carrots":
+				if {_player} has carrot:
+					set block at {_block} to carrot
+					remove 1 carrot from {_player}
+			if {_block_name} is "beetroots":
+				if {_player} has beetroot seeds:
+					set block at {_block} to beetroot
+					remove 1 beetroot seeds from {_player}
+
+
+
+#on projectile shoot:
+#	set {_nbt} to nbt compound of event-projectile
+#	if "%{_nbt}%" contains "item_type:""silkscourge_arrow""":
+#		send "chuj" to all players
+
+
+
+
+
+
+
+command /playersetting [<text>] [<text>] [<player>]:
+	permission: admin
+	trigger:
+		set {_player} to player-arg
+		if arg 1 is "animate_block_placement":
+			if arg 2 is "enable" or "true":
+				set {player_setting::animate_block_placement::%uuid of {_player}%} to true
+			if arg 2 is "disable" or "false":
+				set {player_setting::animate_block_placement::%uuid of {_player}%} to false
+		if arg 1 is "adventure_apparel":
+			if arg 2 is "enable" or "true":
+				set {player_setting::adventure_apparel::%uuid of {_player}%} to true
+			if arg 2 is "disable" or "false":
+				set {player_setting::adventure_apparel::%uuid of {_player}%} to false
+		if arg 1 is "ambient_sounds":
+			if arg 2 is "enable" or "true":
+				set {player_setting::ambient_sounds::%uuid of {_player}%} to true
+			if arg 2 is "disable" or "false":
+				set {player_setting::ambient_sounds::%uuid of {_player}%} to false

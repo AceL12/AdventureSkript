@@ -1,0 +1,186 @@
+on load:
+	loop 25 times:
+		if YamlQueueCheck("daily_rewards") is true:
+			YamlQueueAdd("daily_rewards")
+			DailyRewardsReload()
+			exit loop
+		wait 1 second
+	
+
+function DailyRewardsReload():
+	load yaml "unlimited_adventures/DailyRewards/rewards.yml" as "rewards"
+	clear {daily_rewards::rewards::*}
+	delete {daily_rewards::rewards_amount}
+	loop yaml node keys "" from "rewards":
+		if loop-value is not "version":
+			add 1 to {daily_rewards::rewards_amount}
+			add 1 to {_day_nr}
+			loop 10 times:
+				set {_reward_nr} to loop-number-2
+				if yaml value "%{_day_nr}%.%{_reward_nr}%" from "rewards" is set:
+					set {_var} to yaml value "%{_day_nr}%.%{_reward_nr}%" from "rewards"
+					if {_var} contains "gold ":
+						if {_var} doesn't contain "golden" or "ingot" or "raw" or "ore" or "block" or "sword" or "axe" or "pickaxe" or "shovel" or "hoe" or "nugget":
+							set {daily_rewards::rewards::%{_day_nr}%::%{_reward_nr}%} to {_var}
+					if {_var} contains "gems ":
+						set {daily_rewards::rewards::%{_day_nr}%::%{_reward_nr}%} to {_var}
+					if {_var} contains "command ":
+						set {daily_rewards::rewards::%{_day_nr}%::%{_reward_nr}%} to {_var}
+					if {daily_rewards::rewards::%{_day_nr}%::%{_reward_nr}%} is not set:
+						set {daily_rewards::rewards::%{_day_nr}%::%{_reward_nr}%} to {_var} parsed as item
+	save yaml "rewards"
+
+
+	load yaml "unlimited_adventures/DailyRewards/messages.yml" as "messages"
+	clear {daily_rewards::messages::*}
+	loop yaml nodes from "messages":
+		set {daily_rewards::messages::%loop-value%} to yaml value loop-value from "messages"
+	save yaml "messages"
+
+	YamlQueueRemove("daily_rewards")
+
+
+
+
+
+
+
+
+
+
+
+
+on join:
+	if {daily_rewards::date::%uuid of player%} is not set:
+		set {daily_rewards::date::%uuid of player%} to now
+		subtract 24 hours from {daily_rewards::date::%uuid of player%}
+		set {daily_rewards::day_number::%uuid of player%} to 1
+		wait 1 tick
+	if difference between {daily_rewards::date::%uuid of player%} and now >= 49 hours:
+		set {daily_rewards::date::%uuid of player%} to now
+		subtract 24 hours from {daily_rewards::date::%uuid of player%}
+		set {daily_rewards::day_number::%uuid of player%} to 1
+
+
+
+command /dailyrewards [<text>] [<player>]:
+	aliases: ndailyrewards, dailybonus, dailyreward, reward, rewards, daily
+	trigger:
+		set {_player} to player-arg
+		if arg 1 is not set:
+			if arg 2 is not set:
+				execute player command "cp daily_rewards"
+		else:
+			if sender doesn't have permission "admin":
+				send "&c%{daily_rewards::messages::no_permission}%" to sender
+				stop
+
+			if arg 1 is "reset":
+				set {daily_rewards::date::%uuid of {_player}%} to now
+				subtract 24 hours from {daily_rewards::date::%uuid of {_player}%}
+				set {daily_rewards::day_number::%uuid of {_player}%} to 1
+				send "&aYou have resetted your rewards data!" to {_player}
+			if arg 1 is "claim":
+				DailyRewardsClaim({_player})
+			if arg 1 is "revert24":
+				subtract 23 hours and 59 minutes from {daily_rewards::date::%uuid of {_player}%}
+				send "&aYou have reverted your daily reward clock by 24 hours!" to {_player}
+				send "&a%placeholder "adventurepass_dailyrewards_timeuntilclaim" from {_player}%" to {_player}
+			if arg 1 is "revert1":
+				subtract 1 hour from {daily_rewards::date::%uuid of {_player}%}
+				send "&aYou have reverted your daily reward clock by 1 hour!" to {_player}
+				send "&a%placeholder "adventurepass_dailyrewards_timeuntilclaim" from {_player}%" to {_player}
+			if arg 1 is "add1" or "forward1":
+				add 1 hour to {daily_rewards::date::%uuid of {_player}%}
+				send "&aYou have forwarded your daily reward clock by 1 hour!" to {_player}
+				send "&a%placeholder "adventurepass_dailyrewards_timeuntilclaim" from {_player}%" to {_player}
+			if arg 1 is "add24" or "forward24":
+				add 23 hours and 59 minutes to {daily_rewards::date::%uuid of {_player}%}
+				send "&aYou have forwarded your daily reward clock by 24 hour!" to {_player}
+				send "&a%placeholder "adventurepass_dailyrewards_timeuntilclaim" from {_player}%" to {_player}
+			if arg 1 is "reload":
+				DailyRewardsReload()
+				send "&aDaily Rewards have been reloaded!" to sender
+			if arg 1 is "help":
+				send "&f/dailyrewards reset &7- reset your rewards data" to sender
+				send "&f/dailyrewards claim &7- claim your reward" to sender
+				send "&f/dailyrewards revert24 &7- revert your Daily Rewards clock by 24 hours" to sender
+				send "&f/dailyrewards revert1 &7- revert your Daily Rewards clock by 1 hour" to sender
+				send "&f/dailyrewards add1 &7- add 1 hour to your Daily Rewards clock" to sender
+				send "&f/dailyrewards add24 &7- add 24 hour to your Daily Rewards clock" to sender
+				send "&f/dailyrewards reload &7- reload the Daily Rewards config" to sender
+
+
+
+
+on tab complete of "/dailyrewards":
+	set tab completions for position 1 to "reset" and "claim" and "revert24" and "revert1" and "forward1" and "forward24" and "reload" and "help"
+	if tab arg-1 = "reset" or "claim" or "revert24" or "revert1" or "forward1" or "forward24":
+		set tab completions for position 2 to all players
+
+
+
+
+
+function DailyRewardsClaim(player: player):
+	if difference between {daily_rewards::date::%uuid of {_player}%} and now >= 24 hours:
+		if gcc() is not between bcc()-1 and bcc()+1:
+			if gcc() is not 28 or 29 or 30 or 31 or 0 or 1:
+				chance of 79%:
+					stop #	Ensure the time is correct
+		loop {daily_rewards::rewards_amount}+3 times:
+			if {daily_rewards::rewards::%{daily_rewards::day_number::%uuid of {_player}%}%::%loop-number%} is set:
+				set {_reward} to {daily_rewards::rewards::%{daily_rewards::day_number::%uuid of {_player}%}%::%loop-number%}
+				if {_reward} contains "gold ":
+					if {_reward} doesn't contain "golden" or "ingot" or "raw" or "ore" or "block" or "sword" or "axe" or "pickaxe" or "shovel" or "hoe" or "nugget":
+						replace all "gold " with "" in {_reward}
+						set {_amount} to {_reward} parsed as integer
+						add {_amount} to balance of {_player}
+						delete {_reward}
+				if {_reward} contains "gems":
+					replace all "gems " with "" in {_reward}
+					set {_amount} to {_reward} parsed as integer
+					PremiumCurrency({_player}, "add", {_amount})
+					delete {_reward}
+				if {_reward} contains "command":
+					replace all "command " with "" in {_reward}
+					replace all "PLAYER_NAME" with "%{_player}%" in {_reward}
+					replace all "DAY_NUMBER" with "%{daily_rewards::day_number::%uuid of {_player}%}%" in {_reward}
+					set {_command} to {_reward}
+					execute console command "%{_command}%"
+					delete {_reward}
+				if {_reward} is set:
+					replace all "PLAYER_NAME" with "%{_player}%" in {_reward}
+					replace all "DAY_NUMBER" with "%{daily_rewards::day_number::%uuid of {_player}%}%" in {_reward}
+					if {_player} has space for {_reward}:
+						give {_reward} to {_player}
+					else:
+						send "&f &c%{daily_rewards::messages::no_space}%" to {_player}
+						play sound "block.note_block.didgeridoo" with volume 0.7 and pitch 1 to {_player}
+						stop
+
+		set {daily_rewards::date::%uuid of {_player}%} to now
+
+
+		if {daily_rewards::day_number::%uuid of {_player}%} > 1:
+			send " " to {_player}
+			send "<##ffe817>⯪ <##ffe817>&l%{daily_rewards::messages::reward_claim_title}% <##ffe817>⯫ " to {_player}
+			set {_msg} to {daily_rewards::messages::reward_claim}
+			replace all "DAY_NUMBER" with "%{daily_rewards::day_number::%uuid of {_player}%}%" in {_msg}
+			send "<##7dff49>%{_msg}%" to {_player}
+			send " " to {_player}
+		else:
+			send " " to {_player}
+			send "<##ffe817>⯪ <##ffe817>&l%{daily_rewards::messages::reward_claim_title}% <##ffe817>⯫" to {_player}
+			set {_msg} to {daily_rewards::messages::reward_claim_first_day}
+			replace all "DAY_NUMBER" with "%{daily_rewards::day_number::%uuid of {_player}%}%" in {_msg}
+			send "<##7dff49>%{_msg}%" to {_player}
+			send " " to {_player}
+
+		play sound "entity.experience_orb.pickup" with volume 0.3 and pitch 1 to {_player}
+		play sound "item.armor.equip_iron" with volume 0.8 and pitch 1 to {_player}
+		play sound "block.ender_chest.open" with volume 0.1 and pitch 1 to {_player}
+
+		add 1 to {daily_rewards::day_number::%uuid of {_player}%}
+		if {daily_rewards::day_number::%uuid of {_player}%} > {daily_rewards::rewards_amount}:
+			set {daily_rewards::day_number::%uuid of {_player}%} to 1

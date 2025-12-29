@@ -1,0 +1,268 @@
+on load:
+	RanksManagerReload()
+
+
+
+function RanksManagerReload():
+	load yaml "unlimited_adventures/AdventureCore/ranks.yml" as "config"
+#	load yaml "unlimited_adventures/RanksManager/messages.yml" as "messages"
+	if yaml value "version" from "config" is not set:
+		wait 1 tick
+		RanksManagerCreateConfigFile()
+#	if yaml value "version" from "messages" is not set:
+#		wait 1 tick
+#		RanksManagerCreateMessagesFile()
+
+	#	Ranks List
+	clear {ranks_manager::list::*}
+	clear {ranks_manager::unicode::*}
+	loop yaml node keys "ranks" from "config":
+		set {_rank} to loop-value
+		set {ranks_manager::list::%{_rank}%} to {_rank}
+		if yaml value "ranks.%{_rank}%" from "config" is not "":
+			set {ranks_manager::unicode::%{_rank}%} to yaml value "ranks.%{_rank}%" from "config"
+
+	#	Messages
+#	clear {ranks_manager::messages::*}
+#	loop yaml nodes from "messages":
+#		set {ranks_manager::messages::%loop-value%} to yaml value loop-value from "messages"
+
+
+	save yaml "config"
+#	save yaml "messages"
+
+
+
+function RanksManagerCreateConfigFile():
+	load yaml "unlimited_adventures/AdventureCore/ranks.yml" as "config"
+	
+	set yaml value "version" from "config" to 1
+	set the comments of yaml node "version" from "config" to "Please DO NOT change version number!"
+
+
+#	set yaml list "ranks" from "config" to "player" and "ultra" and "hero" and "legend" and "helper" and "moderator" and "admin" and "owner"
+	set yaml value "ranks.player" from "config" to ""
+	set yaml value "ranks.ultra" from "config" to ""
+	set yaml value "ranks.hero" from "config" to ""
+	set yaml value "ranks.legend" from "config" to ""
+	set yaml value "ranks.helper" from "config" to ""
+	set yaml value "ranks.moderator" from "config" to ""
+	set yaml value "ranks.admin" from "config" to ""
+	set yaml value "ranks.owner" from "config" to ""
+
+
+	save yaml "config"
+
+
+function RanksManagerCreateMessagesFile():
+	load yaml "unlimited_adventures/AdventureCore/ranks.yml" as "messages"
+
+	set yaml value "version" from "messages" to 1
+	set the comments of yaml node "version" from "messages" to "Please DO NOT change version number!"
+
+	set yaml value "test" from "messages" to "test"
+
+	save yaml "messages"
+
+
+
+
+
+command /setrank [<player>] [<text>] [<integer>] [<text>]:
+	permission: admin.setrank
+	trigger:
+		if arg 2 is set:
+			if arg 3 is set:
+				if arg 4 is set:
+					SetRank(player-arg,arg-2,sender, arg-3, arg-4)
+				else:
+					send "&f&f &fExample usage: /setrank NICKNAME 10 days" to sender
+			else:
+				SetRank(player-arg,arg-2,sender)
+		else:
+			set {_list} to "%{ranks_manager::list::*}%"
+			replace all ", " in {_list} with " "
+			replace all " and " in {_list} with ""
+			send "&f&f &fAvailable ranks: &f%{_list}%" to sender
+
+
+
+
+
+on tab complete of "/setrank":
+	set tab completions for position 1 to all players
+	set tab completions for position 2 to {ranks_manager::list::*}
+	set tab completions for position 4 to "minutes" and "hours" and "days" and "weeks" and "months"
+
+
+
+
+
+function GetRankDisplay(rank: string) :: string:
+	
+	if {ranks_manager::unicode::%{_rank}%} is set:
+		set {_display} to "&f%{ranks_manager::unicode::%{_rank}%}%"
+	else:
+		set {_display} to {_rank}
+
+	return {_display}
+
+
+
+
+
+function SetRank(player: player, rank: string, sender: player, duration: integer = 0, time_unit: string = "none"):
+	
+
+	if {_duration} is not 0:
+		set {_time} to {_duration}
+		if {_time_unit} is "m" or "min" or "minute" or "minutes":
+			set {_time_unit} to "minutes"
+		if {_time_unit} is "h" or "hour" or "hours":
+			set {_time_unit} to "hours"
+		if {_time_unit} is "d" or "day" or "days":
+			set {_time_unit} to "days"
+		if {_time_unit} is "w" or "week" or "weeks":
+			set {_time_unit} to "weeks"
+		if {_time_unit} is "mon" or "month" or "months":
+			set {_time_unit} to "months"
+		execute console command "/lp user %{_player}% parent addtemp %{_rank}% %{_time}%%{_time_unit}%"
+
+		send "&f &fYou have set &a%{_player}% &frank to %GetRankDisplay({_rank})% &ffor &e%{_time}% %{_time_unit}%" to {_sender}
+	else:
+		ClearRank({_player})
+		wait 2 tick
+
+		if {_rank} is "default" or "player" or "0":
+			set {_player}'s group to "default"
+		else:
+			if {ranks_manager::list::*} contains {_rank}:
+				set {_player}'s group to {_rank}
+
+		send "&f &fYou have set &a%{_player}% &frank to %GetRankDisplay({_rank})%" to {_sender}
+
+
+	play sound "minecraft:block.note_block.chime" with volume 1 and pitch 1 to {_sender}
+	if {_sender} is not {_player}:
+		send "&f &a%{_sender}% &fhas set your rank to %colored {_player}'s group%" to {_player}
+		play sound "minecraft:block.note_block.chime" with volume 1 and pitch 1 to {_player}
+
+
+
+function ClearRank(player: player):
+#	execute console command "/lp user %{_player}% parent clear"
+	clear group of {_player}
+
+
+
+
+
+
+
+
+
+
+
+
+
+command /buyrank [<player>] [<text>]:
+	permission: admin
+	trigger:
+		if arg 2 is set:
+			BuyRank(player-arg,arg-2)
+
+
+function BuyRank(player: player, rank: string):
+	ClearRank({_player})
+	wait 2 tick
+	if {_rank} is "default" or "player" or "0":
+		set {_player}'s group to "default"
+		set {_rank_display} to GetRankDisplay({_rank})
+	else:
+		if {ranks_manager::list::*} contains {_rank}:
+			set {_player}'s group to {_rank}
+			set {_rank_display} to GetRankDisplay({_rank})
+	
+	send " " to all players
+	set {_message} to random integer between 1 and 3
+	if {_message} is 1:
+		send "&d&lAmazing news!" to all players
+	if {_message} is 2:
+		send "&d&lLet's go!" to all players
+	if {_message} is 3:
+		send "&d&lThank you for the support!" to all players
+	send "&f &e%{_player}% &fhas bought the %{_rank_display}% &frank!" to all players
+	send " " to all players
+	
+	PremiumStoreChime({_player}, {_rank})
+
+
+
+
+function RankPurchaseParticle(name: string, player: player):
+	set {_loc} to location 4 meters in front of {_player}
+	add 1 to y coordinate of {_loc}
+	SpawnParticles("totem", {_loc}, 50)
+
+
+
+
+
+
+
+
+
+
+
+
+
+function PremiumStoreChime(player: player, product: string):
+	if {_product} is "ultra":
+		wait 2 tick
+		play sound "custom.purchase_complete" with volume 1 and pitch 1 to {_player}
+		RankPurchaseParticle("totem", {_player})
+		wait 5 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 5 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 4 tick
+		RankPurchaseParticle("totem", {_player})
+	
+	if {_product} is "hero":
+		wait 2 tick
+		play sound "custom.purchase_complete" with volume 1 and pitch 1 to {_player}
+		RankPurchaseParticle("totem", {_player})
+		wait 3 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 3 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 3 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 3 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 5 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 5 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 4 tick
+		RankPurchaseParticle("totem", {_player})
+	
+	if {_product} is "legend":
+		wait 2 tick
+		play sound "custom.purchase_complete" with volume 1 and pitch 1 to {_player}
+		RankPurchaseParticle("totem", {_player})
+		wait 5 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 5 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 4 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 4 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 5 tick
+		RankPurchaseParticle("totem", {_player})
+		wait 5 tick
+		RankPurchaseParticle("totem", {_player})
+
+
+

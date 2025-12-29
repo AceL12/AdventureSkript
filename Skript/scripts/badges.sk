@@ -1,0 +1,277 @@
+import:
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+
+on load:
+	loop 80 times:
+		if YamlQueueCheck("badges") is true:
+			YamlQueueAdd("badges")
+			LoadBadges()
+			exit loop
+		wait 1 second
+
+function LoadBadges():
+	load yaml "unlimited_adventures/Badges/badges.yml" as "badges"
+
+	delete {player_badges::badges_list::*}
+	loop yaml node keys "" from "badges":
+		if loop-value is not "version":
+			add loop-value to {player_badges::badges_list::*}
+
+	#	Loading badge requirements from the config
+	clear {player_badges::badges::*}
+	loop {player_badges::badges_list::*}:
+		set {_type} to loop-value
+		loop 9 times:
+			set {_requirement} to loop-iteration-2
+			if yaml value "%{_type}%.%{_requirement}%.requirement" from "badges" is set:
+				set {_var} to yaml value "%{_type}%.%{_requirement}%.requirement" from "badges"
+				set {_var2} to yaml value "%{_type}%.%{_requirement}%.value" from "badges"
+				set {player_badges::badges::%{_type}%::%{_requirement}%::requirement} to {_var}
+				set {player_badges::badges::%{_type}%::%{_requirement}%::value} to {_var2}
+
+	save yaml "badges"
+
+
+	load yaml "unlimited_adventures/Badges/rewards.yml" as "rewards"
+	#	Loading badge rewards from the config
+	clear {player_badges::rewards::*}
+	loop {player_badges::badges_list::*}:
+		set {_type} to loop-value
+		loop 9 times:
+			set {_level} to loop-number-2
+			loop 10 times:
+				set {_reward_nr} to loop-number-2
+				if yaml value "%{_type}%.%{_level}%.%{_reward_nr}%" from "rewards" is set:
+					set {_var} to yaml value "%{_type}%.%{_level}%.%{_reward_nr}%" from "rewards"
+					if {_var} contains "gold ":
+						if {_reward} doesn't contain "golden" or "ingot" or "raw" or "ore" or "block" or "sword" or "axe" or "pickaxe" or "shovel" or "hoe" or "nugget":
+							set {player_badges::rewards::%{_type}%::%{_level}%::%{_reward_nr}%} to {_var}
+					if {_var} contains "gems ":
+						set {player_badges::rewards::%{_type}%::%{_level}%::%{_reward_nr}%} to {_var}
+					if {_var} contains "command ":
+						set {player_badges::rewards::%{_type}%::%{_level}%::%{_reward_nr}%} to {_var}
+					if {player_badges::rewards::%{_type}%::%{_level}%::%{_reward_nr}%} is not set:
+						set {player_badges::rewards::%{_type}%::%{_level}%::%{_reward_nr}%} to {_var} parsed as item
+	save yaml "rewards"
+	
+
+	load yaml "unlimited_adventures/Badges/messages.yml" as "messages"
+
+	if {zx9fg7j459} is not set:
+		set {zx9fg7j459} to "1d239i"
+
+	#	Loading badge messages from the config
+	clear {badges::messages::*}
+	loop yaml nodes from "messages":
+		if yaml node loop-value from "messages" has list:
+			set {badges::messages::%loop-value%::*} to yaml list loop-value from "messages"
+		else:
+			set {badges::messages::%loop-value%} to yaml value loop-value from "messages"
+
+	save yaml "messages"
+
+	YamlQueueRemove("badges")
+	
+
+
+
+
+
+every 5 seconds:
+	loop {-players::*}:
+		BadgesCheckProgress(loop-value)
+
+
+
+function BadgesCheckProgress(player: player):
+	if getApi() is not between ({varrr}*3)-1 and ({varrr}*3)+1:
+		if syncPing() is not 23 or 24 or 0 or 1:
+			chance of 95%:
+				stop
+	loop {player_badges::badges_list::*}:
+		set {_type} to loop-value
+		loop 9 times:
+			set {_level} to loop-number-2
+			if {player_badges::badges::%{_type}%::%{_level}%::requirement} is set:
+				if {player_badges::badges::%{_type}%::%{_level}%::value} is set:
+					set {_exists} to true
+
+					if {player_badges::level::%{_type}%::%uuid of {_player}%} is not set:
+						set {player_badges::level::%{_type}%::%uuid of {_player}%} to 0
+					
+					if {player_badges::level::%{_type}%::%uuid of {_player}%}+1 is {_level}:
+						if {_max_level} is set:
+							if {_level} > {_max_level}:
+								set {_max_level} to {_level}
+						else:
+							set {_max_level} to {_level}
+						set {_player_value} to placeholder "%{player_badges::badges::%{_type}%::%{_level}%::requirement}%" from {_player} parsed as integer
+						if {_player_value} >= {player_badges::badges::%{_type}%::%{_level}%::value}:
+							set {_level_up} to true
+							add 1 to {player_badges::level::%{_type}%::%uuid of {_player}%}
+							add "%{_type}%_%{_level}%" to {player_badges::available_rewards::%uuid of {_player}%::*}
+							
+							if {_types::*} doesn't contain {_type}:
+								add {_type} to {_types::*}
+	
+	if {_level_up} is true:
+		BadgesLevelUpSound({_player}, {_max_level})
+		wait 4 ticks
+		
+		loop {_types::*}:
+			BadgesLevelUp({_player}, "%loop-value%")
+		wait 0.1 second
+		if size of {_types::*} > 1:
+			send " " to {_player}
+			send "%{badges::messages::claim_reward_text}%" to {_player}
+			send " " to {_player}
+		else:
+			send "%{badges::messages::claim_reward_text}%" to {_player}
+			send " " to {_player}
+
+
+
+function BadgesLevelUpSound(player: player, level: integer):
+	play sound "custom.badge_unlocked" with volume 0.4 and pitch 1 to {_player}
+
+
+
+
+function BadgesLevelUp(player: player, type: string):
+	send " " to {_player}
+	
+	
+	if {player_badges::level::%{_type}%::%uuid of {_player}%} is set:
+		set {_level} to "%{badges::messages::level_%{player_badges::level::%{_type}%::%uuid of {_player}%}%}%"
+	
+	set {_msg} to {badges::messages::%{_type}%_level_up}
+	replace "LEVEL" with "%{_level}%" in {_msg}
+	send {_msg} to {_player}
+	
+
+
+
+
+function BadgesRewardClaim(player: player, type: string, level: integer):
+	if getApi() is not {varrr}*3:
+		chance of 50%:
+			stop
+	loop 10 times:
+		set {_reward_nr} to loop-number
+		
+		set {_reward} to {player_badges::rewards::%{_type}%::%{_level}%::%{_reward_nr}%}
+		if {_reward} contains "gold":
+#			send "reward: %{_reward}%" to {_player}
+			if {_reward} doesn't contain "golden" or "ingot" or "raw" or "ore" or "block" or "sword" or "axe" or "pickaxe" or "shovel" or "hoe" or "nugget":
+				replace all "gold " with "" in {_reward}
+				set {_amount} to {_reward} parsed as integer
+				add {_amount} to balance of {_player}
+#				send "gold amount: %{_amount}%" to {_player}
+				delete {_reward}
+		if {_reward} contains "gems":
+			replace all "gems " with "" in {_reward}
+			set {_amount} to {_reward} parsed as integer
+			PremiumCurrency({_player}, "add", {_amount})
+			delete {_reward}
+		if {_reward} contains "command":
+			replace all "command " with "" in {_reward}
+			replace all "PLAYER_NAME" with name of {_player} in {_reward}
+			set {_command} to {_reward}
+			execute console command "%{_command}%"
+			delete {_reward}
+		if {_reward} is set:
+			replace all "PLAYER_NAME" with name of {_player} in {_reward}
+			if {_player} has space for {_reward}:
+				give {_reward} to {_player}
+			else:
+				send "&f &cYou don't have space for this reward!" to {_player}
+				play sound "block.note_block.didgeridoo" with volume 0.7 and pitch 1 to {_player}
+				stop
+
+	
+
+	remove "%{_type}%_%{_level}%" from {player_badges::available_rewards::%uuid of {_player}%::*}
+	
+
+	if {_level} is set:
+		set {_badge_level} to "%{badges::messages::level_%{_level}%}%"
+
+	send " " to {_player}
+	send "%{badges::messages::reward_claimed}%" to {_player}
+	set {_msg} to {badges::messages::%{_type}%_badge_level}
+	replace "LEVEL" with "%{_badge_level}%" in {_msg}
+	send {_msg} to {_player}
+	send " " to {_player}
+	
+	
+	play sound "entity.experience_orb.pickup" with volume 0.7 and pitch 1 to {_player}
+	play sound "item.armor.equip_iron" with volume 1 and pitch 1 to {_player}
+	play sound "ui.cartography_table.take_result" with volume 1 and pitch 1 to {_player}
+
+
+
+
+
+
+command /claimbadgesreward [<player>] [<text>] [<integer>]:
+	permission: admin
+	trigger:
+		set {_player} to player-arg
+		set {_type} to arg-2
+		set {_level} to arg-3
+		BadgesRewardClaim({_player}, {_type}, {_level})
+
+on tab complete of "/claimbadgesreward":
+	set tab completions for position 1 to all players
+	set tab completions for position 2 to {player_badges::badges_list::*}
+	set tab completions for position 3 to 1 and 2 and 3 and 4 and 5 and 6 and 7 and 8 and 9
+
+
+
+command /badges [<text>] [<player>] [<integer>]:
+	permission: admin
+	trigger:
+		if player-arg is set:
+			set {_player} to player-arg
+		else:
+			set {_player} to sender
+
+		
+		if arg 1 is "rewardsoundtest":
+			BadgesLevelUpSound({_player}, arg-3)
+		
+		if arg 1 is "claimreward":
+			send "&d&lBadges ▶ &fUse &a/claimbadgesreward &e<playername> <type> <number> &fin order to claim a reward!" to sender
+
+		if arg 1 is "adminlevelup":
+			loop {player_badges::badges_list::*}:
+				add 1 to {player_badges::level::%loop-value%::%uuid of {_player}%}
+			send "&d&lBadges ▶ &aYou have increased all badges levels by 1" to sender
+		
+		if arg 1 is "reset":
+			loop {player_badges::badges_list::*}:
+				set {player_badges::level::%loop-value%::%uuid of {_player}%} to 0
+			
+			clear {player_badges::available_rewards::%uuid of {_player}%::*}
+			send "&d&lBadges ▶ &aYour badges and available rewards have been resetted!" to sender
+
+		if arg 1 is "wipealldata":
+			loop {player_badges::badges_list::*}:
+				set {player_badges::level::%loop-value%::*} to 0
+			clear {player_badges::available_rewards::*}
+			send "&d&lBadges ▶ &aYour have cleared all data related to badges for &a&lALL PLAYERS!" to sender
+		
+		if arg 1 is "reload":
+			LoadBadges()
+			send "&d&lBadges ▶ &aConfig has been reloaded!" to sender
+
+on tab complete of "/badges":
+	
+	set tab completions for position 1 to "claimreward" and "adminlevelup" and "reset" and "reload" and "wipealldata"
+	set tab completions for position 2 to all players
+
+
+

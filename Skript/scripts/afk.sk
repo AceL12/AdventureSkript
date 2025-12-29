@@ -1,0 +1,147 @@
+on load:
+	AfkReload()
+
+
+
+
+function AfkReload():
+	load yaml "unlimited_adventures/AdventureCore/afk.yml" as "config"
+	if yaml value "version" from "config" is not set:
+		wait 1 tick
+		AfkCreateConfigFile()
+
+	#	Config
+	clear {afk::config::*}
+	set {afk::config::detect_afk} to yaml value "settings.detect_afk" from "config"
+	set {afk::config::afk_delay} to yaml value "settings.afk_delay" from "config"
+	set {afk::config::afk_delay} to "%{afk::config::afk_delay}% seconds" parsed as timespan
+	set {afk::config::fullscreen_afk_popup} to yaml value "settings.detect_afk" from "config"
+	set {afk::config::afk_tag_ingame} to yaml value "settings.detect_afk" from "config"
+	
+	set {afk::messages::start_title} to yaml value "messages.start_title" from "config"
+	set {afk::messages::start_subtitle} to yaml value "messages.start_subtitle" from "config"
+	set {afk::messages::end_subtitle} to yaml value "messages.end_subtitle" from "config"
+	
+	save yaml "config"
+
+
+
+
+function AfkCreateConfigFile():
+	load yaml "unlimited_adventures/AdventureCore/afk.yml" as "config"
+
+	set yaml value "version" from "config" to 1
+	set the comments of yaml node "version" from "config" to "Please DO NOT change version number!"
+
+	set yaml value "settings.detect_afk" from "config" to true
+	set yaml value "settings.afk_delay" from "config" to 180
+	set yaml value "settings.fullscreen_afk_popup" from "config" to true
+	set yaml value "settings.afk_tag_ingame" from "config" to true
+	
+	set yaml value "messages.start_title" from "config" to "You are inactive"
+	set yaml value "messages.start_subtitle" from "config" to "Move to go back to game!"
+	set yaml value "messages.end_subtitle" from "config" to "Welcome back!"
+
+	set the comments of yaml node "settings.detect_afk" from "config" to "Choose if you want to automatically detect AFK players."
+	set the comments of yaml node "settings.afk_delay" from "config" to "Delay in seconds before player is assumed to be AFK."
+	save yaml "config"
+
+
+
+every 10 second:
+	if {afk::config::detect_afk} is true:
+		loop {-players::*}:
+			ActivityCheckPeriodical(loop-value)
+every 2 minutes:
+	CheckPing()
+
+on chat:
+	set metadata value "last_activity" of player to now
+
+function ActivityCheckPeriodical(player: player):
+	if difference between metadata value "last_activity" of {_player} and now >= {afk::config::afk_delay}:
+		if metadata value "inactive" of {_player} is not true:
+			set metadata value "inactive" of {_player} to true
+			if {afk::config::fullscreen_afk_popup} is true:
+				apply potion of blindness without any particles to {_player} for 10 hours
+				wait 0.3 second
+				set {_start_title} to {afk::messages::start_title}
+				set {_start_subtitle} to {afk::messages::start_subtitle}
+
+				#	AFK Start
+
+				loop 20 times:
+					set {_title} to first loop-number characters of {_start_title}
+					send title "&f%{_title}%" with subtitle "" to {_player} for 10 hours with fadein 0 seconds
+					if length of {_title} is length of {_start_title}:
+						send title "&f%{_title}%" with subtitle "&7%{_start_subtitle}%" to {_player} for 10 hours with fadein 0 seconds
+						stop
+					wait 1 tick
+
+
+function ActivityCheck(player: player):
+	if {afk::config::detect_afk} is true:
+		if metadata value "inactive" of {_player} is true:
+			set metadata value "inactive" of {_player} to false
+			set {_player}'s gamemode to metadata value "afk_previous_gamemode" of {_player}
+
+			#	AFK End
+
+			set {_start_title} to {afk::messages::start_title}
+			set {_start_subtitle} to {afk::messages::start_subtitle}
+			set {_title} to {_start_title}
+			set {_subtitle} to {_start_subtitle}
+			loop 20 times:
+				if length of {_title} > 0:
+					set {_title} to first length of {_title}-1 characters of {_title}
+					if "%{_title}%" doesn't contain "<none>":
+						set {_title} to last length of {_title}-1 characters of {_title}
+				if length of {_subtitle} > 0:
+					set {_subtitle} to first length of {_subtitle}-1 characters of {_subtitle}
+					if "%{_subtitle}%" doesn't contain "<none>":
+						set {_subtitle} to last length of {_subtitle}-1 characters of {_subtitle}
+				send title "&f%{_title}%" with subtitle "&7%{_subtitle}%" to {_player} for 10 hours with fadein 0 seconds
+				if "%{_title}%" contains "<none>":
+					send title "" with subtitle "" to {_player} for 10 hours with fadein 0 seconds
+					exit loop
+				if "%{_subtitle}%" contains "<none>":
+					send title "" with subtitle "" to {_player} for 10 hours with fadein 0 seconds
+					exit loop
+				
+				wait 1 tick
+
+			wait 6 ticks
+			remove blindness (potion effect type) from {_player}
+
+			wait 3 ticks
+			set {_end_subtitle} to {afk::messages::end_subtitle} 
+			send title "" with subtitle "&f%{_end_subtitle}%" to {_player} for 1 second with fadein 0.4 seconds
+			play sound "custom.ui.resume" with volume 0.4 and pitch 1 to {_player}
+			wait 1 second
+			set {_msg} to "%{_end_subtitle}%"
+			loop 10 times:
+				set {_msg} to first length of {_msg}-1 characters of {_msg}
+				set {_msg} to last length of {_msg}-1 characters of {_msg}
+				if length of {_msg} > 0:
+					send title "" with subtitle "&f%{_msg}%" to {_player} for 1 second with fadein 0 seconds
+					wait 2 ticks
+			send title "" with subtitle "" to {_player} for 1 second with fadein 0 seconds
+
+
+
+
+command /afk:
+	permission: core.afk
+	trigger:
+		if metadata value "inactive" of player is false:
+			set metadata value "last_activity" of player to now - 1 hour
+			wait 1 tick
+			ActivityCheckPeriodical(player)
+			loop 10 times:
+				set metadata value "last_activity" of player to now - 1 hour
+				wait 1 tick
+			stop
+		if metadata value "inactive" of player is true:
+#			set metadata value "inactive" of player to false
+			ActivityCheck(player)
+

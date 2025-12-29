@@ -1,0 +1,332 @@
+on load:
+	PinataReload()
+
+command /pinatareload:
+	permission: admin
+	trigger:
+		PinataReload()
+		send "&f &fPinata's config file has been reloaded!" to sender
+
+function PinataReload():
+	load yaml "unlimited_adventures/Boosters/config.yml" as "config"
+	load yaml "unlimited_adventures/Boosters/messages.yml" as "messages"
+	if yaml value "version" from "config" is not set:
+		wait 1 tick
+		PinataCreateConfigFile()
+
+	if yaml value "version" from "messages" is not set:
+		wait 1 tick
+		PinataCreateMessagesFile()
+
+
+	if yaml value "pinata.drops-amount" from "config" is set:
+		set {boosters::config::pinata::drops-amount} to yaml value "pinata.drops-amount" from "config"
+	if yaml value "pinata.drops-list" from "config" is set:
+		set {boosters::config::pinata::drops::*} to yaml list "pinata.drops-list" from "config"
+
+	clear {boosters::messages::*}
+	loop yaml nodes from "messages":
+		if yaml node loop-value from "messages" has list:
+			set {boosters::messages::%loop-value%::*} to yaml list loop-value from "messages"
+		else:
+			set {boosters::messages::%loop-value%} to yaml value loop-value from "messages"
+
+	save yaml "config"
+	save yaml "messages"
+
+
+function PinataCreateConfigFile():
+	load yaml "unlimited_adventures/Boosters/config.yml" as "config"
+
+	set yaml value "version" from "config" to 1
+	set the comments of yaml node "version" from "config" to "Please DO NOT change version number!"
+
+	set yaml value "pinata.drops-amount" from "config" to 10
+	set yaml list "pinata.drops-list" from "config" to "custom:yellow_crystal" and "custom:pink_crystal" and "custom:blue_crystal" and "custom:green_crystal" and "custom:skeleton_key" and "custom:dracula_key" and "custom:desert_key" and "2 of netherite ingot" and "8 of diamond"
+
+	set the comments of yaml node "pinata" from "config" to "" and "Pinata will drop X random items from the list below. (drops can repeat)" and "You can configure how many items will Pinata drop at random." and ""
+	save yaml "config"
+
+
+function PinataCreateMessagesFile():
+	load yaml "unlimited_adventures/Boosters/messages.yml" as "messages"
+
+	set yaml value "version" from "messages" to 1
+	set the comments of yaml node "version" from "messages" to "Please DO NOT change version number!"
+
+	set yaml value "protection_booster_title" from "messages" to "&aThe &f&lProtection Booster &ahas been activated!"
+	set yaml list "protection_booster_message" from "messages" to "&aFor the next DURATION, players" and "&awill not lose any items on death!"
+
+	set yaml value "luck_booster_title" from "messages" to "&aThe &f&lLuck Booster &ahas been activated!"
+	set yaml list "luck_booster_message" from "messages" to "&aFor the next DURATION, everyone" and "&awill have extra luck when" and "&afishing and looting chests!"
+
+	set yaml value "adventure_pass_booster_title" from "messages" to "&aThe &f&lAdventure Pass XP Booster &ahas been activated!"
+	set yaml list "adventure_pass_booster_message" from "messages" to "&aFor the next DURATION, everyone" and "&awill earn double &6Adventure Pass" and "&aexperience from all sources!"
+	
+
+	set yaml list "luck_booster_expired" from "messages" to "&aBeware Adventurers," and " " and "&aThe &f&lLuck Booster &ais no longer active!"
+	set yaml list "protection_booster_expired" from "messages" to "&aBeware Adventurers," and " " and "&aThe &f&lProtection Booster &ais no longer active!" and " " and "&aRemain save on your journey!"
+	set yaml list "adventure_pass_booster_expired" from "messages" to "&aBeware Adventurers," and " " and "&aThe &f&lAdventure Pass XP Booster &ais no longer active!"
+
+	set yaml value "cant_spawn_pinata" from "messages" to "&cYou can spawn pinatas only in the Wilderness!"
+	set yaml value "pinata_purchase" from "messages" to "&fYou have purchased a &d&lPinata!"
+
+
+	save yaml "messages"
+
+
+
+command /createpinata:
+	permission: admin
+	trigger:
+		execute console command "/minecraft:give %player% minecraft:player_head{display:{Name:""{\""text\"":\""Trick Or Treat Basket (sheep)\""}""},SkullOwner:{Id:[I;-2061146327,1635075578,-1616819965,-235829408],Properties:{textures:[{Value:""eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNjE3N2VjMjk1ZWM2YTAzMjZjMTZmYWE1MmI2MjBkY2YzOTI0MzlkMWU2ZjAzMzJiZjJkZjY1MDhjZjJiNzk3NCJ9fX0=""}]}}} 1"
+		set {item::pinata} to player's tool
+		remove player's tool from player
+		set name of {item::pinata} to "&6Pinata Spawner"
+
+
+
+command /activatebooster [<player>] [<text>] [<integer>]:
+	permission: admin.booster
+	trigger:
+		ActivateBooster(player-arg, arg-2, arg-3)
+
+on tab complete of "/activatebooster":
+	set tab completions for position 1 to all players
+	set tab completions for position 2 to "luck" and "protection" and "adventure_pass"
+	set tab completions for position 3 to 6
+
+
+
+command /resetboosters:
+	permission: admin.booster
+	trigger:
+		ResetBoosters()
+		send "&fYou have deactivated all server boosters!" to player
+
+
+function ActivateBooster(player: player, type: string, duration: integer):
+	
+	set {_duration} to "%{_duration}% hours" parsed as timespan
+
+	if {_type} is "luck" or "protection" or "adventure_pass":
+
+		if difference between {booster::%{_type}%::date} and now < {booster::%{_type}%::duration}:
+			add {_duration} to {booster::%{_type}%::duration}
+		else:
+			set {booster::%{_type}%::date} to now
+			set {booster::%{_type}%::duration} to {_duration}
+
+		set {_text_dur} to difference between {booster::%{_type}%::date} and now
+		set {_text_dur} to difference between {booster::%{_type}%::duration} and {_text_dur}
+		set {_text_dur::*} to "%{_text_dur}%" split at " and "
+		set {_text_dur} to join {_text_dur::1}
+
+		send " " to all players
+		send "%{boosters::messages::%{_type}%_booster_title}%" to all players
+		send " " to all players
+		set {_msg::*} to GetMessage({boosters::messages::%{_type}%_booster_message::*})
+		replace all "DURATION" with "%{_text_dur}%" in {_msg::*}
+		loop {_msg::*}:
+			send colored loop-value to all players
+		send " " to all players
+
+
+
+
+
+
+
+function ResetBoosters():
+	delete {booster::protection::date}
+	delete {booster::luck::date}
+	delete {booster::adventure_pass::date}
+
+
+
+every 5 seconds:
+	if difference between {booster::protection::date} and now > {booster::protection::duration}:
+		delete {booster::protection::date}
+#		send " " to all players
+#		send "&aBeware Adventurers," to all players
+#		send "&aThe &f&lProtection Booster &ais no longer active!" to all players
+#		send " " to all players
+#		send "&aRemain save on your journey!" to all players
+#		send " " to all players
+
+		send " " to all players
+		set {_msg::*} to GetMessage({boosters::messages::luck_booster_expired::*})
+		loop {_msg::*}:
+			send colored loop-value to all players
+		send " " to all players
+
+	if difference between {booster::luck::date} and now > {booster::protection::duration}:
+		delete {booster::luck::date}
+#		send " " to all players
+#		send "&aBeware Adventurers," to all players
+#		send "&aThe &f&lLuck Booster &ais no longer active!" to all players
+#		send " " to all players
+
+		send " " to all players
+		set {_msg::*} to GetMessage({boosters::messages::protection_booster_expired::*})
+		loop {_msg::*}:
+			send colored loop-value to all players
+		send " " to all players
+
+	if difference between {booster::adventure_pass::date} and now > {booster::protection::duration}:
+		delete {booster::adventure_pass::date}
+#		send " " to all players
+#		send "&aBeware Adventurers," to all players
+#		send "&aThe &f&lAdventure Pass XP Booster &ais no longer active!" to all players
+#		send " " to all players
+		
+		send " " to all players
+		set {_msg::*} to GetMessage({boosters::messages::adventure_pass_booster_expired::*})
+		loop {_msg::*}:
+			send colored loop-value to all players
+		send " " to all players
+
+	loop {-players::*}:
+		CheckLuckBooster(loop-value)
+
+
+function CheckLuckBooster(player: player):
+	if {booster::luck::date} is set:
+		apply potion of luck without any particles to {_player} for 0.05 second
+	loop 5 times:
+		if {booster::luck::date} is set:
+			apply potion of luck without any particles to {_player} for 1 second
+		wait 1 second
+
+
+function ProtectionBoosterActive() :: boolean:
+	if difference between {booster::protection::date} and now < {booster::protection::duration}:
+		return true
+	return false
+
+
+
+
+
+
+
+
+command /purchasepinata [<player>]:
+	permission: admin
+	trigger:
+		GivePinata(player-arg)
+
+
+
+
+command /pinata:
+	permission: admin
+	trigger:
+		SpawnPinata(sender)
+
+
+
+command /buypinata [<player>]:
+	permission: admin
+	trigger:
+		GivePinata(player-arg)
+		send "&f %{boosters::messages::pinata_purchase}%" to player-arg
+
+
+function GivePinata(player: player):
+	give {item::pinata} to {_player}
+
+
+
+
+function SpawnPinata(player: player):
+	if "%world of {_player}%" contains "spawn" or "dungeons":
+		send "&f %{boosters::messages::cant_spawn_pinata}%" to {_player}
+		stop
+	if "%region at {_player}%" contains "spawn" or "dungeons":
+		send "&f %{boosters::messages::cant_spawn_pinata}%" to {_player}
+		stop
+
+	remove 1 of tool of {_player} from {_player}
+#	remove {_player}'s tool from {_player}
+	
+	spawn sheep at {_player}
+	set {_pinata} to last spawned sheep
+	
+	play sound "minecraft:entity.mooshroom.convert" with volume 1 and pitch 1 at {_pinata}
+	set {_pinata}'s max health to 30
+	heal {_pinata}
+	set name of {_pinata} to "&d&lPINATA"
+	push {_pinata} forwards with speed 1
+	push {_pinata} upwards with speed 0.6
+	wait 0.3 second
+	push {_pinata} upwards with speed 0.5
+	loop 999 times:
+		SpawnParticles("happy villager", location of {_pinata}, 5)
+		SpawnParticles("totem", location of {_pinata}, 5)
+		if {_pinata} is not alive:
+			stop
+		set {_color} to random integer between 1 and 10
+		if {_color} is 1:
+			set the colour of the last spawned sheep to red
+		if {_color} is 2:
+			set the colour of the last spawned sheep to lime
+		if {_color} is 3:
+			set the colour of the last spawned sheep to light blue
+		if {_color} is 4:
+			set the colour of the last spawned sheep to orange
+		if {_color} is 5:
+			set the colour of the last spawned sheep to pink
+		if {_color} is 6:
+			set the colour of the last spawned sheep to yellow
+		if {_color} is 7:
+			set the colour of the last spawned sheep to magenta
+		if {_color} is 8:
+			set the colour of the last spawned sheep to purple
+		if {_color} is 9:
+			set the colour of the last spawned sheep to blue
+		if {_color} is 10:
+			set the colour of the last spawned sheep to white
+		wait 0.3 second
+	kill {_pinata}
+
+
+
+function PinataDeath(loc: location):
+	play sound "minecraft:entity.player.levelup" with volume 0.15 and pitch 0.75 at {_loc}
+	play sound "minecraft:entity.generic.explode" with volume 0.6 and pitch 1.5 at {_loc}
+	play sound "minecraft:entity.zombie.attack_iron_door" with volume 1 and pitch 2 at {_loc}
+	draw 150 cloud at {_loc} with offset vector(0.4, 0.4, 0.4) with extra 1
+	draw 3 explosion emitter at {_loc} with offset vector(1.5, 1, 1.5) with extra 0
+	SpawnParticles("totem", {_loc}, 150)
+	SpawnParticles("happy villager", {_loc}, 150)
+	
+	
+	wait 1 seconds
+	loop {boosters::config::pinata::drops-amount} times:
+		drop GetItem(random element out of {boosters::config::pinata::drops::*}) at {_loc}
+#		drop random element out of {boosters::config::pinata::drops::*} parsed as item at {_loc}
+		wait 2 tick
+		play sound "entity.chicken.egg" with volume 1 and pitch 1 at {_loc}
+		play sound "block.note_block.xylophone" with volume 1 and pitch 1 at {_loc}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

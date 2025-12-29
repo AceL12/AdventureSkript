@@ -1,0 +1,3802 @@
+import:
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+	org.bukkit.Bukkit
+
+on load:
+	loop 80 times:
+		if YamlQueueCheck("wilderness_dungeons") is true:
+			YamlQueueAdd("wilderness_dungeons")
+			WildernessDungeonsLoadAll()
+			exit loop
+		wait 1 second
+		
+
+function AsyncLoadWildernessDungeons():
+	set {_functions::run} to function reference "WildernessDungeonsLoadAll"
+	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+	{-Threads::Global}.submit({_runnable})
+
+
+
+every second:
+	#	Dungeon Entrance particle effects
+	loop {loc::dungeon_entrance::spider_cave::*}:
+		DungeonPortalEffect(loop-value, "dungeon")
+	loop {loc::dungeon_exit::spider_cave::*}:
+		DungeonPortalEffect(loop-value, "wilderness")
+
+
+	loop {-players::*}:
+		DungeonEditorCheck(loop-value)
+		ProximityTriggerCheck(loop-value)
+		WildernessDungeonsParticles(loop-value)
+
+every 2 seconds:
+	loop {-players::*}:
+		WildernessDungeonsAmbientTickPlayer(loop-value)
+
+function DungeonEditorCheck(player: player):
+	if metadata value "wilderness_dungeons:editor" of {_player} is true:
+		if difference between metadata value "wilderness_dungeons:editor:delay" of {_player} and now < 2 second:
+			stop
+		set {_x} to round(x coordinate of GetRelativeLocation(location of {_player}) * 2)/2
+		set {_y} to round(y coordinate of GetRelativeLocation(location of {_player}) * 2)/2
+		set {_z} to round(z coordinate of GetRelativeLocation(location of {_player}) * 2)/2
+		set {_yaw} to round(yaw of location of {_player})
+		set {_pitch} to round(pitch of location of {_player})
+		set {_yaw} to round({_yaw}/30) * 30
+		set {_pitch} to round({_pitch}/5) * 5
+		if {_yaw} is 360:
+			set {_yaw} to 0
+		send action bar "%{_x}%, %{_y}%, %{_z}% &7[%{_yaw}%, &8%{_pitch}%&7]" to {_player}
+
+
+
+
+
+
+
+function ProximityTriggerCheck(player: player):
+	set {_room} to GetRoomName(location of {_player})
+	set {_instance_nr} to GetInstance(location of {_player})
+	set {_room_nr} to GetRoomNumber(location of {_player})
+	loop {dungeons::spider_cave::proximity_triggers::%{_room}%::trigger_names::*}:
+		set {_trigger_name} to loop-value
+		if {dungeons::spider_cave::%{_instance_nr}%::proximity_triggers::%{_room}%::%{_trigger_name}%::activated} is false:
+			loop {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::trigger_locations::*}:
+				set {_trigger_loc} to loop-value-2
+				set {_trigger_loc} to GetAbsoluteLocation({_trigger_loc}, {_instance_nr}, {_room_nr})
+				if distance between {_player} and {_trigger_loc} <= {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::range}:
+					#	Spawn mobs
+					if {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::spawn} is set:
+						set {dungeons::spider_cave::%{_instance_nr}%::proximity_triggers::%{_room}%::%{_trigger_name}%::activated} to true
+						wait "%{dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::delay}% seconds" parsed as timespan
+						set {_mob} to {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::spawn}
+						set {_loc} to {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::location}
+						set {_loc} to GetAbsoluteLocation({_loc}, {_instance_nr}, {_room_nr})
+						WildernessDungeonsSpawnMob({_mob}, {_loc})
+					#	Start dialogue
+					if {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::dialogues::*} is set:
+						set {dungeons::spider_cave::%{_instance_nr}%::proximity_triggers::%{_room}%::%{_trigger_name}%::activated} to true
+						wait "%{dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::delay}% seconds" parsed as timespan
+						loop {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::dialogues::*}:
+							if {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::cage_location} is set:
+								set {_villager_present} to false
+								set {_loc} to {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::cage_location}
+								set {_cage_loc} to GetAbsoluteLocation({_loc}, {_instance_nr}, {_room_nr})
+								loop all villagers in radius 3 of {_cage_loc}:
+									set {_villager_present} to true
+								if {_villager_present} is not true:
+									stop
+							set {_msg} to loop-value-3
+							if {_msg} contains " d:":
+								replace all " d:" with "" in {_msg}
+								if last character of {_msg} parsed as integer is between 1 and 9:
+									set {_delay} to last character of {_msg} parsed as integer
+									set {_delay} to "%{_delay}% seconds" parsed as timespan
+									set {_msg} to first length of {_msg}-1 characters of {_msg}
+							loop {-players::*}:
+								if distance between loop-value-4 and {_trigger_loc} < 25:
+									send colored {_msg} to loop-value-4
+							play sound "minecraft:entity.villager.ambient" with volume 2.5 and pitch 1 at {_trigger_loc}
+							wait {_delay}
+					exit loop
+
+
+
+function WildernessDungeonsToxicGas(player: player):
+	if {_player}'s gamemode is creative:
+		stop
+	set {_room} to GetRoomName(location of {_player})
+	set {_poison_level} to {dungeons::spider_cave::toxic_areas::%{_room}%::poison_level}
+	set {_range} to {dungeons::spider_cave::toxic_areas::%{_room}%::range}
+	loop {dungeons::spider_cave::toxic_areas::%{_room}%::locations::*}:
+#		send "dist: %distance between loop-value and GetRelativeLocation({_player})%" to {_player}
+		if distance between loop-value and GetRelativeLocation({_player}) <= {_range}:
+			set {_duration} to random number between 2 and 3.5
+			set {_duration} to "%{_duration}% seconds" parsed as timespan
+			apply potion of poison of tier {_poison_level} to {_player} for {_duration}
+			exit loop
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function WildernessDungeonsAmbientTickPlayer(player: player):
+	if {player_setting::ambient_sounds::%uuid of {_player}%} is false:
+		stop
+	
+	set {_p_loc} to location of {_player}
+
+	if IsInDungeon({_p_loc}) is false:
+		stop
+
+	set {_room_name} to GetRoomName({_p_loc})
+	set {_loc_player_relative_y} to y coordinate of GetRelativeLocation({_p_loc})
+	if block above {_player} is water or falling water:
+		set {_submerged} to true
+
+	set {_instance_nr} to GetInstance({_p_loc})
+	set {_room_nr} to GetRoomNumber({_p_loc})
+	if {dungeons::spider_cave::sounds::list_of_sounds::*} is set:
+		loop {dungeons::spider_cave::sounds::list_of_sounds::*}:
+			set {_name} to loop-value
+			set {_sound_name} to {dungeons::spider_cave::sounds::%{_name}%::sound}
+
+#			send "%{_name}%" to all players
+
+			if {dungeons::spider_cave::sounds::%{_name}%::rooms::*} is set:
+				if {dungeons::spider_cave::sounds::%{_name}%::rooms::*} doesn't contain {_room_name}:#GetRoomName(location of {_player}):
+#					send "wrong room!" to {_player}
+					continue loop
+
+			if {dungeons::spider_cave::sounds::%{_name}%::locations::*} is set:
+				loop {dungeons::spider_cave::sounds::%{_name}%::locations::*}:
+					if distance between {_player} and GetAbsoluteLocation(loop-value-2, {_instance_nr}, {_room_nr}) < {dungeons::spider_cave::sounds::%{_name}%::range}:
+						set {_in_range} to true
+				if {_in_range} is not true:
+					continue loop
+
+			if {dungeons::spider_cave::sounds::%{_name}%::y} is set:
+				if {dungeons::spider_cave::sounds::%{_name}%::y} contains "<":
+					set {_operator} to "<"
+				if {dungeons::spider_cave::sounds::%{_name}%::y} contains ">":
+					set {_operator} to ">"
+				set {_y} to {dungeons::spider_cave::sounds::%{_name}%::y}
+				replace all "<" with "" in {_y}
+				replace all ">" with "" in {_y}
+				set {_y} to {_y} parsed as number
+				if {_operator} is "<":
+					if {_loc_player_relative_y} > {_y}:
+#						send "you are too high!" to {_player}
+						continue loop
+				if {_operator} is ">":
+					if {_loc_player_relative_y} < {_y}:
+#						send "you are too low!" to {_player}
+						continue loop
+
+			if {dungeons::spider_cave::sounds::%{_name}%::play_when_submerged} is not true:
+				if {_submerged} is true:
+#					send "can't be submerged!" to {_player}
+					continue loop
+
+			if {dungeons::spider_cave::sounds::%{_name}%::prevent_stacking} is set:
+				if difference between metadata value "ambients_lastsound_cooldown" of {_player} and now < {dungeons::spider_cave::sounds::%{_name}%::prevent_stacking}:
+					continue loop
+
+			set {_delay} to {dungeons::spider_cave::sounds::%{_name}%::delay}
+			set {_amplitude} to {dungeons::spider_cave::sounds::%{_name}%::amplitude}
+			
+			set {_playsound} to false
+
+			if metadata value "ambients_%{_name}%_cooldown" of {_player} is not set:
+				chance of 20%:
+					set {_playsound} to true
+			else if difference between metadata value "ambients_%{_name}%_cooldown" of {_player} and now >= {_delay}:
+				set {_playsound} to true
+			if {_playsound} is true:
+				set {_now} to now
+				add "%random number between 0-{_amplitude} and {_amplitude}% seconds" parsed as timespan to {_now}
+				set metadata value "ambients_lastsound_cooldown" of {_player} to {_now}
+				set metadata value "ambients_%{_name}%_cooldown" of {_player} to {_now}
+
+				if {dungeons::spider_cave::sounds::%{_name}%::source_location} is set:
+					set {_loc} to GetAbsoluteLocation({dungeons::spider_cave::sounds::%{_name}%::source_location}, {_instance_nr}, {_room_nr})
+				else:
+					set {_loc} to {_p_loc}
+					add random number between -10 and 10 to x coordinate of {_loc}
+					add random number between 0 and 5 to y coordinate of {_loc}
+					add random number between -10 and 10 to z coordinate of {_loc}
+#				send "%{dungeons::spider_cave::sounds::%{_name}%::source_location}% / %{_loc}%" to all players
+				set {_volume} to 1
+				if {dungeons::spider_cave::sounds::%{_name}%::volume} is set:
+					set {_volume} to {dungeons::spider_cave::sounds::%{_name}%::volume}
+				set {_pitch} to 1
+				if {dungeons::spider_cave::sounds::%{_name}%::pitch} is set:
+					set {_pitch} to {dungeons::spider_cave::sounds::%{_name}%::pitch}
+				set {_pitch} to random number between {_pitch}*0.9 and {_pitch}*1.1
+				set {_range1} to 0-{_volume}*0.1
+				set {_range2} to {_volume}*0.1
+#				add "%{_sound_name}%||%world of {_loc}%||%x coordinate of {_loc}%||%y coordinate of {_loc}%||%z coordinate of {_loc}%||%{_volume}%||%{_pitch}%" to {-soundsToPlay::%uuid of {_player}%::*}
+				play sound {_sound_name} in ambient category with volume ({_volume} + random number between {_range1} and {_range2}) and pitch {_pitch} at {_loc} to {_player}
+				
+#	loop {_soundsToPlay::*}:
+#		set {_soundToPlay} to loop-value
+#		set {_functions::run} to function reference "PlaySoundsSync" called with {_player}, {_soundToPlay}
+#		set {_runnable} to new proxy instance of Runnable using {_functions::*}
+#		Bukkit.getScheduler().runTask(Skript.getInstance(), {_runnable})
+		
+#	set {_functions::run} to function reference "PlaySoundsSync2" called with {_player}
+#	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+#	Bukkit.getScheduler().runTask(Skript.getInstance(), {_runnable})
+
+
+
+
+
+
+
+
+
+
+
+
+function WildernessDungeonsParticles(player: player):
+	set {_instance_nr} to GetInstance(location of {_player})
+	set {_room_number} to GetRoomNumber(location of {_player})
+	set {_room_name} to GetRoomName(location of {_player})
+
+	loop {-dungeons::spider_cave::particles::particles_list::*}:
+		set {_p_name} to loop-value
+
+#		send "%{_p_name}%" to {_player}
+		set {_type} to {-dungeons::spider_cave::particles::%{_room_name}%::%{_p_name}%::type}
+		set {_amount} to {-dungeons::spider_cave::particles::%{_room_name}%::%{_p_name}%::amount}
+		set {_extra} to {-dungeons::spider_cave::particles::%{_room_name}%::%{_p_name}%::extra}
+		set {_offset} to {-dungeons::spider_cave::particles::%{_room_name}%::%{_p_name}%::offset}
+		set {_frequency} to {-dungeons::spider_cave::particles::%{_room_name}%::%{_p_name}%::frequency}
+
+#		send "name: %{_p_name}%, type: %{_type}%, amount: %{_amount}%, extra: %{_extra}%, vector: %{_offset}%, freq: %{_frequency}%" to {_player}
+
+		loop {_frequency} times:
+
+			loop {-dungeons::spider_cave::particles::%{_room_name}%::%{_p_name}%::locations::*}:
+				set {_loc} to GetAbsoluteLocation(loop-value-3, {_instance_nr}, {_room_number})
+				draw {_amount} of {_type} at {_loc} with offset vector {_offset} with extra {_extra} for {_player}
+			set {_ticks} to round(20/{_frequency})
+			wait "%{_ticks}% ticks" parsed as timespan
+
+
+function DungeonPortalEffect(init_loc: location, type: string = "dungeon"):
+	loop {-players::*}:
+		if distance between loop-value and {_init_loc} < 50:
+			set {_pass} to true
+			exit loop
+	if {_pass} is not true:
+		stop
+	loop 20 times:
+		set {_loc} to {_init_loc}
+		if {_type} is "dungeon":
+			add random number between -0.5 and 0.5 to x coordinate of {_loc}
+			add random number between -0.5 and 0.5 to z coordinate of {_loc}
+			loop 7 times:
+				draw 0 reverse portal at {_loc} with offset vector(0, 1, 0) with extra 0.25
+			draw 5 reverse portal at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.002
+	#		draw 4 poof at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.002
+		if {_type} is "wilderness":
+			add random number between -0.8 and 0.8 to x coordinate of {_loc}
+			add random number between -0.8 and 0.8 to z coordinate of {_loc}
+			loop 5 times:
+				draw 0 end rod at {_loc} with offset vector(0, 1, 0) with extra 0.55
+			draw 5 end rod at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.002
+	#		draw 4 poof at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.002
+		wait 1 tick
+
+function AsyncDungeonPortalEffect(init_loc: location, type: string = "dungeon"):
+	set {_loc} to {_init_loc}
+	if {_type} is "dungeon":
+		add random number between -0.5 and 0.5 to x coordinate of {_loc}
+		add random number between -0.5 and 0.5 to z coordinate of {_loc}
+		loop 7 times:
+			draw 0 reverse portal at {_loc} with offset vector(0, 1, 0) with extra 0.25
+		draw 5 reverse portal at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.002
+#		draw 4 poof at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.002
+	if {_type} is "wilderness":
+		add random number between -0.8 and 0.8 to x coordinate of {_loc}
+		add random number between -0.8 and 0.8 to z coordinate of {_loc}
+		loop 5 times:
+			draw 0 end rod at {_loc} with offset vector(0, 1, 0) with extra 0.55
+		draw 5 end rod at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.002
+#		draw 4 poof at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.002
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+command /wildernessdungeons [<text>]:
+	trigger:
+		if arg 1 is not set:
+			if {server::test_server} is true:
+				loop {loc::dungeon_entrance::spider_cave::*}:
+#					teleport player to random element out of {loc::dungeon_entrance::spider_cave::*}
+					TeleportPlayerToSpiderCave(player, loop-index parsed as integer)
+					exit loop
+		
+
+		if player doesn't have permission "admin":
+			stop
+		if arg 1 is "generate":
+			GenerateDungeon(20, true)
+		if arg 1 is "tp":
+			KillBacktool(sender)
+			teleport sender to location(477, 149, -916, world "dungeons")
+		if arg 1 is "editor":
+			if metadata value "wilderness_dungeons:editor" of sender is not true:
+				set metadata value "wilderness_dungeons:editor" of sender to true
+				send action bar "&aEdit mode enabled!" to sender
+				stop
+			if metadata value "wilderness_dungeons:editor" of sender is true:
+				set metadata value "wilderness_dungeons:editor" of sender to false
+				send action bar "&cEdit mode disabled!" to sender
+				stop
+		if arg 1 is "reload":
+			AsyncLoadWildernessDungeons()
+			send "Reloading Wilderness Dungeons!" to sender
+
+on tab complete of "/wildernessdungeons":
+	set tab completions for position 1 to "tp" and "generate" and "editor" and "reload"
+
+
+
+
+
+
+
+
+
+
+
+
+
+function WildernessDungeonsLoadAll():
+	WildernessDungeonsLoadConfig()
+
+#	Loading Dungeon Config
+function WildernessDungeonsLoadConfig():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/config.yml" as "config"
+	delete {dungeons::spider_cave::config::*}
+	set {dungeons::spider_cave::config::lose_inventory_on_death} to yaml value "lose_inventory_on_death" from "config"
+	set {dungeons::spider_cave::config::can_break_blocks} to yaml value "can_break_blocks" from "config"
+	set {dungeons::spider_cave::config::can_place_blocks} to yaml value "can_place_blocks" from "config"
+
+	save yaml "config"
+	WildernessDungeonsLoadMessages()
+
+function WildernessDungeonsLoadMessages():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/messages.yml" as "messages"
+	delete {dungeons::spider_cave::messages::*}
+	loop yaml node keys "messages" from "messages":
+		if yaml node "messages.%loop-value%" from "messages" has list:
+			set {dungeons::spider_cave::messages::%loop-value%::*} to yaml list "messages.%loop-value%" from "messages"
+		else:
+			set {dungeons::spider_cave::messages::%loop-value%} to yaml value "messages.%loop-value%" from "messages"
+
+	save yaml "messages"
+	WildernessDungeonsLoadCraneBridge()
+
+function WildernessDungeonsLoadCraneBridge():
+	set {-dungeons::spider_cave::bridge_crane::pushable_blocks::*} to stripped spruce wood, spruce planks, spruce stairs, spruce slab, spruce fence gate, spruce fence, spruce trapdoor, oak fence, chain and oak log
+	WildernessDungeonsLoadSounds()
+
+#	Loading Dungeon Entrance locations
+function WildernessDungeonsLoadSounds():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/sounds.yml" as "sounds"
+	
+	loop {dungeons::spider_cave::sounds::list_of_sounds::*}:
+		delete {dungeons::spider_cave::sounds::%loop-value%::*}
+		delete {dungeons::spider_cave::sounds::%loop-value%::rooms::*}
+		delete {dungeons::spider_cave::sounds::%loop-value%::locations::*}
+
+	loop yaml node keys "" from "sounds":
+		set {_sound} to loop-value
+		set {_sound_name} to yaml value "%{_sound}%.sound" from "sounds"
+		set {dungeons::spider_cave::sounds::%{_sound}%::sound} to yaml value "%{_sound}%.sound" from "sounds"
+		set {dungeons::spider_cave::sounds::%{_sound}%::rooms::*} to yaml list "%{_sound}%.rooms" from "sounds"
+		set {dungeons::spider_cave::sounds::%{_sound}%::range} to yaml value "%{_sound}%.range" from "sounds"
+		set {dungeons::spider_cave::sounds::%{_sound}%::y} to yaml value "%{_sound}%.y" from "sounds"
+		set {_loc} to yaml value "%{_sound}%.source_location" from "sounds"
+		set {dungeons::spider_cave::sounds::%{_sound}%::source_location} to GetYamlLocation({_loc}, "dungeons")
+
+		loop yaml list "%{_sound}%.locations" from "sounds":
+			set {_loc} to loop-value-2
+			add GetYamlLocation({_loc}, "dungeons") to {dungeons::spider_cave::sounds::%loop-value-2%::locations::*}
+
+		set {_time} to yaml value "%{_sound}%.delay" from "sounds"
+		set {dungeons::spider_cave::sounds::%{_sound}%::delay} to "%{_time}% seconds" parsed as timespan
+		set {dungeons::spider_cave::sounds::%{_sound}%::amplitude} to yaml value "%{_sound}%.amplitude" from "sounds"
+		if yaml value "%{_sound}%.volume" from "sounds" is set:
+			set {dungeons::spider_cave::sounds::%{_sound}%::volume} to yaml value "%{_sound}%.volume" from "sounds"
+		if yaml value "%{_sound}%.pitch" from "sounds" is set:
+			set {dungeons::spider_cave::sounds::%{_sound}%::pitch} to yaml value "%{_sound}%.pitch" from "sounds"
+		if yaml value "%{_sound}%.play_when_submerged" from "sounds" is set:
+			set {dungeons::spider_cave::sounds::%{_name}%::play_when_submerged} to yaml value "%{_sound}%.play_when_submerged" from "sounds"
+		if yaml value "%{_sound}%.prevent_stacking" from "sounds" is set:
+			set {_time} to yaml value "%{_sound}%.prevent_stacking" from "sounds"
+			set {dungeons::spider_cave::sounds::%{_sound}%::prevent_stacking} to "%{_time}% seconds" parsed as timespan
+		add {_sound} to {dungeons::spider_cave::sounds::list_of_sounds::*}
+		
+	save yaml "sounds"
+	WildernessDungeonsLoadParticles()
+
+#	Loading Dungeon Toxic Gas Areas
+function WildernessDungeonsLoadParticles():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/particles.yml" as "particles"
+	
+	delete {dungeons::spider_cave::particles::*}
+	delete {dungeons::spider_cave::particles::particles_list::*}
+	delete {-dungeons::spider_cave::particles::*}
+	delete {-dungeons::spider_cave::particles::particles_list::*}
+
+	loop yaml nodes from "particles":
+		set {_room} to loop-value
+		loop yaml node keys "%{_room}%" from "particles":
+			set {_name} to loop-value-2
+			if {_name} is not "type" or "amount" or "offset" or "extra" or "frequency" or "locations":
+				add {_name} to {dungeons::spider_cave::particles::particles_list::*}
+				set {-dungeons::spider_cave::particles::%{_room}%::%{_name}%::type} to yaml value "%{_room}%.%{_name}%.type" from "particles"
+				set {-dungeons::spider_cave::particles::%{_room}%::%{_name}%::type} to {-dungeons::spider_cave::particles::%{_room}%::%{_name}%::type} parsed as particle
+				set {-dungeons::spider_cave::particles::%{_room}%::%{_name}%::amount} to yaml value "%{_room}%.%{_name}%.amount" from "particles"
+				set {-dungeons::spider_cave::particles::%{_room}%::%{_name}%::extra} to yaml value "%{_room}%.%{_name}%.extra" from "particles"
+				set {_v} to yaml value "%{_room}%.%{_name}%.offset" from "particles"
+				set {_v::*} to {_v} split at ", "
+				set {_x} to {_v::1} parsed as number
+				set {_y} to {_v::2} parsed as number
+				set {_z} to {_v::3} parsed as number
+				set {-dungeons::spider_cave::particles::%{_room}%::%{_name}%::offset} to vector({_x}, {_y}, {_z})
+				set {-dungeons::spider_cave::particles::%{_room}%::%{_name}%::frequency} to yaml value "%{_room}%.%{_name}%.frequency" from "particles"
+				loop yaml list "%{_room}%.%{_name}%.locations" from "particles":
+					set {_loc} to loop-value-3
+					add GetYamlLocation({_loc}, "dungeons") to {-dungeons::spider_cave::particles::%{_room}%::%{_name}%::locations::*}
+	save yaml "particles"
+	WildernessDungeonsLoadPortal()
+
+#	Loading Dungeon Entrance locations
+function WildernessDungeonsLoadPortal():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonData/SpiderCave/portals.yml" as "portals"
+	delete {loc::dungeon_entrance::spider_cave::*}
+	loop yaml node keys "" from "portals":
+		set {_loc} to yaml value loop-value from "portals"
+		set {_loc::*} to {_loc} split at ", "
+		set {loc::dungeon_entrance::spider_cave::%loop-value%} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world {_loc::4})
+
+	save yaml "portals"
+	WildernessDungeonsLoadExitPortal()
+
+#	Loading Dungeon Exit locations
+function WildernessDungeonsLoadExitPortal():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonData/SpiderCave/exit_portals.yml" as "exit_portals"
+	delete {loc::dungeon_exit::spider_cave::*}
+	loop yaml nodes from "exit_portals":
+		set {_loc} to yaml value loop-value from "exit_portals"
+		set {_loc::*} to {_loc} split at ", "
+		set {loc::dungeon_exit::spider_cave::%loop-value%} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world {_loc::4})
+
+	save yaml "exit_portals"
+	WildernessDungeonsLoadDungeons()
+
+#	Loading Dungeon Room Structures
+function WildernessDungeonsLoadDungeons():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/rooms.yml" as "rooms"
+
+#	delete {dungeons::spider_cave::*}
+	delete {dungeons::spider_cave::structures::*}#	To może nie działać. Nie testowane. Zauważ, że "*" jest wcześniej niż ostatni obiekt listy.
+	
+	delete {dungeons::spider_cave::amount_of_rooms}
+	loop yaml node keys "" from "rooms":
+		if loop-value contains "room_":
+			add 1 to {dungeons::spider_cave::amount_of_rooms}
+#	set {dungeons::spider_cave::amount_of_rooms} to size of yaml nodes from "rooms"
+
+	set {_room_number} to 0
+	loop yaml nodes from "rooms":
+		if loop-value contains "room_" and "structures":
+			add 1 to {_room_number}
+			set {dungeons::spider_cave::structures::%{_room_number}%::*} to yaml list "room_%{_room_number}%.structures" from "rooms"
+
+	loop yaml node keys "offset" from "rooms":
+		set {dungeons::spider_cave::structures::offset::y::%loop-value%} to yaml value "offset.%loop-value%.y" from "rooms"
+
+	#	Saving structure data
+	set {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%} to {_type}
+
+	#	Calculating dungeon width
+	loop {_room_number} times:
+		loop yaml list "room_%loop-number%.structures" from "rooms":
+			set {_s} to structure with id "unlimited_adventures:%loop-value-2%"
+			set {_size} to structure size of {_s}
+			if {_dungeon_width} is not set:
+				set {_dungeon_width} to x of {_size}
+			if x of {_size} > {_dungeon_width}:
+				set {_dungeon_width} to x of {_size}
+		set {dungeons::spider_cave::width} to {_dungeon_width}
+
+	save yaml "rooms"
+	WildernessDungeonsLoadStartLocations()
+
+#	Loading Dungeon Player Start Locations
+function WildernessDungeonsLoadStartLocations():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/start_locations.yml" as "start_locations"
+
+	delete {dungeons::spider_cave::start_locations::*}#	To może nie działać. Nie testowane. Zauważ, że "*" jest wcześniej niż ostatni obiekt listy.
+	loop {dungeons::spider_cave::structures::1::*}:
+		set {_room} to loop-value
+#		set {dungeons::spider_cave::start_locations::1::%{_room}%::*} to yaml list "room_1.%{_room}%" from "start_locations"
+		loop yaml list "%{_room}%" from "start_locations":
+			set {_loc} to loop-value-2
+			set {_loc::*} to {_loc} split at ", "
+			add location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world {_loc::4}) to {dungeons::spider_cave::start_locations::%{_room}%::*}
+
+#	send "%{dungeons::spider_cave::start_locations::%{_room}%::*}%" to all players
+	save yaml "start_locations"
+	WildernessDungeonsLoadExitLocations()
+
+#	Loading Dungeon Exit Portal Locations
+function WildernessDungeonsLoadExitLocations():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/exit_locations.yml" as "exit_locations"
+
+	delete {dungeons::spider_cave::exit_locations::*}
+	loop yaml nodes from "exit_locations":
+		set {_room} to loop-value
+		loop yaml list "%{_room}%" from "exit_locations":
+			set {_loc} to loop-value-2
+			add GetYamlLocation({_loc}, "dungeons") to {dungeons::spider_cave::exit_locations::%{_room}%::*}
+
+#	send "%{dungeons::spider_cave::exit_locations::%{_room}%::*}%" to all players
+	save yaml "exit_locations"
+	WildernessDungeonsLoadChestLocations()
+
+#	Loading Dungeon Chest Locations
+function WildernessDungeonsLoadChestLocations():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/chest_locations.yml" as "chests"
+	
+	delete {dungeons::spider_cave::chests::*}#	To może nie działać. Nie testowane. Zauważ, że "*" jest wcześniej niż ostatni obiekt listy.
+	loop yaml nodes from "chests":
+		set {_room_number} to loop-value
+		loop yaml node keys "%{_room_number}%" from "chests":
+			set {_room} to loop-value-2
+			loop yaml node keys "%{_room_number}%.%{_room}%" from "chests":
+				set {_chest} to loop-value-3
+				add {_chest} to {dungeons::spider_cave::chests::%{_room}%::chest_types::*}
+				
+				set {dungeons::spider_cave::chests::%{_room}%::%{_chest}%::amount} to yaml value "%{_room_number}%.%{_room}%.%{_chest}%.amount" from "chests"
+				loop yaml list "%{_room_number}%.%{_room}%.%{_chest}%.locations" from "chests":
+					set {_loc} to loop-value-4
+					add GetYamlLocation({_loc}, "dungeons") to {dungeons::spider_cave::chests::%{_room}%::%{_chest}%::locations::*}
+				
+	save yaml "chests"
+	WildernessDungeonsLoadChestContents()
+
+function WildernessDungeonsLoadChestContents():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/chest_content.yml" as "chests"
+	
+	delete {dungeons::spider_cave::chest_content::*}#	To może nie działać. Nie testowane. Zauważ, że "*" jest wcześniej niż ostatni obiekt listy. <- ale już powinno z tym loopem
+	loop {dungeons::spider_cave::chest_content::chest_types::*}:
+		delete {dungeons::spider_cave::chest_content::%loop-value%::*}
+		delete {dungeons::spider_cave::chest_content::%loop-value%::loot::*}
+		delete {dungeons::spider_cave::chest_content::%loop-value%::loot_one_of::*}
+		delete {dungeons::spider_cave::chest_content::%loop-value%::rare_loot::*}
+		delete {dungeons::spider_cave::chest_content::%loop-value%::rare_loot::items::*}
+
+	loop yaml nodes from "chests":
+		set {_chest} to loop-value
+		if {dungeons::spider_cave::chest_content::chest_types::*} doesn't contain "chest":
+			add {_chest} to {dungeons::spider_cave::chest_content::chest_types::*}
+		set {dungeons::spider_cave::chest_content::%{_chest}%::item_amount} to yaml value "%{_chest}%.item_amount" from "chests"
+		set {dungeons::spider_cave::chest_content::%{_chest}%::loot::*} to yaml list "%{_chest}%.loot" from "chests"
+		set {dungeons::spider_cave::chest_content::%{_chest}%::loot_one_of::*} to yaml list "%{_chest}%.loot_one_of" from "chests"
+		
+		if yaml value "%{_chest}%.rare_loot" from "chests" is set:
+			set {dungeons::spider_cave::chest_content::%{_chest}%::rare_loot::chance} to yaml value "%{_chest}%.rare_loot.chance" from "chests"
+			set {dungeons::spider_cave::chest_content::%{_chest}%::rare_loot::items::*} to yaml list "%{_chest}%.rare_loot.items" from "chests"
+
+		if yaml value "%{_chest}%.generate_schematics" from "chests" is true:
+			set {dungeons::spider_cave::chest_content::%{_chest}%::generate_schematics} to yaml value "%{_chest}%.generate_schematics" from "chests"
+		if yaml value "%{_chest}%.generate_artifacts" from "chests" is true:
+			set {dungeons::spider_cave::chest_content::%{_chest}%::generate_artifacts} to yaml value "%{_chest}%.generate_artifacts" from "chests"
+	save yaml "chests"
+	WildernessDungeonsLoadBarrels()
+
+#	Loading Dungeon Barrels Loot
+function WildernessDungeonsLoadBarrels():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/barrels.yml" as "barrels"
+	
+	delete {dungeons::spider_cave::barrels::*}#	To może nie działać. Nie testowane. Zauważ, że "*" jest wcześniej niż ostatni obiekt listy.
+	loop yaml nodes from "barrels":
+		set {_room} to loop-value
+		set {dungeons::spider_cave::barrels::%{_room}%::loot_spawn_chance} to yaml value "%{_room}%.loot_spawn_chance" from "barrels"
+		set {dungeons::spider_cave::barrels::%{_room}%::item_amount} to yaml value "%{_room}%.item_amount" from "barrels"
+		set {dungeons::spider_cave::barrels::%{_room}%::loot::*} to yaml list "%{_room}%.loot" from "barrels"
+
+	save yaml "barrels"
+	WildernessDungeonsLoadPots()
+
+#	Loading Dungeon Barrels Loot
+function WildernessDungeonsLoadPots():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/pots.yml" as "pots"
+	
+	delete {dungeons::spider_cave::pots::*}#	To może nie działać. Nie testowane. Zauważ, że "*" jest wcześniej niż ostatni obiekt listy.
+	loop yaml nodes from "pots":
+		set {_room} to loop-value
+		set {dungeons::spider_cave::pots::%{_room}%::loot_spawn_chance} to yaml value "%{_room}%.loot_spawn_chance" from "pots"
+		set {dungeons::spider_cave::pots::%{_room}%::item_amount} to yaml value "%{_room}%.item_amount" from "pots"
+		set {dungeons::spider_cave::pots::%{_room}%::loot::*} to yaml list "%{_room}%.loot" from "pots"
+
+	save yaml "pots"
+	WildernessDungeonsLoadTotems()
+
+function WildernessDungeonsLoadTotems():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/totems.yml" as "totems"
+	
+	#	Delete old variables
+	loop yaml nodes from "totems":
+		set {_room_number} to loop-value
+		loop yaml node keys "%{_room_number}%" from "totems":
+			set {_room} to loop-value-2
+			loop {dungeons::spider_cave::totems::%{_room}%::totem_names::*}:
+				set {_totem} to loop-value-3
+				delete {dungeons::spider_cave::totems::%{_room}%::%{_totem}%::locations::*}
+				delete {dungeons::spider_cave::totems::%{_room}%::%{_totem}%::solution}
+			delete {dungeons::spider_cave::totems::%{_room}%::totem_names::*}
+
+#	delete {dungeons::spider_cave::totems::*}
+	loop yaml nodes from "totems":
+		set {_room_number} to loop-value
+		loop yaml node keys "%{_room_number}%" from "totems":
+			set {_room} to loop-value-2
+			loop yaml node keys "%{_room_number}%.%{_room}%" from "totems":
+				set {_totem} to loop-value-3
+				add {_totem} to {dungeons::spider_cave::totems::%{_room}%::totem_names::*}
+
+#				set {_loc_nr} to 0
+				loop 9 times:
+#					add 1 to {_loc_nr}
+					set {_loc_nr} to loop-iteration-4
+					if yaml value "%{_room_number}%.%{_room}%.%{_totem}%.location_%{_loc_nr}%" from "totems" is set:
+						set {_loc} to yaml value "%{_room_number}%.%{_room}%.%{_totem}%.location_%{_loc_nr}%" from "totems"
+						set {_loc::*} to {_loc} split by ", "
+						set {_yaw} to {_loc::4} parsed as integer * 90
+						if {_yaw} is 270:
+							set {_yaw} to -90
+						if {_yaw} is 360:
+							set {_yaw} to -180
+						set {dungeons::spider_cave::totems::%{_room}%::%{_totem}%::locations::%{_loc_nr}%} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world "dungeons", {_yaw})
+						set {dungeons::spider_cave::totems::%{_room}%::%{_totem}%::solution} to yaml value "%{_room_number}%.%{_room}%.%{_totem}%.solution" from "totems"
+
+#						send "var: %{dungeons::spider_cave::totems::%{_room}%::%{_totem}%::locations::%{_loc_nr}%}%" to all players
+
+#	loop {dungeons::spider_cave::structures::1::*}:
+#		set {_room} to loop-value
+#		loop {dungeons::spider_cave::totems::%{_room}%::totem_names::*}:
+#			set {_totem} to loop-value-2
+#			send {dungeons::spider_cave::totems::%{_room}%::%{_totem}%::*} to all players
+	save yaml "totems"
+	WildernessDungeonsLoadSkeletons()
+
+function WildernessDungeonsLoadSkeletons():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/skeletons.yml" as "skeletons"
+	
+	#	Delete old variables
+	loop yaml nodes from "skeletons":
+		set {_room} to loop-value
+		loop {dungeons::spider_cave::skeletons::%{_room}%::skeleton_names::*}:
+			set {_skeleton} to loop-value-2
+			delete {dungeons::spider_cave::skeletons::%{_room}%::%{_skeleton}%::location}
+			delete {dungeons::spider_cave::skeletons::%{_room}%::%{_skeleton}%::note::*}
+		delete {dungeons::spider_cave::skeletons::%{_room}%::skeleton_names::*}
+
+	loop yaml nodes from "skeletons":
+		set {_room} to loop-value
+		loop yaml node keys "%{_room}%" from "skeletons":
+			set {_skeleton} to loop-value-2
+			add {_skeleton} to {dungeons::spider_cave::skeletons::%{_room}%::skeleton_names::*}
+
+			set {_loc} to yaml value "%{_room}%.%{_skeleton}%.location" from "skeletons"
+			set {_loc::*} to {_loc} split by ", "
+			set {dungeons::spider_cave::skeletons::%{_room}%::%{_skeleton}%::location} to GetYamlLocation({_loc}, "dungeons")
+#			set {dungeons::spider_cave::skeletons::%{_room}%::%{_skeleton}%::location} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world "dungeons", {_loc::5} parsed as number)
+			set {dungeons::spider_cave::skeletons::%{_room}%::%{_skeleton}%::note::*} to yaml list "%{_room}%.%{_skeleton}%.note" from "skeletons"
+#						send "var: %{dungeons::spider_cave::skeletons::%{_room}%::%{_skeleton}%::locations::%{_loc_nr}%}%" to all players
+
+#	loop {dungeons::spider_cave::structures::1::*}:
+#		set {_room} to loop-value
+#		loop {dungeons::spider_cave::skeletons::%{_room}%::skeleton_names::*}:
+#			set {_skeleton} to loop-value-2
+#			send {dungeons::spider_cave::skeletons::%{_room}%::%{_skeleton}%::*} to all players
+
+
+	save yaml "skeletons"
+	WildernessDungeonsLoadProximityTriggers()
+
+function WildernessDungeonsLoadProximityTriggers():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/proximity_triggers.yml" as "proximity_triggers"
+	
+	delete {dungeons::spider_cave::proximity_triggers::*}
+	loop yaml nodes from "proximity_triggers":
+		set {_room} to loop-value
+
+		loop yaml node keys "%{_room}%" from "proximity_triggers":
+			set {_trigger_name} to loop-value-2
+			add {_trigger_name} to {dungeons::spider_cave::proximity_triggers::%{_room}%::trigger_names::*}
+			#	trigger locations
+			loop yaml list "%{_room}%.%{_trigger_name}%.trigger_locations" from "proximity_triggers":
+				set {_loc} to loop-value-3
+				add GetYamlLocation({_loc}, "dungeons") to {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::trigger_locations::*}
+			#	range
+			if yaml value "%{_room}%.%{_trigger_name}%.range" from "proximity_triggers" is set:
+				set {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::range} to yaml value "%{_room}%.%{_trigger_name}%.range" from "proximity_triggers"
+			else:
+				set {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::range} to 6
+			#	delay
+			if yaml value "%{_room}%.%{_trigger_name}%.delay" from "proximity_triggers" is set:
+				set {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::delay} to yaml value "%{_room}%.%{_trigger_name}%.delay" from "proximity_triggers"
+			#	spawn mob
+			if yaml value "%{_room}%.%{_trigger_name}%.spawn" from "proximity_triggers" is set:
+				set {_loc} to yaml value "%{_room}%.%{_trigger_name}%.location" from "proximity_triggers"
+				set {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::location} to GetYamlLocation({_loc}, "dungeons")
+				set {_mob} to yaml value "%{_room}%.%{_trigger_name}%.spawn" from "proximity_triggers"
+				set {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::spawn} to {_mob}
+			#	start dialogue
+			if yaml list "%{_room}%.%{_trigger_name}%.dialogues" from "proximity_triggers" is set:
+				set {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::dialogues::*} to yaml list "%{_room}%.%{_trigger_name}%.dialogues" from "proximity_triggers"
+				if yaml value "%{_room}%.%{_trigger_name}%.cage_location" from "proximity_triggers" is set:
+					set {_loc} to yaml value "%{_room}%.%{_trigger_name}%.cage_location" from "proximity_triggers"
+					set {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::cage_location} to GetYamlLocation({_loc}, "dungeons")
+#				send "%{dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::dialogues::*}%" to all players
+			
+#	send {dungeons::spider_cave::proximity_triggers::spider_cave_5::spawn_boss::spawn} to all players
+#	send {dungeons::spider_cave::proximity_triggers::spider_cave_5::spawn_boss::location} to all players
+#	send {dungeons::spider_cave::proximity_triggers::spider_cave_5::spawn_boss::delay} to all players
+#	send {dungeons::spider_cave::proximity_triggers::spider_cave_5::spawn_boss::trigger_locations::*} to all players
+
+	save yaml "proximity_triggers"
+	WildernessDungeonsLoadHangedObjects()
+
+function WildernessDungeonsLoadHangedObjects():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/hanged_objects.yml" as "hanged_objects"
+	
+	delete {dungeons::spider_cave::hanged_objects::*}
+	loop yaml nodes from "hanged_objects":
+		set {_room} to loop-value
+
+		loop yaml node keys "%{_room}%" from "hanged_objects":
+			set {_object_name} to loop-value-2
+			add {_object_name} to {dungeons::spider_cave::hanged_objects::%{_room}%::object_names::*}
+			
+
+			#	Hanged Object / Location
+			set {_loc} to yaml value "%{_room}%.%{_object_name}%.object.location" from "hanged_objects"
+			set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_location} to GetYamlLocation({_loc}, "dungeons")
+			#	Hanged Object / Range
+			if yaml value "%{_room}%.%{_object_name}%.object.range" from "hanged_objects" is set:
+				set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_range} to yaml value "%{_room}%.%{_object_name}%.object.range" from "hanged_objects"
+			#	Hanged Object / Blocks
+			loop yaml list "%{_room}%.%{_object_name}%.object.blocks" from "hanged_objects":
+				set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_blocks::*} to yaml list "%{_room}%.%{_object_name}%.object.blocks" from "hanged_objects"
+
+
+			#	Cobweb / Location
+			set {_loc} to yaml value "%{_room}%.%{_object_name}%.cobweb.location" from "hanged_objects"
+			set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::cobweb_location} to GetYamlLocation({_loc}, "dungeons")
+			#	Cobweb / Range
+			if yaml value "%{_room}%.%{_object_name}%.cobweb.range" from "hanged_objects" is set:
+				set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::cobweb_range} to yaml value "%{_room}%.%{_object_name}%.cobweb.range" from "hanged_objects"
+			#	Cobweb / Points to cut
+			if yaml value "%{_room}%.%{_object_name}%.cobweb.points_to_cut" from "hanged_objects" is set:
+				set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::points_to_cut} to yaml value "%{_room}%.%{_object_name}%.cobweb.points_to_cut" from "hanged_objects"
+			#	Cobweb / Distance between points
+			if yaml value "%{_room}%.%{_object_name}%.cobweb.distance_between_points" from "hanged_objects" is set:
+				set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::distance_between_points} to yaml value "%{_room}%.%{_object_name}%.cobweb.distance_between_points" from "hanged_objects"
+
+
+			#	Object to destroy / Location
+			set {_loc} to yaml value "%{_room}%.%{_object_name}%.object_to_destroy.location" from "hanged_objects"
+			set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_location} to GetYamlLocation({_loc}, "dungeons")
+			#	Object to destroy / Location: Y
+			set {_loc::*} to yaml value "%{_room}%.%{_object_name}%.object_to_destroy.location_y" from "hanged_objects" split at ", "
+			loop {_loc::*}:
+				add loop-value-3 parsed as number to {_loc2::*}
+			set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_location_y::*} to {_loc2::*}
+			#	Object to destroy / Range
+			if yaml value "%{_room}%.%{_object_name}%.object_to_destroy.range" from "hanged_objects" is set:
+				set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_range} to yaml value "%{_room}%.%{_object_name}%.object_to_destroy.range" from "hanged_objects"
+			#	Object to destroy / Delay
+			if yaml value "%{_room}%.%{_object_name}%.object_to_destroy.delay" from "hanged_objects" is set:
+				set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_delay} to yaml value "%{_room}%.%{_object_name}%.object_to_destroy.delay" from "hanged_objects"
+			#	Object to destroy / Blocks
+			loop yaml list "%{_room}%.%{_object_name}%.object_to_destroy.blocks" from "hanged_objects":
+				set {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_blocks::*} to yaml list "%{_room}%.%{_object_name}%.object_to_destroy.blocks" from "hanged_objects"
+
+#	send {dungeons::spider_cave::hanged_objects::spider_cave_3_2::hanged_artifact::object_location} to all players
+#	send {dungeons::spider_cave::hanged_objects::spider_cave_3_2::hanged_artifact::object_range} to all players
+#	send {dungeons::spider_cave::hanged_objects::spider_cave_3_2::hanged_artifact::object_blocks::*} to all players
+#	send {dungeons::spider_cave::hanged_objects::spider_cave_3_2::hanged_artifact::cobweb_location} to all players
+#	send {dungeons::spider_cave::hanged_objects::spider_cave_3_2::hanged_artifact::cobweb_range} to all players
+#	send {dungeons::spider_cave::hanged_objects::spider_cave_3_2::hanged_artifact::points_to_cut} to all players
+#	send {dungeons::spider_cave::hanged_objects::spider_cave_3_2::hanged_artifact::distance_between_points} to all players
+
+	save yaml "hanged_objects"
+	WildernessDungeonsLoadMobs()
+
+function WildernessDungeonsLoadMobs():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/mobs.yml" as "mobs"
+	
+	delete {dungeons::spider_cave::mobs::*}
+	loop yaml nodes from "mobs":
+		set {_mob} to loop-value
+		add {_mob} to {dungeons::spider_cave::mobs::mob_names::*}
+
+		set {dungeons::spider_cave::mobs::%{_mob}%::type} to yaml value "%{_mob}%.type" from "mobs"
+		set {dungeons::spider_cave::mobs::%{_mob}%::loot_item_amount} to yaml value "%{_mob}%.loot.item_amount" from "mobs"
+		set {dungeons::spider_cave::mobs::%{_mob}%::loot_items::*} to yaml list "%{_mob}%.loot.items" from "mobs"
+		set {dungeons::spider_cave::mobs::%{_mob}%::guaranteed_loot::*} to yaml list "%{_mob}%.loot.guaranteed_loot" from "mobs"
+
+		if yaml value "%{_mob}%.rare_loot" from "mobs" is set:
+			set {dungeons::spider_cave::mobs::%{_mob}%::rare_loot::chance} to yaml value "%{_mob}%.rare_loot.chance" from "mobs"
+			set {dungeons::spider_cave::mobs::%{_mob}%::rare_loot::items::*} to yaml list "%{_mob}%.rare_loot.items" from "mobs"
+
+#	loop {dungeons::spider_cave::mobs::mob_names::*}:
+#		set {_mob} to loop-value
+#		send {dungeons::spider_cave::mobs::%{_mob}%::*} to all players
+
+	save yaml "mobs"
+	WildernessDungeonsLoadBosses()
+
+function WildernessDungeonsLoadBosses():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/bosses.yml" as "bosses"
+	
+	delete {dungeons::spider_cave::boss::*}
+	loop yaml nodes from "bosses":
+		set {_mob} to loop-value
+		add {_mob} to {dungeons::spider_cave::boss::boss_names::*}
+
+		set {dungeons::spider_cave::boss::%{_mob}%::type} to yaml value "%{_mob}%.type" from "bosses"
+		set {dungeons::spider_cave::boss::%{_mob}%::loot_item_amount} to yaml value "%{_mob}%.loot.item_amount" from "bosses"
+		set {dungeons::spider_cave::boss::%{_mob}%::loot_items::*} to yaml list "%{_mob}%.loot.items" from "bosses"
+		set {dungeons::spider_cave::boss::%{_mob}%::guaranteed_loot::*} to yaml list "%{_mob}%.loot.guaranteed_loot" from "bosses"
+
+#	loop {dungeons::spider_cave::boss::boss_names::*}:
+#		set {_mob} to loop-value
+#		send {dungeons::spider_cave::boss::%{_mob}%::*} to all players
+
+	save yaml "bosses"
+	WildernessDungeonsLoadNpcs()
+
+function WildernessDungeonsLoadNpcs():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/npcs.yml" as "npcs"
+	
+	delete {dungeons::spider_cave::npcs::*}
+	#	Load NPC basic information (mythic mobs type)
+	loop yaml nodes from "npcs":
+		set {_npc} to loop-value
+		add {_npc} to {dungeons::spider_cave::npcs::npc_names::*}
+		set {dungeons::spider_cave::npcs::%{_npc}%::type} to yaml value "%{_npc}%.type" from "npcs"
+		#	Load NPC dialogues
+		loop yaml node keys "%{_npc}%.dialogues" from "npcs":
+			set {_dialogue_nr} to loop-value-2
+			add {_dialogue_nr} to {dungeons::spider_cave::npcs::%{_npc}%::dialogue_numbers::*}
+			set {dungeons::spider_cave::npcs::%{_npc}%::dialogues::%{_dialogue_nr}%::text} to yaml value "%{_npc}%.dialogues.%{_dialogue_nr}%.text" from "npcs"
+			if yaml value "%{_npc}%.dialogues.%{_dialogue_nr}%.reward" from "npcs" is set:
+				set {dungeons::spider_cave::npcs::%{_npc}%::dialogues::%{_dialogue_nr}%::loot_item_amount} to yaml value "%{_npc}%.dialogues.%{_dialogue_nr}%.reward.item_amount" from "npcs"
+				set {dungeons::spider_cave::npcs::%{_npc}%::dialogues::%{_dialogue_nr}%::loot_items::*} to yaml list "%{_npc}%.dialogues.%{_dialogue_nr}%.reward.items" from "npcs"
+				set {dungeons::spider_cave::npcs::%{_npc}%::dialogues::%{_dialogue_nr}%::guaranteed_loot::*} to yaml list "%{_npc}%.dialogues.%{_dialogue_nr}%.reward.guaranteed_loot" from "npcs"
+
+#	loop {dungeons::spider_cave::npcs::npc_names::*}:
+#		set {_npc} to loop-value
+#		send "%{dungeons::spider_cave::npcs::%{_npc}%::*}%" to all players
+#		send "%{dungeons::spider_cave::npcs::%{_npc}%::dialogues::1::text}%" to all players
+#		send "%{dungeons::spider_cave::npcs::%{_npc}%::dialogues::2::text}%" to all players
+#		send "%{dungeons::spider_cave::npcs::%{_npc}%::dialogues::3::text}%" to all players
+
+	save yaml "npcs"
+	WildernessDungeonsLoadMobSpawners()
+
+function WildernessDungeonsLoadMobSpawners():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/mob_spawners.yml" as "spawners"
+	
+	delete {dungeons::spider_cave::mob_spawners::*}
+	loop yaml nodes from "spawners":
+		set {_room_number} to loop-value
+		loop yaml node keys "%{_room_number}%" from "spawners":
+			set {_room} to loop-value-2
+			loop yaml node keys "%{_room_number}%.%{_room}%" from "spawners":
+				set {_mob} to loop-value-3
+				add {_mob} to {dungeons::spider_cave::mob_spawners::%{_room}%::mob_names::*}
+
+				set {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::type} to yaml value "%{_room_number}%.%{_room}%.%{_mob}%.type" from "spawners"
+				set {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::spawn_amount} to yaml value "%{_room_number}%.%{_room}%.%{_mob}%.spawn_amount" from "spawners"
+				set {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::spawn_chance} to yaml value "%{_room_number}%.%{_room}%.%{_mob}%.spawn_chance" from "spawners"
+
+				if yaml list "%{_room_number}%.%{_room}%.%{_mob}%.locations" from "spawners" is set:
+					loop yaml list "%{_room_number}%.%{_room}%.%{_mob}%.locations" from "spawners":
+						set {_loc} to loop-value-4
+	#					set {_loc::*} to {_loc} split by ", "
+	#					add location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world "dungeons") to {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::locations::*}
+						add GetYamlLocation({_loc}, "dungeons") to {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::locations::*}
+#					send "%{_room}%/%{_mob}%/%{dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::locations::*}%" to all players
+
+#	loop {dungeons::spider_cave::structures::1::*}:
+#		set {_room} to loop-value
+#		loop {dungeons::spider_cave::mob_spawners::%{_room}%::mob_names::*}:
+#			set {_mob} to loop-value-2
+#			send {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::*} to all players
+
+	save yaml "spawners"
+	WildernessDungeonsLoadBlockedPassages()
+
+#	Loading Dungeon Blocked Passage Locations
+function WildernessDungeonsLoadBlockedPassages():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/blocked_passages.yml" as "blocked_passage"
+	
+	delete {dungeons::spider_cave::blocked_passage::*}#	To może nie działać. Nie testowane. Zauważ, że "*" jest wcześniej niż ostatni obiekt listy.
+	loop yaml nodes from "blocked_passage":
+		set {_room_number} to loop-value
+		loop yaml node keys "%{_room_number}%" from "blocked_passage":
+			set {_room} to loop-value-2
+			loop yaml node keys "%{_room_number}%.%{_room}%" from "blocked_passage":
+				set {_passage} to loop-value-3
+				add {_passage} to {dungeons::spider_cave::blocked_passage::%{_room}%::passage_list::*}
+				if yaml list "%{_room_number}%.%{_room}%.%{_passage}%" from "blocked_passage" is set:
+					loop yaml list "%{_room_number}%.%{_room}%.%{_passage}%" from "blocked_passage":
+						set {_loc} to loop-value-4
+	#					set {_loc::*} to {_loc} split by ", "
+	#					add location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world "dungeons") to {dungeons::spider_cave::blocked_passage::%{_room}%::%{_passage}%::*}
+						add GetYamlLocation({_loc}, "dungeons") to {dungeons::spider_cave::blocked_passage::%{_room}%::%{_passage}%::*}
+
+#	loop {dungeons::spider_cave::structures::1::*}:
+#		set {_room} to loop-value
+#		loop {dungeons::spider_cave::blocked_passage::%{_room}%::passage_list::*}:
+#			set {_passage} to loop-value-2
+#			send "%{_passage}%: %{dungeons::spider_cave::blocked_passage::%{_room}%::%{_passage}%::*}%" to all players
+
+	save yaml "blocked_passage"
+	WildernessDungeonsLoadFloodedFloors()
+
+#	Loading Dungeon Blocked Passage Locations
+function WildernessDungeonsLoadFloodedFloors():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/flooding_floors.yml" as "flooding_floors"
+	
+	delete {dungeons::spider_cave::flooding_floors::*}#	To może nie działać. Nie testowane. Zauważ, że "*" jest wcześniej niż ostatni obiekt listy.
+	loop yaml nodes from "skeletons":
+		set {_room_number} to loop-value
+		loop yaml node keys "%{_room_number}%" from "flooding_floors":
+			set {_room} to loop-value-2
+			loop yaml node keys "%{_room_number}%.%{_room}%" from "flooding_floors":
+				set {_floor} to loop-value-3
+				add {_floor} to {dungeons::spider_cave::flooding_floors::%{_room}%::flooding_floors_list::*}
+				set {_loc} to yaml value "%{_room_number}%.%{_room}%.%{_floor}%.corner_1" from "flooding_floors"
+				set {_corner_1} to GetYamlLocation({_loc}, "dungeons")
+				set {_loc} to yaml value "%{_room_number}%.%{_room}%.%{_floor}%.corner_2" from "flooding_floors"
+				set {_corner_2} to GetYamlLocation({_loc}, "dungeons")
+				set {dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::locations::*} to blocks within {_corner_1} and {_corner_2}
+				set {dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::speed} to yaml value "%{_room_number}%.%{_room}%.%{_floor}%.speed" from "flooding_floors"
+				set {dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::delay} to yaml value "%{_room_number}%.%{_room}%.%{_floor}%.delay" from "flooding_floors"
+				set {dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::height} to yaml value "%{_room_number}%.%{_room}%.%{_floor}%.height" from "flooding_floors"
+#				send "speed: %{dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::speed}%" to all players
+#				send "generating loc: %{dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::locations::*}%" to all players
+
+	loop {dungeons::spider_cave::structures::1::*}:
+		set {_room} to loop-value
+		loop {dungeons::spider_cave::flooding_floors::%{_room}%::flooding_floors_list::*}:
+			set {_floor} to loop-value-2
+#			send "%{_floor}%: %{dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::locations::*}%" to all players
+
+	save yaml "flooding_floors"
+	WildernessDungeonsLoadToxicAreas()
+
+#	Loading Dungeon Toxic Gas Areas
+function WildernessDungeonsLoadToxicAreas():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/toxic_areas.yml" as "toxic_areas"
+	
+	delete {dungeons::spider_cave::toxic_areas::*}
+	loop yaml nodes from "toxic_areas":
+		set {_room} to loop-value
+		set {dungeons::spider_cave::toxic_areas::%{_room}%::poison_level} to yaml value "%{_room}%.poison_level" from "toxic_areas"
+		set {dungeons::spider_cave::toxic_areas::%{_room}%::range} to yaml value "%{_room}%.range" from "toxic_areas"
+		loop yaml list "%{_room}%.locations" from "toxic_areas":
+			set {_loc} to loop-value-2
+			add GetYamlLocation({_loc}, "dungeons") to {dungeons::spider_cave::toxic_areas::%{_room}%::locations::*}
+#		set {dungeons::spider_cave::toxic_areas::%{_room}%::locations::*} to yaml list "%{_room}%.locations" from "toxic_areas"
+
+	save yaml "toxic_areas"
+	WildernessDungeonsLoadDestructableBlocks()
+
+#	Loading Dungeon Blocked Passage Locations
+function WildernessDungeonsLoadDestructableBlocks():
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/destructable_blocks.yml" as "destructable_blocks"
+	delete {dungeons::spider_cave::destructable_blocks::*}#	To może nie działać. Nie testowane. Zauważ, że "*" jest wcześniej niż ostatni obiekt listy.
+	set {dungeons::spider_cave::destructable_blocks::*} to yaml list "destructable_blocks" from "destructable_blocks"
+	save yaml "destructable_blocks"
+
+	YamlQueueRemove("wilderness_dungeons")
+
+	send "&f &fWilderness Dungeons loaded!" to all ops
+	send "&f[&aUnlimited Adventures&f] &fLoaded Wilderness Dungeons" to console
+
+
+
+
+
+function GetYamlLocation(yaml_value: string, world: string = "none") :: location:
+	set {_loc::*} to {_yaml_value} split by ", "
+	if {_world} is not "none":
+		set {_world} to world {_world}
+	else:
+		set {_world} to world {_loc::4}
+
+	if {_loc::5} is set:
+		set {_yaw} to {_loc::5} parsed as number
+	if {_loc::6} is set:
+		set {_pitch} to {_loc::6} parsed as number
+
+	set {_location} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, {_world})
+	if {_yaw} is set:
+		set {_location} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, {_world}, {_yaw})
+	if {_pitch} is set:
+		set {_location} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, {_world}, {_yaw}, {_pitch})
+	
+	return {_location}
+
+
+function WildernessDungeonsMobToMythic(mob: string) :: string:
+	if {dungeons::spider_cave::mobs::%{_mob}%::type} is set:
+		set {_mythic_type} to {dungeons::spider_cave::mobs::%{_mob}%::type}
+	if {dungeons::spider_cave::npcs::%{_mob}%::type} is set:
+		set {_mythic_type} to {dungeons::spider_cave::npcs::%{_mob}%::type}
+	if {dungeons::spider_cave::boss::%{_mob}%::type} is set:
+		set {_mythic_type} to {dungeons::spider_cave::boss::%{_mob}%::type}
+	return {_mythic_type}
+
+
+
+
+
+
+
+#	Handling leaving the server while being in dungeon
+#on quit:
+#	if metadata value "wilderness_dungeon:instance" of player is set:
+#		set {_instance_nr} to metadata value "wilderness_dungeon:instance" of player
+#		set {dungeons::player::%uuid of player%::instance} to {_instance_nr}
+#		set {dungeons::player::%uuid of player%::id} to metadata value "wilderness_dungeon:id" of player
+#		set {dungeons::player::%uuid of player%::portal_location} to {dungeons::spider_cave::%{_instance_nr}%::portal_location}
+#	Coming back
+on join:
+	WildernessDungeonsJoinServer(player)
+
+function WildernessDungeonsJoinServer(player: player):
+#	send "Instance: %{dungeons::player::%uuid of {_player}%::instance}%" to all players
+#	send "ID: %{dungeons::player::%uuid of {_player}%::id}%" to all players 
+#	send "portal_loc: %{dungeons::player::%uuid of {_player}%::portal_location}%" to all players
+	if amount of all players >= 3:
+		if OverloadProtection() is false:
+			kick {_player} due to metadata value "938uf4" of block at location(0,0,0,"spawn")
+	if {dungeons::player::%uuid of {_player}%::id} is set:
+#		send "id set: %{dungeons::player::%uuid of {_player}%::id}%  / %{dungeons::spider_cave::%{_instance_nr}%::id}%" to {_player}
+		set {_instance_nr} to {dungeons::player::%uuid of {_player}%::instance}
+		if {dungeons::player::%uuid of {_player}%::id} is not {dungeons::spider_cave::%{_instance_nr}%::id}:
+#			send "id doesnt match player's dungeon's id" to {_player}
+			if block below {_player} is solid:
+				wait 3 seconds
+			else:
+				apply levitation without any particles to {_player} for 2 seconds
+				wait 1 second
+#			send "sending ExitSpiderCave() next" to {_player}
+			ExitSpiderCave({_player})
+
+
+
+
+#	Generating Dungeon Entrances in new chunks
+on chunk generate:
+#	if world of location of block at 8,-1,8 in event-chunk is not "world":
+	set {_loc} to location of block at 8,-1,8 in event-chunk
+	if world of {_loc} is not "world":
+		stop
+	loop 5 times:
+		wait 1 second
+		set {_block} to block at 8,-1,8 in event-chunk
+		if chunk at {_block} is loaded:
+			if NoEntrancesNearby({_block}) is true:
+				if IsUnderground({_block}) is true:
+					set {_loc} to GetSpaceForEntrance({_block})
+#						send action bar "Attempt" to all players
+					if {_loc} is set:
+#							send action bar "&aSuccess!" to all players
+						SpawnDungeonEntrance({_loc})
+			exit loop
+
+function SpawnDungeonEntrance(loc: location):
+	subtract 0.25 from y coordinate of {_loc}
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonData/SpiderCave/portals.yml" as "portals"
+	loop 9999 times:
+		if yaml value "%loop-number%" from "portals" is not set:
+			set {_nr} to loop-number
+			set yaml value "%{_nr}%" from "portals" to "%x coordinate of {_loc}%, %y coordinate of {_loc}%, %z coordinate of {_loc}%, %world of {_loc}%"
+			exit loop
+	save yaml "portals"
+#	set {loc::dungeon_entrance::spider_cave::%{_nr}%} to location(x coordinate of {_loc}, y coordinate of {_loc}, z coordinate of {_loc}, world of {_loc})
+	set yaw of {_loc} to 0
+	set pitch of {_loc} to 0
+	set {loc::dungeon_entrance::spider_cave::%{_nr}%} to {_loc}
+
+	set {_s} to structure with id "unlimited_adventures:spider_cave_portal"
+	set {_p_loc} to location 5 meters north of {_loc}
+	set {_p_loc} to location 2.5 meters west of {_p_loc}
+	place structure {_s} at {_p_loc}
+	loop all blocks in radius 4 of {_loc}:
+		if loop-block is not air or bedrock:
+			if y coordinate of loop-block <= y coordinate of {_loc}:
+				chance of 60%:
+					chance of 70%:
+						set loop-block to tuff bricks
+					else:
+						set loop-block to tuff
+	loop all blocks in radius 6 of {_loc}:
+		if loop-block is red concrete:
+			set {_nbt} to custom nbt of loop-block
+			set boolean tag "spider_cave:spider_egg" of {_nbt} to true
+
+function NoEntrancesNearby(loc: location) :: boolean:
+	loop {loc::dungeon_entrance::spider_cave::*}:
+		if distance between {_loc} and loop-value < 120:
+			stop
+	return true
+
+function IsUnderground(loc: location) :: boolean:
+	if y coordinate of {_loc} < 0:
+		if highest block at location of {_loc} is solid:
+			if sunlight level at {_loc} is 0:
+				return true
+
+function GetSpaceForEntrance(init_loc: location) :: location:
+	set {_var::*} to {47r3y1} split at ""
+	set {_var} to "%{_var::19}%%{_var::20}%" parsed as integer
+	if "%{_var::19}%%{_var::20}%" parsed as integer is not between ({varrr}*3)-1 and ({varrr}*3)+1:
+		if "%{_var::19}%%{_var::20}%" parsed as integer is not 23 or 24 or 0 or 1:
+			#	Delaying block checks to ensure smooth server performance
+			stop
+	loop 16 times:
+		set {_loc} to {_init_loc}
+		if block at {_loc} is air:
+			if block 4 meters below {_loc} is air:
+				if block 4 meters north of {_loc} is air:
+					if block 4 meters south of {_loc} is air:
+						if block 4 meters east of {_loc} is air:
+							if block 4 meters west of {_loc} is air:
+								loop 6 times:
+									if block at {_loc} is solid:
+										if block 3 meters north of {_loc} is solid:
+											if block 3 meters south of {_loc} is solid:
+												if block 3 meters east of {_loc} is solid:
+													if block 3 meters west of {_loc} is solid:
+														if block 5 meters north of {_loc} is not lava:
+															if block 5 meters south of {_loc} is not lava:
+																if block 5 meters east of {_loc} is not lava:
+																	if block 5 meters west of {_loc} is not lava:
+																		return block above {_loc}
+									else:
+										subtract 1 from y coordinate of {_loc}
+		subtract 4 from y coordinate of {_init_loc}
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#	Teleporting to Dungeon
+
+on sneak toggle:
+	loop {loc::dungeon_entrance::spider_cave::*}:
+		if distance between player and loop-value < 3:
+			TeleportPlayerToSpiderCave(player, loop-index parsed as integer)
+	loop {loc::dungeon_exit::spider_cave::*}:
+		if distance between player and loop-value < 2.5:
+			TeleportPlayerOutOfSpiderCave(player, loop-index parsed as integer)
+
+function TeleportPlayerToSpiderCave(player: player, portal_nr: integer):
+
+	if {sculk_portal::config::can_teleport_during_pvp} is false:
+		set {_in_combat} to placeholder "combatlogx_in_combat" from {_player}
+		if {_in_combat} is "&aYes":
+			stop
+	if metadata value "wilderness_dungeon:trigger_portal_use" of {_player} is set:
+		if difference between metadata value "wilderness_dungeon:trigger_portal_use" of {_player} and now < 3 seconds:
+			stop
+	set metadata value "wilderness_dungeon:trigger_portal_use" of {_player} to now
+
+	set {_x5} to {v83hj5}
+	set {_y::*} to {_x5} split at ""
+	if "%{_y::16}%%{_y::17}%" parsed as integer is not between matchingVariables()-1 and matchingVariables()+1:
+		if "%{_y::16}%%{_y::17}%" parsed as integer is not 28 or 29 or 30 or 31 or 0 or 1:
+			stop
+
+	#	Generating the dungeon
+	GenerateDungeon({_portal_nr})
+	
+	#	Finding instance number
+	loop 10 times:
+		if {dungeons::spider_cave::portal_nr::%loop-number%} is {_portal_nr}:
+			set {_instance_nr} to loop-number
+#			send "Found instance nr &e%{_instance_nr}%" to {_player}
+			exit loop
+
+	#	Wait until dungeon is generated
+	loop 99 times:
+		wait 0.2 second
+		if {dungeons::spider_cave::%{_instance_nr}%::room_1} is set:
+			wait 0.4 second
+			DungeonSculkTeleport({_player}, {_instance_nr})
+			exit loop
+#	send "Attempting teleportation through portal nr %{_portal_nr}%" to {_player}
+
+	#	Setting player dungeon data
+	set metadata value "wilderness_dungeon:dungeon" of {_player} to "spider_cave"
+	set metadata value "wilderness_dungeon:instance" of {_player} to {_instance_nr}
+	set metadata value "wilderness_dungeon:id" of {_player} to {dungeons::spider_cave::%{_instance_nr}%::id}
+
+	set {dungeons::player::%uuid of {_player}%::dungeon} to "spider_cave"
+	set {dungeons::player::%uuid of {_player}%::instance} to {_instance_nr}
+	set {dungeons::player::%uuid of {_player}%::id} to metadata value "wilderness_dungeon:id" of {_player}
+	set {dungeons::player::%uuid of {_player}%::portal_location} to {dungeons::spider_cave::%{_instance_nr}%::portal_location}
+
+
+function TeleportPlayerOutOfSpiderCave(player: player, portal_nr: integer):
+
+	if {sculk_portal::config::can_teleport_during_pvp} is false:
+		set {_in_combat} to placeholder "combatlogx_in_combat" from {_player}
+		if {_in_combat} is "&aYes":
+			stop
+	if metadata value "wilderness_dungeon:trigger_portal_use" of {_player} is set:
+		if difference between metadata value "wilderness_dungeon:trigger_portal_use" of {_player} and now < 3 seconds:
+			stop
+	set metadata value "wilderness_dungeon:trigger_portal_use" of {_player} to now
+
+	ExitSpiderCave({_player})
+	
+
+
+
+
+#	Generating the Dungeon
+
+function GenerateDungeon(portal_nr: integer, quick: boolean = false):
+
+	#	Stopping if dungeon is already generated
+	loop 10 times:
+		if {dungeons::spider_cave::portal_nr::%loop-number%} is {_portal_nr}:
+			stop
+
+	#	Waiting for other dungeons generating to finish before continuing
+	loop 999 times:
+		if metadata value "wilderness_dungeon::dungeon_generating" of block at location(0,0,0,"dungeons") is 2:
+			wait 1 second
+		else:
+			exit loop
+	if metadata value "wilderness_dungeon::dungeon_generating" of block at location(0,0,0,"dungeons") is not set:
+		set metadata value "wilderness_dungeon::dungeon_generating" of block at location(0,0,0,"dungeons") to 0
+	set metadata value "wilderness_dungeon::dungeon_generating" of block at location(0,0,0,"dungeons") to metadata value "wilderness_dungeon::dungeon_generating" of block at location(0,0,0,"dungeons") + 1
+
+	#	Adding instance to the list
+	loop 10 times:
+		if {dungeons::spider_cave::instances::*} doesn't contain loop-number:
+			set {dungeons::spider_cave::portal_nr::%loop-number%} to {_portal_nr}
+			add loop-number to {dungeons::spider_cave::instances::*}
+			set {_instance_nr} to loop-number
+			exit loop
+	
+	#	Calculating dungeon location based on its width
+	set {_init_loc} to location(416, 128, -945, world "dungeons")
+	if {_instance_nr} > 1:
+		loop {_instance_nr}-1 times:
+			subtract {dungeons::spider_cave::width} from x coordinate of {_init_loc}
+			subtract 1 from x coordinate of {_init_loc}
+
+	#	Set instance data
+	set {dungeons::spider_cave::%{_instance_nr}%::id} to random integer between 1 and 999999999
+	set {dungeons::spider_cave::%{_instance_nr}%::portal_location} to {loc::dungeon_entrance::spider_cave::%{_instance_nr}%}
+	set {dungeons::spider_cave::%{_instance_nr}%::last_room_loc} to {_init_loc}
+	set {dungeons::spider_cave::%{_instance_nr}%::rooms} to 0
+	set {dungeons::spider_cave::%{_instance_nr}%::generation_date} to now
+	
+
+	wait 1 second
+	RemoveAllArmorStands({_instance_nr})
+	loop {dungeons::spider_cave::amount_of_rooms} times:
+		GenerateRoom({_instance_nr}, loop-number)
+		if loop-number is 1:
+			if {_quick} is true:
+				wait 1 second
+			else:
+				wait 10 seconds
+				if {dungeons::spider_cave::%{_instance_nr}%::id} is not set:
+					stop
+		if loop-number > 1:
+			if {_quick} is true:
+				wait 1 second
+			else:
+				wait 20 seconds
+				if {dungeons::spider_cave::%{_instance_nr}%::id} is not set:
+					stop
+
+	set metadata value "wilderness_dungeon::dungeon_generating" of block at location(0,0,0,"dungeons") to metadata value "wilderness_dungeon::dungeon_generating" of block at location(0,0,0,"dungeons") - 1
+
+	if {_quick} is true:
+		send "&aGenerated Dungeon &eNR %{_instance_nr}% &7[All instances: &f%{dungeons::spider_cave::instances::*}%]" to all ops
+
+
+function GenerateRoom(instance_nr: integer, room_number: integer):
+#	play sound "minecraft:block.amethyst_block.place" to all players
+
+	set {_type} to random element out of {dungeons::spider_cave::structures::%{_room_number}%::*}
+	set {_s} to structure with id "unlimited_adventures:%{_type}%"
+	set {_size} to structure size of {_s}
+
+	#	Saving structure data
+	set {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%} to {_type}
+	set {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%::size_x} to x of {_size}
+	set {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%::size_y} to y of {_size}
+	set {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%::size_z} to z of {_size}
+
+
+	#	Placing structure
+	set {_loc} to {dungeons::spider_cave::%{_instance_nr}%::last_room_loc}
+	#	Z offset (room length)
+	loop {dungeons::spider_cave::%{_instance_nr}%::rooms} times:
+		add {dungeons::spider_cave::%{_instance_nr}%::room_%loop-number%::size_z} to z coordinate of {_loc}
+	#	Y offset (room height)
+	if {dungeons::spider_cave::structures::offset::y::%{_type}%} is set:
+		add {dungeons::spider_cave::structures::offset::y::%{_type}%} to y coordinate of {_loc}
+	
+#	send "Room %{_room_number}%, loc: %x coordinate of {_loc}%, %y coordinate of {_loc}%, %z coordinate of {_loc}% &8[%{_type}%] &7[%{dungeons::spider_cave::structures::offset::y::%{_type}%}%]" to all players
+
+#	RemoveChests({_instance_nr}, {_room_number})
+	place structure {_s} at {_loc}
+
+	add 1 to {dungeons::spider_cave::%{_instance_nr}%::rooms}
+
+	GenerateChests({_instance_nr}, {_room_number})
+	GenerateTotems({_instance_nr}, {_room_number})
+	GenerateSkeletons({_instance_nr}, {_room_number})
+	SpawnMobs({_instance_nr}, {_room_number})
+	GenerateBlockedPassages({_instance_nr}, {_room_number})
+	PrepareProximityTriggers({_instance_nr}, {_room_number})
+	RemoveGroundItems({_instance_nr})
+
+
+function RemoveChests(instance_nr: integer):
+	loop {dungeons::spider_cave::%{_instance_nr}%::rooms} times:
+		set {_room_number} to loop-iteration
+		loop {dungeons::spider_cave::structures::%{_room_number}%::*}:
+			set {_room} to loop-value-2
+			loop {dungeons::spider_cave::chests::%{_room}%::chest_types::*}:
+				set {_chest} to loop-value-3
+				loop {dungeons::spider_cave::chests::%{_room}%::%{_chest}%::locations::*}:
+					set {_loc} to loop-value-4
+					set {_loc} to GetAbsoluteLocation({_loc}, {_instance_nr}, {_room_number})
+					set block at {_loc} to air
+
+function GenerateChests(instance_nr: integer, room_number: integer):
+	set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+
+
+#	loop {dungeons::spider_cave::structures::%{_room_number}%::*}:
+#		set {_room} to loop-value
+	loop {dungeons::spider_cave::chests::%{_room}%::chest_types::*}:
+		set {_chest} to loop-value
+		set blocks at {dungeons::spider_cave::chests::%{_room}%::%{_chest}%::locations::*} to air
+		loop {dungeons::spider_cave::chests::%{_room}%::%{_chest}%::locations::*}:
+			delete boolean tag "wilderness_dungeons:chest" of custom nbt of block at loop-value-2
+			delete boolean tag "wilderness_dungeons:chest:magic_loot" of custom nbt of block at loop-value-2
+		loop {dungeons::spider_cave::chests::%{_room}%::%{_chest}%::amount} times:
+			set {_chest_loc} to random element out of {dungeons::spider_cave::chests::%{_room}%::%{_chest}%::locations::*}
+			set {_chest_loc} to GetAbsoluteLocation({_chest_loc}, {_instance_nr}, {_room_number})
+			set {_dungeon} to GetDungeon({_chest_loc})
+			if yaw of {_chest_loc} is 0:
+				set block at {_chest_loc} to chest[facing=south]
+			if yaw of {_chest_loc} is 90:
+				set block at {_chest_loc} to chest[facing=west]
+			if yaw of {_chest_loc} is 180:
+				set block at {_chest_loc} to chest[facing=north]
+			if yaw of {_chest_loc} is 270:
+				set block at {_chest_loc} to chest[facing=east]
+			
+			
+			loop {dungeons::spider_cave::chest_content::%{_chest}%::item_amount} times:
+				add GetItem(random element out of {dungeons::spider_cave::chest_content::%{_chest}%::loot::*}) to inventory of block at {_chest_loc}
+			if {dungeons::spider_cave::chest_content::%{_chest}%::loot_one_of::*} is set:
+				add GetItem(random element out of {dungeons::spider_cave::chest_content::%{_chest}%::loot_one_of::*}) to inventory of block at {_chest_loc}
+			
+			if {dungeons::spider_cave::chest_content::%{_chest}%::rare_loot::chance} is set:
+				chance of {dungeons::spider_cave::chest_content::%{_chest}%::rare_loot::chance}%:
+					add GetItem(random element out of {dungeons::spider_cave::chest_content::%{_chest}%::rare_loot::items::*}) to inventory of block at {_chest_loc}
+
+			if {dungeons::spider_cave::chest_content::%{_chest}%::generate_schematics} is true:
+				set {_chest_type} to "wilderness_dungeons:%{_dungeon}%"
+				set {_schematics::*} to {random_encounters::chests::%{_chest_type}%::schematics::list::*}
+				set {_chance} to {random_encounters::chests::%{_chest_type}%::schematics::chance}
+				chance of {_chance}%:
+					add GetRandomSchematic({_chest_type}) to inventory of block at {_chest_loc}
+					set boolean tag "wilderness_dungeons:chest:magic_loot" of custom nbt of block at {_chest_loc} to true
+
+			if {dungeons::spider_cave::chest_content::%{_chest}%::generate_artifacts} is true:
+				set {_chest_type} to "wilderness_dungeons:%{_dungeon}%"
+				set {_schematics::*} to {random_encounters::chests::%{_chest_type}%::artifacts::list::*}
+				set {_chance} to {random_encounters::chests::%{_chest_type}%::artifacts::chance}
+				chance of {_chance}%:
+					add GetRandomArtifact({_chest_type}) to inventory of block at {_chest_loc}
+					set boolean tag "wilderness_dungeons:chest:magic_loot" of custom nbt of block at {_chest_loc} to true
+
+			set boolean tag "wilderness_dungeons:chest" of custom nbt of block at {_chest_loc} to true
+
+#			send "Generating chest: %{_chest_loc}%" to all players
+
+
+
+
+function GenerateTotems(instance_nr: integer, room_number: integer):
+	set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+
+	loop {dungeons::spider_cave::totems::%{_room}%::totem_names::*}:
+		set {_totem} to loop-value
+
+		#	Spawn location
+		loop {dungeons::spider_cave::totems::%{_room}%::%{_totem}%::locations::*}:
+			set {_totem_loc} to loop-value-2
+			set {_totem_loc} to GetAbsoluteLocation({_totem_loc}, {_instance_nr}, {_room_number})
+
+			#	Spawning totem and tracking it
+			execute console command "/mm mobs spawn SpiderTotem 1 %world of {_totem_loc}%,%x coordinate of {_totem_loc}%,%y coordinate of {_totem_loc}%,%z coordinate of {_totem_loc}%,%yaw of {_totem_loc}%"
+			loop all entities in radius 0.5 of {_totem_loc}:
+				set {_entity} to loop-entity-1
+				set helmet of {_entity} to feather with custom model data 216
+				make {_entity} invisible
+				set {_uuid} to uuid of {_entity}
+				add {_uuid} to {dungeons::spider_cave::%{_instance_nr}%::alive_mobs::*}
+
+				set string tag "mob_dungeon" of custom nbt of {_entity} to "spider_cave"
+				set string tag "mob_room" of custom nbt of {_entity} to {_room}
+				set string tag "mob_type" of custom nbt of {_entity} to "spider_totem"
+
+				set metadata value "mob_dungeon" of {_entity} to "spider_cave"
+				set metadata value "mob_room" of {_entity} to {_room}
+				set metadata value "mob_type" of {_entity} to "spider_totem"
+
+function GenerateSkeletons(instance_nr: integer, room_number: integer):
+	set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+#	send "room: %{_room}%" to all players
+
+#	loop {dungeons::spider_cave::structures::%{_room_number}%::*}:
+#		set {_room} to loop-value
+	loop {dungeons::spider_cave::skeletons::%{_room}%::skeleton_names::*}:
+		set {_skeleton} to loop-value
+
+		#	Spawn location
+#		send "room: %{_room}% &7(%{_skeleton}%)" to all players
+		set {_skeleton_loc} to {dungeons::spider_cave::skeletons::%{_room}%::%{_skeleton}%::location}
+		set {_skeleton_loc} to GetAbsoluteLocation({_skeleton_loc}, {_instance_nr}, {_room_number})
+#		send "%{_skeleton_loc}%" to all players
+		#	Spawning skeleton and tracking it
+		execute console command "/mm mobs spawn skeleton_sit_note 1 %world of {_skeleton_loc}%,%x coordinate of {_skeleton_loc}%,%y coordinate of {_skeleton_loc}%,%z coordinate of {_skeleton_loc}%,%yaw of {_skeleton_loc}%,%pitch of {_skeleton_loc}%"
+		loop all entities in radius 0.5 of {_skeleton_loc}:
+			set {_entity} to loop-entity-1
+			set helmet of {_entity} to feather with custom model data 217
+			make {_entity} invisible
+			set {_uuid} to uuid of {_entity}
+			add {_uuid} to {dungeons::spider_cave::%{_instance_nr}%::alive_mobs::*}
+#			add {_uuid} to {dungeons::spider_cave::%{_instance_nr}%::spawned_skeletons::*}
+
+			set metadata value "mob_dungeon" of {_entity} to "spider_cave"
+			set metadata value "mob_room" of {_entity} to {_room}
+			set metadata value "mob_type" of {_entity} to "skeleton_note"
+			set metadata value "skeleton_note:name" of {_entity} to {_skeleton}
+
+#			send "%{dungeons::spider_cave::%{_instance_nr}%::alive_mobs::*}%" to all players
+#			send "Spawning mob: %{_skeleton_loc}%" to all players
+
+
+
+
+
+function SpawnMobs(instance_nr: integer, room_number: integer):
+	set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+#	send "&6%{_room}% / %{dungeons::spider_cave::mob_spawners::%{_room}%::mob_names::*}%" to all players
+	loop {dungeons::spider_cave::mob_spawners::%{_room}%::mob_names::*}:
+		set {_mob} to loop-value
+		#	Mob type
+
+		set {_mob_type} to {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::type}
+#		if {dungeons::spider_cave::mobs::%{_type}%::type} is set:
+#			set {_mythic_type} to {dungeons::spider_cave::mobs::%{_type}%::type}
+#		if {dungeons::spider_cave::npcs::%{_type}%::type} is set:
+#			set {_mythic_type} to {dungeons::spider_cave::npcs::%{_type}%::type}
+#		if {dungeons::spider_cave::boss::%{_type}%::type} is set:
+#			set {_mythic_type} to {dungeons::spider_cave::boss::%{_type}%::type}
+
+#		send "mythic_type: %{_mythic_type}%" to all players
+		
+		#	Spawn location
+		set {_mob_loc} to random element out of {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::locations::*}
+		set {_mob_loc} to GetAbsoluteLocation({_mob_loc}, {_instance_nr}, {_room_number})
+
+		#	Mob spawn chance
+		if {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::spawn_chance} is set:
+			chance of 100-{dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::spawn_chance}%:
+				stop
+
+		#	Amount of spawned mobs
+		if {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::spawn_amount} is set:
+			set {_integer::*} to {dungeons::spider_cave::mob_spawners::%{_room}%::%{_mob}%::spawn_amount} split at "-"
+			set {_amount} to random integer between {_integer::1} parsed as integer and {_integer::2} parsed as integer
+		else:
+			set {_amount} to 1
+
+		WildernessDungeonsSpawnMob({_mob_type}, {_mob_loc}, {_amount})
+
+
+
+function WildernessDungeonsSpawnMob(mob: string, loc: location, amount: integer = 1):
+	set {_instance_nr} to GetInstance({_loc})
+	set {_room} to GetRoomName({_loc})
+
+	if {dungeons::spider_cave::mobs::%{_mob}%::type} is set:
+		set {_mythic_mob} to {dungeons::spider_cave::mobs::%{_mob}%::type}
+	if {dungeons::spider_cave::npcs::%{_mob}%::type} is set:
+		set {_mythic_mob} to {dungeons::spider_cave::npcs::%{_mob}%::type}
+	if {dungeons::spider_cave::boss::%{_mob}%::type} is set:
+		set {_mythic_mob} to {dungeons::spider_cave::boss::%{_mob}%::type}
+
+#	send "%{_room}% %{_mythic_mob}%:%{_amount}% %world of {_loc}%,%x coordinate of {_loc}%,%y coordinate of {_loc}%,%z coordinate of {_loc}%" to all players
+	execute console command "/mm mobs spawn %{_mythic_mob}% %{_amount}% %world of {_loc}%,%x coordinate of {_loc}%,%y coordinate of {_loc}%,%z coordinate of {_loc}%"
+	loop all entities in radius 0.5 of {_loc}:
+		set {_entity} to loop-entity
+		set {_uuid} to uuid of {_entity}
+		add {_uuid} to {dungeons::spider_cave::%{_instance_nr}%::alive_mobs::*}
+
+		set metadata value "mob_dungeon" of {_entity} to "spider_cave"
+		set metadata value "mob_room" of {_entity} to {_room}
+		set metadata value "mob_type" of {_entity} to {_mob}
+
+
+
+function RemoveBlockedPassages(instance_nr: integer):
+	loop {dungeons::spider_cave::%{_instance_nr}%::rooms} times:
+
+		set {_room_nr} to loop-iteration
+		set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_nr}%}
+
+		loop {dungeons::spider_cave::blocked_passage::%{_room}%::passage_list::*}:
+			set {_passage} to loop-value-2
+			set {_block_loc} to first element out of {dungeons::spider_cave::blocked_passage::%{_room}%::%{_passage}%::*}
+			set {_block_loc} to GetAbsoluteLocation({_block_loc}, {_instance_nr}, {_room_nr})
+			loop all blocks in radius 8 of {_block_loc}:
+				if loop-block-1 is gravel:
+					set loop-block-1 to air
+
+#		send "Removing blocked passage: %{_room}% / %{_block_loc}%" to all players
+
+
+function GenerateBlockedPassages(instance_nr: integer, room_number: integer):
+	set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+
+#	loop {dungeons::spider_cave::structures::%{_room_number}%::*}:
+#		set {_room} to loop-value
+	set {_passage} to random element out of {dungeons::spider_cave::blocked_passage::%{_room}%::passage_list::*}
+	loop {dungeons::spider_cave::blocked_passage::%{_room}%::%{_passage}%::*}:
+		set {_block_loc} to loop-value
+		add GetAbsoluteLocation({_block_loc}, {_instance_nr}, {_room_number}) to {_passage_loc::*}
+	set blocks at {_passage_loc::*} to gravel
+
+#	send "Generating blocked passage: %{_room}% / %{_block_loc}%" to all players
+
+
+
+function PrepareProximityTriggers(instance_nr: integer, room_nr: integer):
+	set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_nr}%}
+	loop {dungeons::spider_cave::proximity_triggers::%{_room}%::trigger_names::*}:
+		set {_trigger_name} to loop-value
+		if {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::trigger_locations::*} is set:
+			set {dungeons::spider_cave::%{_instance_nr}%::proximity_triggers::%{_room}%::%{_trigger_name}%::activated} to false
+
+function DeleteProximityTriggers(instance_nr: integer):
+	loop {dungeons::spider_cave::%{_instance_nr}%::rooms} times:
+		set {_room_nr} to loop-number
+		set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_nr}%}
+		loop {dungeons::spider_cave::proximity_triggers::%{_room}%::trigger_names::*}:
+			set {_trigger_name} to loop-value-2
+			if {dungeons::spider_cave::proximity_triggers::%{_room}%::%{_trigger_name}%::trigger_locations::*} is set:
+				delete {dungeons::spider_cave::%{_instance_nr}%::proximity_triggers::%{_room}%::%{_trigger_name}%::activated}
+
+
+
+
+#	Teleporting player to the dungeon - actual teleport code
+function DungeonSculkTeleport(player: player, instance_nr: integer):
+
+	#	Basic checks
+	if {sculk_portal::config::can_teleport_during_pvp} is false:
+		set {_in_combat} to placeholder "combatlogx_in_combat" from {_player}
+		if {_in_combat} is "&aYes":
+			stop
+	if CanUseSculkPortal({_player}) is false:
+		stop
+
+
+	set {_loc} to location at {_player}
+	set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_1}
+	set {_destination_loc} to random element out of {dungeons::spider_cave::start_locations::%{_room}%::*}
+	set {_destination_loc} to GetAbsoluteLocation({_destination_loc}, {_instance_nr}, 1)
+
+#	send "ROOM: %{dungeons::spider_cave::%{_instance_nr}%::room_1}%" to {_player}
+#	send "LOCS: %{dungeons::spider_cave::start_locations::%{_room}%::*}%" to {_player}
+	if world of {_player} is not "spawn" or "dungeons":
+		set {last_location::wilderness::%{_player}%} to location of {_player}
+
+	set metadata value "sculk_teleport:waiting:spider_cave" of {_player} to true
+	SculkTeleport({_player}, {_destination_loc})
+
+function WildernessDungeonsPlayerArrived(player: player):
+	wait 3 second
+	set {_start_text} to "The Crawling Depths"
+
+	play sound "custom.dungeons.spider_cave.reveal" with volume 1 and pitch 1 to {_player}
+	wait 0.3 second
+	send title "" with subtitle "&f%{_start_text}%" to {_player} for 3 seconds with fadein 2 seconds
+
+
+
+command /despawndungeon [<integer>]:
+	aliases: removedungeon, deletedungeon
+	permission: admin
+	trigger:
+		if {dungeons::spider_cave::instances::*} contains arg-1:
+			RemoveDungeon(arg-1, true)
+
+command /resetalldungeons [<integer>]:
+	aliases: removealldungeons, deletealldungeons
+	permission: admin
+	trigger:
+		loop {dungeons::spider_cave::instances::*}:
+			RemoveDungeon(loop-value)
+			send "&cRemoving dungeon &eNR %loop-value%" to sender
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#	Dungeon Gameplay
+
+function WildernessDungeonsLoseInventory(player: player) :: boolean:
+	if {dungeons::spider_cave::config::lose_inventory_on_death} is false:
+		return false
+	return true
+
+on death:
+	if victim is player:
+		if WildernessDungeonsLoseInventory(victim) is false:
+			keep the inventory and experiences
+			clear drops
+	IsInDungeon(location of victim) is true:
+		WildernessDungeonsMobDeath(victim)
+
+function GetMythicMob(entity: entity) :: string:
+	set {_nbt} to nbt compound of {_entity}
+	set {_custom} to compound tag "BukkitValues" of {_nbt}
+	return string tag "mythicmobs:type" of {_custom}
+
+function GetWildernessDungeonsMob(entity: entity) :: string:
+	set {_mythicmob} to GetMythicMob({_entity})
+	set {_room} to GetRoomName(location of {_entity})
+
+	loop {dungeons::spider_cave::mobs::mob_names::*}:
+		set {_mob} to loop-value
+		if {dungeons::spider_cave::mobs::%{_mob}%::type} is {_mythicmob}:
+			return {_mob}
+	loop {dungeons::spider_cave::boss::boss_names::*}:
+		set {_boss} to loop-value
+		if {dungeons::spider_cave::boss::%{_boss}%::type} is {_mythicmob}:
+			return {_boss}
+	loop {dungeons::spider_cave::npcs::npc_names::*}:
+		set {_npc} to loop-value
+		if {dungeons::spider_cave::npcs::%{_npc}%::type} is {_mythicmob}:
+			return {_npc}
+
+function GetWildernessDungeonsMobType(entity: entity) :: string:
+	set {_mythicmob} to GetMythicMob({_entity})
+#	set {_room} to GetRoomName(location of {_entity})
+
+	loop {dungeons::spider_cave::mobs::mob_names::*}:
+		set {_mob} to loop-value
+		if {dungeons::spider_cave::mobs::%{_mob}%::type} is {_mythicmob}:
+			return "mobs"
+	loop {dungeons::spider_cave::boss::boss_names::*}:
+		set {_boss} to loop-value
+		if {dungeons::spider_cave::boss::%{_boss}%::type} is {_mythicmob}:
+			return "boss"
+	loop {dungeons::spider_cave::npcs::npc_names::*}:
+		set {_npc} to loop-value
+		if {dungeons::spider_cave::npcs::%{_npc}%::type} is {_mythicmob}:
+			return "npc"
+
+
+function WildernessDungeonsMobDeath(entity: entity):
+	set {_loc} to location of {_entity}
+	set {_dungeon} to metadata value "mob_dungeon" of {_entity}
+	set {_room} to metadata value "mob_room" of {_entity}
+	set {_mob} to metadata value "mob_type" of {_entity}
+	if {_dungeon} is not set:
+		set {_dungeon} to GetDungeon(location of {_entity})
+	if {_room} is not set:
+		set {_room} to GetRoomName(location of {_entity})
+	if {_mob} is not set:
+		if GetWildernessDungeonsMob({_entity}) is set:
+			set {_mob} to GetWildernessDungeonsMob({_entity})
+
+	#	Mob drops
+	set {_mob_type} to GetWildernessDungeonsMobType({_entity})
+	set {_item_amount} to {dungeons::%{_dungeon}%::%{_mob_type}%::%{_mob}%::loot_item_amount}
+	loop {_item_amount} times:
+		add random element out of {dungeons::%{_dungeon}%::%{_mob_type}%::%{_mob}%::loot_items::*} to {_loot::*}
+	set {_guaranteed_loot::*} to {dungeons::%{_dungeon}%::%{_mob_type}%::%{_mob}%::guaranteed_loot::*}
+
+	#	Rare loot
+	if {dungeons::%{_dungeon}%::%{_mob_type}%::%{_mob}%::rare_loot::chance} is set:
+		chance of {dungeons::%{_dungeon}%::%{_mob_type}%::%{_mob}%::rare_loot::chance}%:
+			add random element out of {dungeons::%{_dungeon}%::%{_mob_type}%::%{_mob}%::rare_loot::items::*} to {_loot::*}
+	
+	loop {_loot::*}:
+		drop GetItem(loop-value) at {_entity}
+	loop {_guaranteed_loot::*}:
+		drop GetItem(loop-value) at {_entity}
+
+
+
+
+
+	if {_mob_type} is "boss":
+		set {_instance_nr} to GetInstance(location of {_entity})
+		wait 5 seconds
+		loop GetPlayersInSpiderCave({_instance_nr}):
+			send colored random element out of {dungeons::spider_cave::messages::exit_portal_message::*} to loop-value
+		wait 5 seconds
+		if IsInDungeon({_loc}) is true:
+			WildernessDungeonsSpawnExitPortal({_instance_nr}, {_loc})
+
+	if {_mob} is "tough_minion":
+		SpiderQueenMinionKilled({_entity})
+
+
+
+function LeverUse(player: player, block: block):
+	wait 0.2 second
+	CheckTotems(location of {_block})
+	CheckCrane(location of {_block})
+	loop all armor stands in radius 10 of location of {_block}:
+		if string tag "mob_type" of custom nbt of loop-entity is "spider_totem":
+			stop
+	OpenGate(location of {_block})
+
+
+
+function InsertGateKey(player: player, block: block):
+	if "%block data of {_block}%" contains "ominous=true":
+		set {_ominous} to true
+		set {_required_key} to "ominous_vault_key"
+	else:
+		set {_ominous} to false
+		set {_required_key} to "gate_key"
+	if GetCustomItemId({_player}'s tool) is not {_required_key}:
+		if difference between metadata value "wilderness_dungeons:dialogue:gate_key" of {_player} and now < 3 seconds:
+			stop
+		send colored random element out of {dungeons::spider_cave::messages::gate_key_required::*} to {_player}
+		set metadata value "wilderness_dungeons:dialogue:gate_key" of {_player} to now
+	if GetCustomItemId({_player}'s tool) is {_required_key}:
+		if difference between metadata value "gate_opening_date" of {_block} and now < 10 seconds:
+			stop
+		set metadata value "gate_opening_date" of {_block} to now
+		remove {item::%{_required_key}%} from {_player}
+		play sound "minecraft:block.vault.open_shutter" with volume 3 and pitch 1 at location 3 meters above {_block}
+#		wait 0.6 second
+#		play sound "minecraft:custom.dungeons.gate_open" with volume 3 and pitch 1 at location 10 meters above {_block}
+		loop 11 times:
+			if {_ominous} is true:
+				set block at {_block} to vault[ominous=true, vault_state=inactive]
+			else:
+				set block at {_block} to vault[vault_state=inactive]
+			wait 0.1 second
+		if {_ominous} is true:
+			set block at {_block} to vault[ominous=true, vault_state=inactive]
+		else:
+			set block at {_block} to vault[vault_state=inactive]
+		OpenGate(location of {_block})
+		loop 50 times:
+			if {_ominous} is true:
+				set block at {_block} to vault[ominous=true, vault_state=inactive]
+			else:
+				set block at {_block} to vault[vault_state=inactive]
+			wait 0.1 second
+
+
+function OpenGate(loc: location):
+	loop all blocks in radius 12 of {_loc}:
+		if loop-block is waxed oxidized copper:
+			if {_highest_block} is not set:
+				set {_highest_block} to loop-block
+			if y coordinate of loop-block > y coordinate of {_highest_block}:
+				set {_highest_block} to loop-block
+			add loop-block to {_blocks::*}
+	if {_highest_block} is not set:
+		stop
+	play sound "minecraft:custom.dungeons.gate_open" with volume 3 and pitch 1 at location 10 meters above {_loc}
+	wait 1.1 seconds
+	loop 10 times:
+		if size of {_blocks::*} > 0:
+			loop {_blocks::*}:
+				set {_loc} to loop-value-2
+				if y coordinate of {_loc} is y coordinate of {_highest_block}:
+					set block at {_loc} to air
+					remove {_loc} from {_blocks::*}
+			subtract 1 from y coordinate of {_highest_block}
+			play sound "block.piston.contract" with volume 2 and pitch 0.5 at {_highest_block}
+			play sound "entity.iron_golem.hurt" with volume 0.3 and pitch 0.5 at {_highest_block}
+			draw 10 block using waxed oxidized copper at {_blocks::*} with offset vector(0.4, 0.4, 0.4) with extra 0
+			wait 1 second
+
+
+
+on break:
+	#	Breaking blocks in Wilderness Dungeons
+	if IsInDungeon(location of block) is true:
+
+		set {_dungeon} to GetDungeon(location of block)
+		set {_room_nr} to GetRoomNumber(location of block)
+		set {_room_name} to GetRoomName(location of block)
+		set {_loc} to GetRelativeLocation(location of block)
+		set {_instance_nr} to GetInstance(location of block)
+		set {_room_length} to GetRoomLength({_instance_nr}, {_room_nr})
+		
+		#	Handling dungeon's variable floor Y coordinate (caused by room Y offset)
+		if {dungeons::spider_cave::structures::offset::y::%{_room_name}%} is set:
+			set {_y_offset} to {dungeons::spider_cave::structures::offset::y::%{_room_name}%}
+		else:
+			set {_y_offset} to 0
+
+		#	Handling dungeon's side walls
+		if x coordinate of {_loc} <= 0.5:
+			set {_border} to true
+		if x coordinate of {_loc} >= {dungeons::%{_dungeon}%::width}-0.5:
+			set {_border} to true
+
+		#	Handling dungeon's front and back walls
+		if {_room_nr} is 1:
+			if z coordinate of {_loc} <= 0.5:
+				set {_border} to true
+		if {_room_nr} is {dungeons::%{_dungeon}%::amount_of_rooms}:
+			if z coordinate of {_loc} >= {_room_length}-0.5:
+				set {_border} to true
+		
+		#	Handling front and back with variable Y
+		if z coordinate of {_loc} >= {_room_length}-0.5:
+			if y coordinate of {_loc} <= 0:
+				set {_border} to true
+
+
+		#	Handling dungeon's floor
+		if y coordinate of {_loc} <= 0.5 + {_y_offset}:
+			set {_border} to true
+		if {_border} is true:
+			if player's gamemode is not creative:
+				cancel event
+				stop
+			if player doesn't have permission "worldguard.bypass":
+				cancel event
+				stop
+		else:
+#			send "can break blocks: %{dungeons::%{_dungeon}%::config::can_break_blocks}%" to all players
+			if {dungeons::%{_dungeon}%::config::can_break_blocks} is false:
+				if {dungeons::%{_dungeon}%::destructable_blocks::*} does not contain "%type of block%":
+					if player's gamemode is not creative:
+						cancel event
+						stop
+					if player doesn't have permission "worldguard.bypass":
+						cancel event
+						stop
+	if event-block is waxed oxidized copper:
+		if IsInDungeon(location of block) is true:
+			if player's gamemode is not creative:
+				cancel event
+	if event-block is decorated pot:
+		if IsInDungeon(location of block) is true:
+			if player's gamemode is not creative:
+				clear drops
+				DestructibleBroken(player, block)
+	if event-block is white carpet or red carpet:
+		if IsInDungeon(location of block) is true:
+			if player's gamemode is not creative:
+				cancel event
+
+on right click on decorated pot:
+	if IsInDungeon(location of block) is true:
+		cancel event
+
+on toggling gliding:
+	if IsInDungeon(location of player) is true:
+		if player's gamemode is not creative:
+			wait 1 tick
+			set gliding of player to off
+			if difference between metadata value "wilderness_dungeons:dialogue:disabled_item" of player and now < 3 seconds:
+				stop
+			send colored random element out of {dungeons::spider_cave::messages::disabled_item::*} to player
+			set metadata value "wilderness_dungeons:dialogue:disabled_item" of player to now
+
+
+
+on consume:
+	if IsInDungeon(location of player) is true:
+		if player's gamemode is not creative:
+			if event-item is chorus fruit:
+				cancel event
+				if difference between metadata value "wilderness_dungeons:dialogue:disabled_item" of player and now < 3 seconds:
+					stop
+				send colored random element out of {dungeons::spider_cave::messages::disabled_item::*} to player
+				set metadata value "wilderness_dungeons:dialogue:disabled_item" of player to now
+on click:
+	if IsInDungeon(location of event-entity) is true:
+		if player's gamemode is not creative:
+			if event-block is tagged with minecraft tag "beds":
+				cancel event
+			if event-block is red concrete:
+				SpiderEggBreak(player, block)
+			if event-block is vault:
+				cancel event
+				InsertGateKey(player, block)
+			if event-block is lever:
+				if "%block data of block%" contains "powered=true":
+					cancel event
+					stop
+				LeverUse(player, block)
+		if event-block is cobweb:
+			if player's tool is tagged with minecraft tag "swords":
+				DestructibleBroken(player, block)
+		if event-block is chest:
+			WildernessDungeonsChestOpen(player, block)
+		if event-block is trapped chest:
+			TrapChestOpen(player, block)
+		if event-block is barrel:
+			WildernessDungeonsBarrelOpen(player, block)
+		
+#		if event-block is white carpet:
+#			SpiderTripwireStep(player, block)
+#		if event-block is red carpet:
+#			SpiderRedTripwireStep(player, block)
+
+
+function DestructibleBroken(player: player, block: block):
+	if {_block} is decorated pot:
+		set block at location of {_block} to air
+		play sound "block.decorated_pot.shatter" with volume 1 and pitch 1 at {_block}
+		draw 40 block using decorated pot at location of {_block} with offset vector(0.3, 0.3, 0.3) with extra 0
+		DecoratedPotBroken({_block})
+	if {_block} is cobweb:
+		set block at location of {_block} to air
+		play sound "block.cobweb.break" with volume 1 and pitch 1 at {_block}
+		draw 20 block using cobweb at location of {_block} with offset vector(0.3, 0.3, 0.3) with extra 0
+		ArtifactSupportBreak({_player}, {_block})
+
+
+
+function ArtifactSupportBreak(player: player, block: block):
+
+	set {_dungeon} to GetDungeon(location of {_block})
+	set {_room} to GetRoomName(location of {_block})
+	set {_instance_nr} to GetInstance(location of {_block})
+	set {_room_number} to GetRoomNumber(location of {_block})
+	set {_loc} to location of {_block}
+
+	loop {dungeons::spider_cave::hanged_objects::%{_room}%::object_names::*}:
+		set {_object_name} to loop-value
+		set {_cob_loc} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::cobweb_location}
+		set {_cob_range} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::cobweb_range}
+		if distance between {_player} and {_cob_loc} <= {_cob_range}:
+			exit loop
+
+	set {_obj_loc} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::object_location}
+
+	set {_cob_loc} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::cobweb_location}
+	set {_cob_range} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::cobweb_range}
+	set {_cob_points_to_cut} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::points_to_cut}
+	set {_cob_distance_between_points} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::distance_between_points}
+
+#	set {_broken_cobwebs} to {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::broken_cobwebs}
+#	set {_locations::*} to {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::locations::*}
+
+	if distance between GetRelativeLocation(location of {_block}) and {_cob_loc} <= {_cob_range}:
+
+		if size of {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::locations::*} > 0:
+			loop {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::locations::*}:
+				if distance between {_loc} and loop-value < {_cob_distance_between_points}:
+					add {_loc} to {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::locations::*}
+					stop
+				add 1 to {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::broken_cobwebs}
+				exit loop
+		else:
+			add 1 to {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::broken_cobwebs}
+		add {_loc} to {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::locations::*}
+		if {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::broken_cobwebs} >= {_cob_points_to_cut}:
+			if {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::object_fell} is not true:
+				set {_act_obj_loc} to GetAbsoluteLocation({_obj_loc}, {_instance_nr}, {_room_number})
+				ArtifactBreaksLoose({_act_obj_loc}, {_player})
+
+
+function ArtifactBreaksLoose(obj_loc: location, player: player):
+	
+	set {_dungeon} to GetDungeon({_obj_loc})
+	set {_room} to GetRoomName({_obj_loc})
+	set {_instance_nr} to GetInstance({_obj_loc})
+
+	set {dungeons::%{_dungeon}%::%{_instance_nr}%::hanged_objects::object_fell} to true
+
+	loop {dungeons::spider_cave::hanged_objects::%{_room}%::object_names::*}:
+		set {_object_name} to loop-value
+		set {_cob_loc} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::cobweb_location}
+		set {_cob_range} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::cobweb_range}
+		if distance between {_player} and {_cob_loc} <= {_cob_range}:
+			exit loop
+	
+	set {_obj_range} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::object_range}
+	set {_obj_blocks::*} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::object_blocks::*}
+
+	loop all blocks in radius {_obj_range} of {_obj_loc}:
+		loop {_obj_blocks::*}:
+			if "%type of loop-block-1%" is loop-value-2:
+				add loop-block-1 to {_blocks::*}
+
+	wait 4 ticks
+	play sound "custom.dungeons.rocks_rumble" with volume 1 and pitch 1 at {_obj_loc}
+	loop 4 times:	
+		loop {_blocks::*}:
+			ShakeBlock(loop-value-2)
+#			draw 10 block using lodestone at loop-value-2 with offset vector(0.5, 0.5, 0.5)
+		wait 5 ticks
+	loop {_blocks::*}:
+		draw 5 block using lodestone at loop-value with offset vector(0.3, 0.3, 0.3)
+		set {_data} to "%type of block at loop-value%[]"
+		set {_data} to {_data} parsed as blockdata
+		set block at loop-value to air
+		le spawn falling {_data} at location of loop-value
+
+
+	ArtifactDestroysObject({_obj_loc})
+
+
+function ArtifactDestroysObject(obj_loc: location):
+
+	set {_dungeon} to GetDungeon({_obj_loc})
+	set {_room} to GetRoomName({_obj_loc})
+	set {_room_nr} to GetRoomNumber({_obj_loc})
+	set {_instance_nr} to GetInstance({_obj_loc})
+
+	loop {dungeons::spider_cave::hanged_objects::%{_room}%::object_names::*}:
+		set {_object_name} to loop-value
+		set {_cob_loc} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::cobweb_location}
+		set {_cob_range} to {dungeons::%{_dungeon}%::hanged_objects::%{_room}%::%{_object_name}%::cobweb_range}
+		if distance between {_player} and {_cob_loc} <= {_cob_range}:
+			exit loop
+
+	set {_obj_to_destroy_location} to {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_location}
+	set {_obj_to_destroy_location_y::*} to {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_location_y::*}
+	set {_obj_to_destroy_range} to {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_range}
+	set {_obj_to_destroy_delay} to "%{dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_delay}% seconds" parsed as timespan
+	set {_obj_to_destroy_blocks::*} to {dungeons::spider_cave::hanged_objects::%{_room}%::%{_object_name}%::object_to_destroy_blocks::*}
+
+
+	set {_abs_location} to GetAbsoluteLocation({_obj_to_destroy_location}, {_instance_nr}, {_room_nr})
+
+	wait {_obj_to_destroy_delay} - 0.5 second
+
+	play sound "custom.dungeons.object_break" with volume 3 and pitch 1 at location 10 meters above {_abs_location}
+	wait 0.5 second
+	loop all blocks in radius {_obj_to_destroy_range} of {_abs_location}:
+		loop {_obj_to_destroy_blocks::*}:
+			if {_obj_to_destroy_blocks::*} contains "%type of loop-block-1%":
+				set {_pass} to true
+				if {_obj_to_destroy_location_y::*} is set:
+					set {_pass} to false
+					if {_obj_to_destroy_location_y::*} contains y coordinate of GetRelativeLocation(location of loop-block-1):
+						set {_pass} to true
+				if {_pass} is true:
+					set block at loop-block-1 to air
+					draw 10 block using cracked deepslate bricks at loop-block-1 with offset vector(0.5, 0.5, 0.5)
+	
+	loop {-players::*}:
+		if distance between loop-value and {_abs_location} < 30:
+			apply slowness of tier 3 without any particles to {_player} for 0.5 second
+	loop {-players::*}:
+		if distance between loop-value and {_abs_location} < 5:
+			damage loop-value by 2
+	loop all monsters:
+		if distance between loop-value and {_abs_location} < 10:
+			damage loop-value by 25
+
+	wait 0.45 second
+	loop 3 times:
+		draw 50 cloud at location 1 meter above {_abs_location} with offset vector(3, 2, 3) with extra 0.05
+		wait 2 ticks
+	loop 10 times:
+		draw 100 cloud at location 1+loop-iteration*0.4 meter above {_abs_location} with offset vector(3, 2, 3) with extra 0.05
+		wait 3 ticks
+	draw 200 cloud at location 5 meter above {_abs_location} with offset vector(3, 2, 3) with extra 0.05
+
+	loop 100 times:
+		draw 10 white ash at {_abs_location} with offset vector(4, 2, 4)
+		wait 10 ticks
+
+
+
+
+function ShakeBlock(block: block):
+	set {_loc} to location of {_block}
+	spawn block display at {_loc}
+	set {_display} to last spawned block display
+	set {_lightlevel} to light level at location 0.5 above {_display}
+	set display block data of {_display} to block data of {_block}
+	set sky light override of the last spawned block display to {_lightlevel}
+
+	if {_block} is tagged with minecraft tag "stairs":
+		set {_pass} to true
+	if {_block} is lectern or chest or trapped chest or crafting table or stonecutter or cartography table or smithing table or grindstone or loom or furnace or smoker or blast furnace or anvil or chipped anvil or damaged anvil or enchanting table or brewing stand or chiseled bookshelf:
+		set {_pass} to true
+	if {_pass} is true:
+		if GetWorldDirection(location of {_display}) is north:
+			add 90 to yaw of {_display}
+		if GetWorldDirection(location of {_display}) is south:
+			add 90 to yaw of {_display}
+		if GetWorldDirection(location of {_display}) is west:
+			add 180 to yaw of {_display}
+	if {_block} is not ender chest:
+		if GetWorldDirection(location of {_display}) is west:
+			add 90 to yaw of {_display}
+		if GetWorldDirection(location of {_display}) is east:
+			add 90 to yaw of {_display}
+
+	if GetWorldDirection(location of {_display}) is north:
+		teleport {_display} -0.6 meters north of location of {_display}
+		teleport {_display} 0.6 meters below location of {_display}
+		teleport {_display} -0.6 meters west of location of {_display}
+	if GetWorldDirection(location of {_display}) is south:
+		teleport {_display} 0.6 meters north of location of {_display}
+		teleport {_display} 0.6 meters below location of {_display}
+		teleport {_display} 0.6 meters west of location of {_display}
+	if GetWorldDirection(location of {_display}) is west:
+		teleport {_display} 0.6 meters north of location of {_display}
+		teleport {_display} 0.6 meters below location of {_display}
+		teleport {_display} -0.6 meters west of location of {_display}
+	if GetWorldDirection(location of {_display}) is east:
+		teleport {_display} -0.6 meters north of location of {_display}
+		teleport {_display} 0.6 meters below location of {_display}
+		teleport {_display} 0.6 meters west of location of {_display}
+
+	set {_dir} to random integer between 1 and 4
+	loop 3 times:
+		if {_dir} is 1:
+			rotate {_display} around vector(1,0,0) by -3 degrees
+		if {_dir} is 2:
+			rotate {_display} around vector(1,0,0) by 3 degrees
+		if {_dir} is 3:
+			rotate {_display} around vector(0,0,1) by -3 degrees
+		if {_dir} is 4:
+			rotate {_display} around vector(0,0,1) by 3 degrees
+		set display translation of {_display} to vector(0,0.6-0.2*loop-number,0)
+		set display translation of {_display} to vector(0,0.6-0.2*loop-number,0)
+#		set {_v} to 0.9+0.1*loop-number
+#		set display scale of {_display} to vector({_v}, {_v}, {_v})
+		wait 1 ticks
+	wait 1 tick
+#	set display scale of {_display} to vector(1, 1, 1)
+	kill {_display}
+
+
+
+
+
+
+
+
+
+command /resetcobwebs:
+	permission: admin
+	trigger:
+		delete {-dungeons::%{_dungeon}%::hanged_objects::%uuid of player%::broken_cobwebs}
+		delete {-dungeons::%{_dungeon}%::hanged_objects::%uuid of player%::locations::*}
+		send "Resetted hanged objects progress" to player
+
+
+
+
+
+
+
+
+function DecoratedPotBroken(block: block):
+	set {_instance_nr} to GetInstance(location of {_block})
+	set {_room_number} to GetRoomNumber(location of {_block})
+	set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+	
+	#	Generating loot
+	set {_chance} to {dungeons::spider_cave::pots::%{_room}%::loot_spawn_chance}
+	set {_item_amount} to {dungeons::spider_cave::pots::%{_room}%::item_amount}
+	set {_items::*} to {dungeons::spider_cave::pots::%{_room}%::loot::*}
+
+	if {_chance} is set:
+		chance of 100-{_chance}%:
+			stop
+
+
+	if {_item_amount} is set:
+		loop {_item_amount} times:
+			drop random element out of {_items::*} parsed as item at location of {_block}
+
+
+
+
+
+on step on pressure plate:
+	if IsInDungeon(location of event-block) is true:
+		PressurePlateStep(player, block)
+
+function PressurePlateStep(player: player, stepped_block: block):
+	if difference between metadata value "pressure_plate_step" of {_player} and now < 1.5 seconds:
+		stop
+	set metadata value "pressure_plate_step" of {_player} to now
+	loop all blocks in radius 10 of location of {_stepped_block}:
+		if loop-block is dispenser:
+			DispenserShoot(loop-block)
+
+function DispenserShoot(block: block):
+	if difference between metadata value "shot_cooldown" of {_block} and now < 2 seconds:
+		stop
+	set metadata value "shot_cooldown" of {_block} to now
+	wait 0.6 second
+	loop 2 times:
+		play sound "minecraft:entity.arrow.shoot" with volume 0.8 and pitch 0.8 at {_block}
+		set {_vector} to vector from {_block} to location 1 meter in front of {_block}
+		subtract 5 from pitch of {_vector}
+		add random number between -5 and 5 to yaw of {_vector}
+		shoot arrow from location 1 meter in front of {_block} with speed 1.4 {_vector}
+		add last shot arrow to {_arrows::*}
+		set metadata value "poison_arrow" of last shot arrow to true
+		wait 0.3 second
+	wait 5 seconds
+	kill {_arrows::*}
+
+
+on step on cracked deepslate bricks:
+	if IsInDungeon(location of event-block) is true:
+		UnstableBlockStep(player, block)
+
+function UnstableBlockStep(player: player, stepped_block: block):
+	wait 1 tick
+	play sound "minecraft:ui.stonecutter.take_result" with volume 0.5 and pitch 0.5 at {_stepped_block}
+	loop all blocks in radius 1.5 of location of {_stepped_block}:
+		if loop-block is cracked deepslate bricks:
+			set loop-block to air
+			draw 25 block using cracked deepslate bricks at location 0.5 meter above loop-value with offset vector(0.3, 0.3, 0.3)
+
+
+function TrapChestOpen(player: player, block: block):
+	wait 3 tick
+	StartFloodingFloor(location of {_block})
+	play sound "minecraft:ui.stonecutter.take_result" with volume 0.5 and pitch 0.5 at {_block}
+	loop all blocks in radius 13 of location of {_block}:
+		if loop-block is cracked stone bricks:
+			set loop-block to air
+			draw 25 block using cracked stone bricks at location 0.5 meter above loop-value with offset vector(0.3, 0.3, 0.3)
+		if loop-block is dispenser:
+			DispenserShoot(loop-block)
+
+
+function WildernessDungeonsChestOpen(player: player, block: block):
+	if boolean tag "wilderness_dungeons:chest" of custom nbt of {_block} is true:
+		if boolean tag "wilderness_dungeons:chest:magic_loot" of custom nbt of {_block} is true:
+			play sound "custom.magic_loot" with volume 1 and pitch 1 at location of {_block}
+			delete boolean tag "wilderness_dungeons:chest:magic_loot" of custom nbt of {_block}
+
+
+on projectile hit:
+	if IsInDungeon(location of event-block) is not true:
+		stop
+	if projectile is not an arrow:
+		stop
+	if event-block is decorated pot:
+		kill projectile
+		DestructibleBroken(shooter, block)
+		cancel event
+	if event-block is red concrete:
+		SpiderEggBreak(shooter, block)
+	if event-block is chain:
+		if "%block data of event-block%" contains "axis=x":
+			stop
+		if "%block data of event-block%" contains "axis=z":
+			stop
+		set event-block to air
+		set {_loc} to location of event-block
+		delete projectile
+		play sound "minecraft:block.chain.break" with volume 3 and pitch 0.5 at {_loc}
+		play sound "minecraft:block.chain.step" with volume 3 and pitch 0.5 at {_loc}
+		draw 5 crit at {_loc} with offset vector(0.1, 0.1, 0.1) with extra 0.2
+		loop 5 times:
+			subtract 1 from y coordinate of {_loc}
+			if block at {_loc} is chain:
+				set block at {_loc} to air
+				draw 5 crit at {_loc} with offset vector(0.1, 0.1, 0.1) with extra 0.2
+			if block at {_loc} is barrel:
+				loop inventory of block at {_loc}:
+					add loop-value-2 to {_inventory::*}
+				set block at {_loc} to air
+				le spawn falling barrel at {_loc}
+				set {_block} to last spawned entity
+				wait 1 second
+				loop 10 times:
+					wait 0.5 second
+					if {_block} is on ground:
+						loop all blocks in radius 1 of {_block}:
+							if loop-block is barrel:
+								loop {_inventory::*}:
+									add loop-value-4 to inventory of loop-block-1
+								stop
+						stop
+			if block at {_loc} is oak fence or spruce planks or spruce slab:
+				loop all blocks in radius 5 of {_loc}:
+					if loop-block is oak fence:
+						set loop-block to air
+						le spawn falling oak fence at loop-block
+					if loop-block is spruce planks:
+						set loop-block to air
+						le spawn falling spruce planks at loop-block
+					if loop-block is spruce slab:
+						set loop-block to air
+						le spawn falling spruce slab at loop-block
+			if block at {_loc} is polished deepslate:
+				set {_pass} to true
+			if block at {_loc} is iron ore or gold ore:
+				set {_pass} to true
+			if {_pass} is true:
+				loop all blocks in radius 5 of {_loc}:
+					if loop-block is polished deepslate:
+						set loop-block to air
+						le spawn falling polished deepslate at loop-block
+					if loop-block is iron ore:
+						set {_block} to type of loop-block
+						set loop-block to air
+						le spawn falling iron ore at loop-block
+			if block at {_loc} is white concrete or cobweb:
+				loop all blocks in radius 4 of {_loc}:
+					if loop-block is white concrete:
+						set loop-block to air
+						le spawn falling white concrete at loop-block
+					if loop-block is cobweb:
+						set loop-block to air
+						le spawn falling cobweb at loop-block
+			if block at {_loc} is redstone block:
+				loop all blocks in radius 4 of {_loc}:
+					if loop-block is redstone block:
+						set loop-block to air
+						le spawn falling redstone block at loop-block
+
+
+			#	Prison Cages
+			if block at {_loc} is deepslate tiles or deepslate tile slab or iron bars:
+				loop all blocks in radius 5 of {_loc}:
+					if loop-block is deepslate tiles:
+						set loop-block to air
+						le spawn falling deepslate tiles at loop-block
+					if loop-block is deepslate tile slab:
+						set loop-block to air
+						le spawn falling deepslate tile slab at loop-block
+					if loop-block is iron bars:
+						set loop-block to air
+						le spawn falling iron bars at loop-block
+
+
+			#	Large Barrels
+			if block at {_loc} is oak wood:
+				set {_loc_new} to {_loc}
+				loop 3 times:
+					loop all blocks in radius 2.5 of {_loc_new}:
+						if loop-block is oak wood:
+							set loop-block to air
+							le spawn falling oak wood at loop-block
+						if loop-block is spruce planks:
+							set loop-block to air
+							le spawn falling spruce planks at loop-block
+						if loop-block is spruce stairs:
+							set loop-block to air
+							le spawn falling spruce planks at loop-block
+						if loop-block is spruce trapdoor:
+							set loop-block to air
+					subtract 2 from y coordinate of {_loc_new}
+
+
+			#	Harry's Cage
+			set {_cage_blocks::*} to cauldron, dark oak stairs, dark oak trapdoor, dark oak planks and iron bars
+			if {_cage_blocks::*} contains type of block at {_loc}:
+				loop all blocks in radius 5 of {_loc}:
+					if {_cage_blocks::*} contains type of loop-block:
+						set loop-block to air
+						draw 1 crit at loop-block with offset vector(0.2, 0.2, 0.2) with extra 0.2
+#						draw 5 block using type of loop-block at loop-block with offset vector(0.2, 0.2, 0.2) with extra 0.2
+
+
+
+
+function ArrowHitChain(block: block, projectile: entity):
+	if "%block data of {_block}%" contains "axis=x":
+		stop
+	if "%block data of {_block}%" contains "axis=z":
+		stop
+	set {_block} to air
+	set {_loc} to location of {_block}
+	delete {_projectile}
+	play sound "minecraft:block.chain.break" with volume 3 and pitch 0.5 at {_loc}
+	play sound "minecraft:block.chain.step" with volume 3 and pitch 0.5 at {_loc}
+	draw 5 crit at {_loc} with offset vector(0.1, 0.1, 0.1) with extra 0.2
+	loop 5 times:
+		subtract 1 from y coordinate of {_loc}
+		if block at {_loc} is chain:
+			set block at {_loc} to air
+			draw 5 crit at {_loc} with offset vector(0.1, 0.1, 0.1) with extra 0.2
+		if block at {_loc} is barrel:
+			set block at {_loc} to air
+			le spawn falling barrel at {_loc}
+			set {_block} to last spawned entity
+			wait 1 second
+			loop 10 times:
+				wait 0.5 second
+				if {_block} is on ground:
+					loop all blocks in radius 1 of {_block}:
+						if loop-block is barrel:
+							add {item::gate_key} to inventory of loop-block
+							stop
+					stop
+		if block at {_loc} is oak fence or spruce planks or spruce slab:
+			loop all blocks in radius 5 of {_loc}:
+				if loop-block is oak fence:
+					set loop-block to air
+					le spawn falling oak fence at loop-block
+				if loop-block is spruce planks:
+					set loop-block to air
+					le spawn falling spruce planks at loop-block
+				if loop-block is spruce slab:
+					set loop-block to air
+					le spawn falling spruce slab at loop-block
+		if block at {_loc} is polished deepslate:
+			loop all blocks in radius 5 of {_loc}:
+				if loop-block is polished deepslate:
+					set loop-block to air
+					le spawn falling polished deepslate at loop-block
+		if block at {_loc} is white concrete or cobweb:
+			loop all blocks in radius 4 of {_loc}:
+				if loop-block is white concrete:
+					set loop-block to air
+					le spawn falling white concrete at loop-block
+				if loop-block is cobweb:
+					set loop-block to air
+					le spawn falling cobweb at loop-block
+		if block at {_loc} is waxed oxidized copper trapdoor:
+			loop all blocks in radius 5 of {_loc}:
+				if loop-block is waxed oxidized copper trapdoor:
+					set loop-block to air
+					draw 1 crit at loop-block with offset vector(0.2, 0.2, 0.2) with extra 0.2
+					draw 5 block using waxed oxidized copper at loop-block with offset vector(0.2, 0.2, 0.2) with extra 0.2
+
+
+
+
+
+
+
+
+
+function WildernessDungeonsTrackSpiderling(loc: location):
+	loop all entities in radius 0.5 of {_loc}:
+		set {_entity} to loop-entity
+		set {_uuid} to uuid of {_entity}
+		set {_instance_nr} to GetInstance({_loc})
+		add {_uuid} to {dungeons::spider_cave::%{_instance_nr}%::alive_mobs::*}
+
+		set metadata value "mob_dungeon" of {_entity} to "spider_cave"
+		set metadata value "mob_type" of {_entity} to "spiderling"
+
+
+on step on red concrete:
+	SpiderEggBreak(player, block)
+
+
+
+function SpiderEggBreak(player: player, block: block):
+	
+	set {_nbt} to custom nbt of {_block}
+	if boolean tag "spider_cave:spider_egg" of {_nbt} is true:
+		set {_spider_egg} to true
+	if IsInDungeon(location of {_block}) is true:
+		set {_spider_egg} to true
+	
+	if {_spider_egg} is true:
+		set {_loc} to location of {_block}
+		set block at {_loc} to air
+		draw 30 block using red concrete at location 0.5 meter above {_loc} with offset vector(0.3, 0.3, 0.3) with extra 0
+		play sound "entity.zombie.destroy_egg" with volume 1 and pitch 1 at {_loc}
+		execute console command "/mm mobs spawn spider_cave_spiderling 1 %world of {_loc}%,%x coordinate of {_loc}%,%y coordinate of {_loc}%,%z coordinate of {_loc}%"
+		WildernessDungeonsTrackSpiderling({_loc})
+
+on step on white carpet:
+	SpiderTripwireStep(player, block)
+
+#on step on red carpet:
+#	SpiderRedTripwireStep(player, block)
+
+function SpiderRedTripwireStep(player: player, block: block):
+	if IsInDungeon(location of {_block}) is true:
+		apply slowness of tier 3 without any particles to {_player} for 2 seconds
+		set {_loc} to location of {_block}
+		if block at {_loc} is red carpet:
+			add 1 to y coordinate of {_loc}
+		if block at {_loc} is red carpet:
+			set block at {_loc} to air
+		draw 30 block using red concrete at location 0.5 meter above {_loc} with offset vector(0.3, 0.3, 0.3) with extra 0
+		play sound "entity.zombie.destroy_egg" with volume 1 and pitch 1 at {_loc}
+		play sound "entity.zombie.destroy_egg" with volume 1 and pitch 0.5 at {_loc}
+		loop 10 times:
+			if block above {_loc} is air:
+				add 1 to y coordinate of {_loc}
+		execute console command "/mm mobs spawn spider_cave_spiderling 3 %world of {_loc}%,%x coordinate of {_loc}%,%y coordinate of {_loc}%,%z coordinate of {_loc}%"
+		WildernessDungeonsTrackSpiderling({_loc})
+
+function SpiderTripwireStep(player: player, block: block):
+	if difference between metadata value "wilderness_dungeon:tripwire_step:date" of {_player} and now < 2 seconds:
+		stop
+	if IsInDungeon(location of {_block}) is true:
+		set metadata value "wilderness_dungeon:tripwire_step:date" of {_player} to now
+		play sound "block.cobweb.step" with volume 1 and pitch 0.5 at {_player}
+		apply slowness of tier 3 without any particles to {_player} for 2 seconds
+		set {_loc} to location of {_block}
+		if block at {_loc} is not white carpet:
+			add 1 to y coordinate of {_loc}
+		if block at {_loc} is white carpet:
+			set block at {_loc} to air
+		draw 30 block using white concrete at location 0.5 meter above {_loc} with offset vector(0.3, 0.3, 0.3) with extra 0
+		chance of 10%:
+			play sound "entity.zombie.destroy_egg" with volume 1.5 and pitch 1 at {_loc}
+			loop 10 times:
+				if block above {_loc} is air:
+					add 1 to y coordinate of {_loc}
+			execute console command "/mm mobs spawn spider_cave_spiderling 1 %world of {_loc}%,%x coordinate of {_loc}%,%y coordinate of {_loc}%,%z coordinate of {_loc}%"
+			WildernessDungeonsTrackSpiderling({_loc})
+
+on step on lime stained glass:
+	StepOnVenom(player, block)
+
+function StepOnVenom(player: player, block: block):
+	if difference between metadata value "wilderness_dungeon:venom_step:date" of {_player} and now < 2 seconds:
+		stop
+	if IsInDungeon(location of {_block}) is true:
+		set metadata value "wilderness_dungeon:venom_step:date" of {_player} to now
+		play sound "block.cobweb.step" with volume 1 and pitch 0.5 at {_player}
+		apply poison of tier 4 without any particles to {_player} for 2 seconds
+
+
+
+
+
+on right click on villager:
+	if world of player is "dungeons":
+		cancel event
+	if IsInDungeon(location of entity) is true:
+		WildernessDungeonsVillagerInteraction(player, entity)
+#		wait 1 tick
+#		close the inventory of player
+
+function WildernessDungeonsVillagerInteraction(player: player, entity: entity):
+	set {_dungeon} to metadata value "mob_dungeon" of {_entity}
+#	set {_room} to metadata value "mob_room" of {_entity}
+	set {_mob} to metadata value "mob_type" of {_entity}
+
+	#	Checking if there are still dialogues left to go through
+	if difference between metadata value "wilderness_dungeons::villager_interaction_delay" of {_entity} and now < 1 second:
+		stop
+	set metadata value "wilderness_dungeons::villager_interaction_delay" of {_entity} to now
+	if metadata value "wilderness_dungeons::villager_interaction" of {_entity} is not set:
+		set metadata value "wilderness_dungeons::villager_interaction" of {_entity} to 0
+	set {_dialogue_nr} to metadata value "wilderness_dungeons::villager_interaction" of {_entity}
+	if {dungeons::spider_cave::npcs::%{_mob}%::dialogues::%{_dialogue_nr} + 1%::text} is not set:
+		stop
+
+	#	Playing dialogue
+	set metadata value "wilderness_dungeons::villager_interaction" of {_entity} to metadata value "wilderness_dungeons::villager_interaction" of {_entity} + 1
+	set {_dialogue_nr} to metadata value "wilderness_dungeons::villager_interaction" of {_entity}
+
+	set {_msg} to {dungeons::spider_cave::npcs::%{_mob}%::dialogues::%{_dialogue_nr}%::text}
+	send "%name of {_entity}%: %colored {_msg}%" to {_player}
+	play sound "minecraft:entity.villager.ambient" with volume 1 and pitch 1 to {_player}
+	
+	if {dungeons::spider_cave::npcs::%{_mob}%::dialogues::%{_dialogue_nr}%::loot_item_amount} is set:
+		set {_item_amount} to {dungeons::%{_dungeon}%::npcs::%{_mob}%::dialogues::%{_dialogue_nr}%::loot_item_amount}
+		loop {_item_amount} times:
+			add random element out of {dungeons::%{_dungeon}%::npcs::%{_mob}%::dialogues::%{_dialogue_nr}%::loot_items::*} to {_loot::*}
+		set {_guaranteed_loot::*} to {dungeons::%{_dungeon}%::npcs::%{_mob}%::dialogues::%{_dialogue_nr}%::guaranteed_loot::*}
+		
+		loop {_loot::*}:
+			drop GetItem(loop-value) at {_entity}
+		loop {_guaranteed_loot::*}:
+			drop GetItem(loop-value) at {_entity}
+
+
+
+
+
+function WildernessDungeonsBarrelOpen(player: player, block: block):
+	if 1 is 1:
+		stop
+	set {_instance_nr} to GetInstance(location of {_block})
+	set {_room_number} to GetRoomNumber(location of {_block})
+	set {_room} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+	
+	#	Making sure barrel loot generates only on the first open
+	set {_nbt} to custom nbt of block at location of {_block}
+	send "%{_nbt}%" to {_player}
+#	if boolean tag "spider_cave:barrel_opened" of {_nbt} is true:
+#		stop
+	set boolean tag "spider_cave:barrel_opened" of {_nbt} to true
+	send "%{_nbt}%" to {_player}
+#	send "generate loot" to {_player}
+	set {_inventory} to inventory of {_block}
+#	if {_inventory} doesn't contain green wool:
+#		stop
+#	remove green wool from {_inventory}
+
+	#	Generating loot
+	set {_chance} to {dungeons::spider_cave::barrels::%{_room}%::loot_spawn_chance}
+	set {_item_amount} to {dungeons::spider_cave::barrels::%{_room}%::item_amount}
+	set {_items::*} to {dungeons::spider_cave::barrels::%{_room}%::loot::*}
+
+	if {_chance} is set:
+		chance of 100-{_chance}%:
+			stop
+
+	if {_item_amount} is set:
+		loop {_item_amount} times:
+			add random element out of {_items::*} to {_loot::*}
+
+		loop {_loot::*}:
+			set {_slot} to random integer between 0 and 26
+			if slot {_slot} of {_inventory} is air:
+				set slot {_slot} of {_inventory} to GetItem(loop-value)
+
+
+
+on right click on armor stand:
+	if IsInDungeon(location of entity) is true:
+		cancel event
+		if metadata value "mob_type" of entity is "spider_totem":
+			WildernessDungeonsTotemInteraction(player, entity)
+		if metadata value "mob_type" of entity is "skeleton_note":
+			WildernessDungeonsSkeletonInteraction(player, entity)
+
+function WildernessDungeonsTotemInteraction(player: player, entity: entity):
+	if {_player} has permission "admin":
+		if {_player} is sneaking:
+			send "Totem position: %yaw of location of {_entity}/90%" to {_player}
+			stop
+	if difference between metadata value "wilderness_dungeons::armorstand_delay" of {_entity} and now < 0.55 second:
+		stop
+	set metadata value "wilderness_dungeons::armorstand_delay" of {_entity} to now
+
+	play sound "minecraft:block.nether_gold_ore.hit" with volume 1 and pitch 1 at {_entity}
+	loop 6 times:
+		draw 3 block using stone at {_entity} with offset vector(0, 0.3, 0)
+		set yaw of {_entity} to yaw of {_entity} + 15
+		wait 1 tick
+
+function CheckTotems(loc: location):
+	set {_instance_nr} to GetInstance({_loc})
+	set {_room_number} to GetRoomNumber({_loc})
+	set {_room_type} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+
+	loop all armor stands in radius 10 of {_loc}:
+		loop {dungeons::spider_cave::totems::%{_room_type}%::totem_names::*}:
+			set {_totem} to loop-value-2
+#			send "&7%{_totem}%" to all players
+#			send "locs: %{dungeons::spider_cave::totems::%{_room_type}%::%{_totem}%::locations::*}%" to all players
+			loop {dungeons::spider_cave::totems::%{_room_type}%::%{_totem}%::locations::*}:
+				set {_totem_loc} to loop-value-3
+				set {_totem_nr} to loop-index-2
+				set {_entity_loc} to GetRelativeLocation(location of loop-entity-1)
+				set {_entity_yaw} to yaw of loop-entity-1
+#				send "&7%x coordinate of {_entity_loc}% / %x coordinate of {_totem_loc}%" to all players
+#				send "&7%y coordinate of {_entity_loc}% / %y coordinate of {_totem_loc}%" to all players
+#				send "&7%z coordinate of {_entity_loc}% / %z coordinate of {_totem_loc}%" to all players
+				if x coordinate of {_entity_loc} is x coordinate of {_totem_loc}:
+					if y coordinate of {_entity_loc} is y coordinate of {_totem_loc}:
+						if z coordinate of {_entity_loc} is z coordinate of {_totem_loc}:
+							
+							set {_yaw::*} to {dungeons::spider_cave::totems::%{_room_type}%::%{_totem}%::solution} split at ", "
+#							send "%{_entity_yaw}/90% / %{_yaw::%{_totem_nr}%}%" to all players
+							if {_entity_yaw}/90 is {_yaw::%{_totem_nr}%} parsed as number:
+								add 1 to {_solved}
+
+#	send "Solved: %{_solved}% / %size of {dungeons::spider_cave::totems::%{_room_type}%::%{_totem}%::locations::*}%" to all players
+	if {_solved} is size of {dungeons::spider_cave::totems::%{_room_type}%::%{_totem}%::locations::*}:
+		OpenGate({_loc})
+#		send "open gate" to all players
+	wait 3 second
+	set {_dir} to facing of block at {_loc}
+	if {_dir} is north:
+		set block at {_loc} to lever[powered=false, facing=north]
+	if {_dir} is south:
+		set block at {_loc} to lever[powered=false, facing=south]
+	if {_dir} is west:
+		set block at {_loc} to lever[powered=false, facing=west]
+	if {_dir} is east:
+		set block at {_loc} to lever[powered=false, facing=east]
+
+
+
+function CheckCrane(loc: location):
+	if difference between metadata value "crane_location:check_date" of block at {_loc} and now < 5 seconds:
+		stop
+	set metadata value "crane_location:check_date" of block at {_loc} to now
+	set {_instance_nr} to GetInstance({_loc})
+	set {_room_number} to GetRoomNumber({_loc})
+	set {_room_type} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+
+	PushCraneAttemt({_loc})	
+
+
+function PushCraneAttemt(initial_loc: location):
+	
+	#	Finding crane location
+
+	loop all blocks in radius 25 of {_initial_loc}:
+		if loop-block is oak log:
+			if block at location 1 meter east of loop-block is chain:
+				set {_crane_loc} to location of loop-block
+				set {_axis} to "x"
+			if block at location 1 meter west of loop-block is chain:
+				set {_crane_loc} to location of loop-block
+				set {_axis} to "x"
+			if block at location 1 meter north of loop-block is chain:
+				set {_crane_loc} to location of loop-block
+				set {_axis} to "z"
+			if block at location 1 meter south of loop-block is chain:
+				set {_crane_loc} to location of loop-block
+				set {_axis} to "z"
+			if {_crane_loc} is set:
+				set metadata value "crane_location" of block at {_initial_loc} to {_crane_loc}
+
+	if {_axis} is "x":
+		if block at location 1 meter east of {_crane_loc} is not chain:
+			if block at location 1 meter west of {_crane_loc} is chain:
+				set metadata value "crane_start_position" of block at {_initial_loc} to "east"
+				set metadata value "crane_direction" of block at {_initial_loc} to "west"
+		if block at location 1 meter west of {_crane_loc} is not chain:
+			if block at location 1 meter east of {_crane_loc} is chain:
+				set metadata value "crane_start_position" of block at {_initial_loc} to "west"
+				set metadata value "crane_direction" of block at {_initial_loc} to "east"
+	if {_axis} is "z":
+		if block at location 1 meter north of {_crane_loc} is not chain:
+			if block at location 1 meter south of {_crane_loc} is chain:
+				set metadata value "crane_start_position" of block at {_initial_loc} to "north"
+				set metadata value "crane_direction" of block at {_initial_loc} to "south"
+		if block at location 1 meter south of {_crane_loc} is not chain:
+			if block at location 1 meter north of {_crane_loc} is chain:
+				set metadata value "crane_start_position" of block at {_initial_loc} to "south"
+				set metadata value "crane_direction" of block at {_initial_loc} to "north"
+
+	loop 10 times:
+		set {_crane_loc} to metadata value "crane_location" of block at {_initial_loc}
+		if metadata value "crane_direction" of block at {_initial_loc} is "west":
+			if block at location 1 meter west of {_crane_loc} is not chain:
+				stop
+		if metadata value "crane_direction" of block at {_initial_loc} is "east":
+			if block at location 1 meter east of {_crane_loc} is not chain:
+				stop
+		if metadata value "crane_direction" of block at {_initial_loc} is "north":
+			if block at location 1 meter north of {_crane_loc} is not chain:
+				stop
+		if metadata value "crane_direction" of block at {_initial_loc} is "south":
+			if block at location 1 meter south of {_crane_loc} is not chain:
+				stop
+		PushCrane({_initial_loc}, {_crane_loc})
+		play sound "minecraft:entity.iron_golem.attack" with volume 3 and pitch 1 at {_crane_loc}
+		play sound "minecraft:block.chain.step" with volume 3 and pitch 0.5 at {_crane_loc}
+		wait 6 ticks
+
+
+
+
+function PushCrane(initial_loc: location, crane_loc: location):
+
+	#	Moving the crane
+
+	draw 10 block using chain at {_crane_loc} with offset vector(0.5, 0.5, 0.5) with extra 0.2
+	set {_loc} to {_crane_loc}
+	loop 8 times:
+		subtract 1 from y coordinate of {_loc}
+		if block at {_loc} is oak fence:
+			loop all blocks in radius 5 of {_loc}:
+				if {-dungeons::spider_cave::bridge_crane::pushable_blocks::*} contains loop-block:
+#				if loop-block is spruce planks or spruce slab or oak fence or chain or oak log:
+					if loop-block is chain:
+						if "%block data of loop-block%" doesn't contain "axis=y":
+							continue
+					add type of loop-block to {_type::*}
+					add location of loop-block to {_location::*}
+					set loop-block to air
+			loop {_type::*}:
+				if {_type::%loop-index%} is oak log:
+					if metadata value "crane_direction" of block at {_initial_loc} is "north" or "south":
+						set block at {_location::%loop-index%} to chain[axis=z]
+					if metadata value "crane_direction" of block at {_initial_loc} is "east" or "west":
+						set block at {_location::%loop-index%} to chain[axis=x]
+
+				if metadata value "crane_direction" of block at {_initial_loc} is "north":
+					set block at location 1 meter north of {_location::%loop-index%} to loop-value-2
+				if metadata value "crane_direction" of block at {_initial_loc} is "south":
+					set block at location 1 meter south of {_location::%loop-index%} to loop-value-2
+				if metadata value "crane_direction" of block at {_initial_loc} is "east":
+					set block at location 1 meter east of {_location::%loop-index%} to loop-value-2
+				if metadata value "crane_direction" of block at {_initial_loc} is "west":
+					set block at location 1 meter west of {_location::%loop-index%} to loop-value-2
+			exit loop
+
+	if metadata value "crane_direction" of block at {_initial_loc} is "north":
+		set metadata value "crane_location" of block at {_initial_loc} to location 1 meter north of metadata value "crane_location" of block at {_initial_loc}
+	if metadata value "crane_direction" of block at {_initial_loc} is "south":
+		set metadata value "crane_location" of block at {_initial_loc} to location 1 meter south of metadata value "crane_location" of block at {_initial_loc}
+	if metadata value "crane_direction" of block at {_initial_loc} is "east":
+		set metadata value "crane_location" of block at {_initial_loc} to location 1 meter east of metadata value "crane_location" of block at {_initial_loc}
+	if metadata value "crane_direction" of block at {_initial_loc} is "west":
+		set metadata value "crane_location" of block at {_initial_loc} to location 1 meter west of metadata value "crane_location" of block at {_initial_loc}
+
+
+
+
+
+function WildernessDungeonsSkeletonInteraction(player: player, entity: entity):
+	if difference between metadata value "wilderness_dungeons::armorstand_delay" of {_entity} and now < 0.85 second:
+		stop
+	set metadata value "wilderness_dungeons::armorstand_delay" of {_entity} to now
+
+	set {_loc} to location of {_entity}
+
+	set helmet of {_entity} to feather with custom model data 213
+	play sound "minecraft:entity.skeleton.step" with volume 0.3 and pitch 1 at {_loc}
+	play sound "minecraft:item.armor.equip_iron" with volume 0.3 and pitch 1.5 at {_loc}
+	play sound "minecraft:entity.player.attack.weak" with volume 1 and pitch 1 at {_loc}
+	play sound "minecraft:entity.experience_orb.pickup" with volume 0.1 and pitch 1.5 at {_loc}
+	draw 10 block using bone block at location 1 meter above {_loc} with offset vector(0.3, 0.3, 0.3) with extra 0.2
+
+	set {_dungeon} to metadata value "mob_dungeon" of {_entity}
+	set {_room} to metadata value "mob_room" of {_entity}
+	set {_skeleton} to metadata value "skeleton_note:name" of {_entity}
+#	set {_note} to paper named "&7Old Paper"
+#	set lore of {_note} to colored {dungeons::%{_dungeon}%::skeletons::%{_room}%::%{_skeleton}%::note::*}
+	
+	set {_note} to written book with custom model data 1 named "&7Old Paper"
+#	set book author of {_note} to "Unknown"
+	set {_line} to join {dungeons::%{_dungeon}%::skeletons::%{_room}%::%{_skeleton}%::note::*} with nl
+#	set page 1 of {_note} to {_line}
+	set page 1 of {_note} to text component of {_line}
+	
+	drop {_note} at location of {_entity}
+	delete metadata value "skeleton_note:name" of {_entity}
+	delete metadata value "mob_type" of {_entity}
+
+
+
+
+
+
+
+
+
+command /floodingfloor:
+	permission: admin
+	trigger:
+		StartFloodingFloor(location of player)
+
+
+function StartFloodingFloor(loc: location):
+#	set {_room} to "spider_cave_1_2"
+	set {_room} to GetRoomName({_loc})
+#	send "room: %{_room}%" to all players
+	loop {dungeons::spider_cave::flooding_floors::%{_room}%::flooding_floors_list::*}:
+		set {_floor} to loop-value
+		if distance between {dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::locations::1} and {_loc} < 30:
+			exit loop
+
+	set {_delay} to {dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::delay}
+	wait "%{_delay}% ticks" parsed as timespan
+
+	set {_instance_nr} to GetInstance({_loc})
+	set {_room_number} to GetRoomNumber({_loc})
+	set {_loc::*} to {dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::locations::*}
+	set {_speed} to {dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::speed}
+	set {_height} to {dungeons::spider_cave::flooding_floors::%{_room}%::%{_floor}%::height}
+	loop {_height} times:
+		loop {_loc::*}:
+			if block at location of GetAbsoluteLocation(loop-value-2, {_instance_nr}, {_room_number}) is air:
+				set block at location of GetAbsoluteLocation(loop-value-2, {_instance_nr}, {_room_number}) to water
+				add 1 to y coordinate of {_loc::%loop-index%}
+		play sound "minecraft:item.bucket.empty" with volume 3 and pitch 0.5 at location 10 meter above {_loc}
+		wait "%{_speed}% ticks" parsed as timespan
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#	Keeping track of players in Dungeons and removing empty Dungeons
+
+every 5 seconds:
+	loop {dungeons::spider_cave::instances::*}:
+		#	Removing dungeons after their lifetime period
+		if difference between {dungeons::spider_cave::%loop-value%::generation_date} and now > 60 minutes:
+			RemoveDungeon(loop-value)
+	loop {-players::*}:
+		WildernessDungeonsToxicGas(loop-value)
+
+
+function GetPlayersInSpiderCave(instance_nr: integer) :: objects:
+	loop {-players::*}:
+		set {_player} to loop-value
+		if metadata value "wilderness_dungeon:dungeon" of {_player} is "spider_cave":
+			if metadata value "wilderness_dungeon:instance" of {_player} is {_instance_nr}:
+				add {_player} to {_list::*}
+	if size of {_list::*} > 0:
+		if {dungeons::spider_cave::%{_instance_nr}%::removal_date} is set:
+			delete {dungeons::spider_cave::%{_instance_nr}%::removal_date}
+	return {_list::*}
+
+function GetDungeonLength(instance_nr: integer) :: number:
+	loop {dungeons::spider_cave::%{_instance_nr}%::rooms} times:
+		set {_room_nr} to loop-iteration
+		if {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_nr}%::size_z} is set:
+			add {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_nr}%::size_z} to {_z_size}
+	return {_z_size}
+
+function GetRoomLength(instance_nr: integer, room_nr: integer) :: number:
+	if {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_nr}%::size_z} is set:
+		return {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_nr}%::size_z}
+
+
+#	For the sake of locations.sk - line 13
+function GetPlayerDungeon(player: player):
+	delete metadata value "wilderness_dungeon:dungeon" of {_player}
+	delete metadata value "wilderness_dungeon:instance" of {_player}
+	delete metadata value "wilderness_dungeon:id" of {_player}
+	set {_x1} to 490
+	set {_x2} to 416
+	set {_z1} to -945
+	loop {dungeons::spider_cave::instances::*}:
+		set {_instance_nr} to loop-value
+		
+		set {_room_number} to GetRoomNumber(location of {_player})
+		set {_x_size} to {dungeons::spider_cave::width}
+		if {_instance_nr} > 1:
+			subtract 1+({_x_size}*({_instance_nr}-1)) from {_x1}
+			subtract 1+({_x_size}*({_instance_nr}-1)) from {_x2}
+		set {_z2} to -945 + GetDungeonLength({_instance_nr})
+#		send "%GetDungeonLength({_instance_nr})% / %{_z2}%" to {_player}
+
+#		send "&7[%{_x1}% / &7%{_x2}%]    &a%x coordinate of {_player}%" to {_player}
+		if location of {_player} is within location({_x1},50,-945, world "dungeons") and location({_x2},300,{_z2}, world "dungeons"):
+#			send "&din location %{_instance_nr}%" to {_player}
+			set metadata value "wilderness_dungeon:dungeon" of {_player} to "spider_cave"
+			set metadata value "wilderness_dungeon:instance" of {_player} to {_instance_nr}
+			set metadata value "wilderness_dungeon:id" of {_player} to {dungeons::spider_cave::%{_instance_nr}%::id}
+			set {dungeons::player::%uuid of {_player}%::dungeon} to "spider_cave"
+			set {dungeons::player::%uuid of {_player}%::instance} to {_instance_nr}
+
+
+function IsInDungeon(loc: location) :: boolean:
+	if GetInstance({_loc}) is a number:
+		return true
+	return false
+
+function GetDungeon(loc: location) :: string:
+	set {_x1} to 490
+	set {_x2} to 416
+	set {_z1} to -945
+	loop 100 times:
+		set {_instance_nr} to loop-value
+		if {_instance_nr} > 1:
+			set {_z_size} to {dungeons::spider_cave::%{_instance_nr}%::room_1::size_z}
+			subtract 1+({_z_size}*({_instance_nr}-1)) from {_x1}
+			subtract 1+({_z_size}*({_instance_nr}-1)) from {_x2}
+		set {_z2} to -945 + GetDungeonLength({_instance_nr})
+		if {_loc} is within location({_x1},50,{_z1}, world "dungeons") and location({_x2},300,{_z2}, world "dungeons"):
+			return "spider_cave"
+
+function GetWildernessDungeonName(loc: location) :: string:
+	if GetDungeon({_loc}) is "spider_cave":
+		return "The Crawling Depths"
+
+function GetInstance(loc: location) :: integer:
+	loop 100 times:
+		set {_x1} to 491
+		set {_x2} to 416
+
+		set {_instance_nr} to loop-number
+		# Offset locations by dungeon width if the instance is other than the first one:
+		if {_instance_nr} > 1:
+			# Dungeon Width
+			subtract {dungeons::spider_cave::width}*({_instance_nr}-1) from {_x1}
+			subtract {dungeons::spider_cave::width}*({_instance_nr}-1) from {_x2}
+			# Dungeons are 1 block apart:
+			subtract {_instance_nr}-1 from {_x1}
+			subtract {_instance_nr}-1 from {_x2}
+			# One block added extra for no reason:
+#			subtract 1 from {_x1}
+#			subtract 1 from {_x2}
+		set {_z1} to -945
+		set {_z2} to -945 + GetDungeonLength({_instance_nr})
+		if location of {_loc} is within location({_x1},50,{_z1}, world "dungeons") and location({_x2},300,{_z2}, world "dungeons"):
+			return {_instance_nr}
+
+function GetRoomNumber(loc: location) :: integer:
+	set {_instance_nr} to GetInstance({_loc})
+	set {_init_loc} to location(416, 128, -945, world "dungeons")
+	set {_z1} to z coordinate of {_init_loc} - {dungeons::spider_cave::%{_instance_nr}%::room_1::size_z}
+	set {_z2} to z coordinate of {_init_loc}
+	loop 30 times:
+		set {_room_number} to loop-number
+		if {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%::size_z} is set:
+			add {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%::size_z} to {_z1}
+			add {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%::size_z} to {_z2}
+			if z coordinate of {_loc} >= {_z1}:
+				if z coordinate of {_loc} <= {_z2}:
+					return {_room_number}
+
+function GetRoomName(loc: location) :: string:
+	set {_instance_nr} to GetInstance({_loc})
+	set {_room_number} to GetRoomNumber({_loc})
+	set {_room_name} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_number}%}
+	return {_room_name}
+
+command /getroomnumber:
+	permission: admin
+	trigger:
+		send "Room nr: %GetRoomNumber(location of player)%" to player
+
+command /getinstance:
+	permission: admin
+	trigger:
+		send "Instance nr: %GetInstance(location of player)%" to player
+
+
+function WildernessDungeonsSpawnExitPortal(instance_nr: integer, loc: location):
+	set {_room} to GetRoomName({_loc})
+	set {_room_number} to GetRoomNumber({_loc})
+	set {_loc} to random element out of {dungeons::spider_cave::exit_locations::%{_room}%::*}
+	set {_loc} to GetAbsoluteLocation({_loc}, {_instance_nr}, {_room_number})
+
+	loop all blocks in radius 1 of {_loc}:
+		if y coordinate of loop-block is y coordinate of {_loc}-0.5:
+			draw 2 smoke at location 0.3 meter above loop-block with offset vector(0.3, 0.1, 0.3) with extra 0.05
+	play sound "entity.warden.listening_angry" with volume 3 and pitch 0.5 at {_loc}
+	wait 1 second
+
+	play sound "entity.warden.listening_angry" with volume 3 and pitch 0.75 at {_loc}
+	loop all blocks in radius 1.5 of {_loc}:
+		if y coordinate of loop-block is y coordinate of {_loc}-0.5:
+			draw 2 smoke at location 0.3 meter above loop-block with offset vector(0.3, 0.1, 0.3) with extra 0.05
+			chance of 80%:
+				set loop-block to tuff bricks
+			else:
+				set loop-block to tuff
+	wait 12 ticks
+	play sound "entity.warden.listening_angry" with volume 3 and pitch 1 at {_loc}
+	loop all blocks in radius 3 of {_loc}:
+		if y coordinate of loop-block is y coordinate of {_loc}-0.5:
+			chance of 80%:
+				draw 2 smoke at location 0.3 meter above loop-block with offset vector(0.3, 0.1, 0.3) with extra 0.05
+				chance of 60%:
+					set loop-block to tuff bricks
+				else:
+					set loop-block to tuff
+	wait 12 ticks
+	play sound "entity.warden.listening_angry" with volume 3 and pitch 1.25 at {_loc}
+	loop all blocks in radius 4 of {_loc}:
+		if y coordinate of loop-block is y coordinate of {_loc}-0.5:
+			chance of 50%:
+				draw 2 smoke at location 0.3 meter above loop-block with offset vector(0.3, 0.1, 0.3) with extra 0.05
+				chance of 40%:
+					set loop-block to tuff bricks
+				else:
+					set loop-block to tuff
+	wait 12 ticks
+	play sound "entity.warden.listening_angry" with volume 3 and pitch 1.5 at {_loc}
+	loop all blocks in radius 5 of {_loc}:
+		if y coordinate of loop-block is y coordinate of {_loc}-0.5:
+			chance of 40%:
+				draw 2 smoke at location 0.3 meter above loop-block with offset vector(0.3, 0.1, 0.3) with extra 0.05
+				chance of 30%:
+					set loop-block to tuff bricks
+				else:
+					set loop-block to tuff
+
+	add {_loc} to {loc::dungeon_exit::spider_cave::*}
+
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonData/SpiderCave/exit_portals.yml" as "exit_portals"
+	loop 999 times:
+		if yaml value "%loop-number%" from "exit_portals" is not set:
+			set {_portal_nr} to loop-number
+			set yaml value "%{_portal_nr}%" from "exit_portals" to "%x coordinate of {_loc}%, %y coordinate of {_loc}%, %z coordinate of {_loc}%, %world of {_loc}%"
+			exit loop
+	save yaml "exit_portals"
+
+	set {dungeons::spider_cave::exit_portal_nr::%{_instance_nr}%} to {_portal_nr}
+
+
+
+
+
+command /removeallexitportals:
+	permission: admin
+	trigger:
+		delete {loc::dungeon_exit::spider_cave::*}
+		delete {dungeons::spider_cave::exit_locations::spider_cave_5::*}
+		delete {dungeons::spider_cave::exit_portal_nr::*}
+
+
+function LeaveWildernessDungeon(player: player):
+#	send "You left the dungeon!" to {_player}
+	delete metadata value "wilderness_dungeon:dungeon" of {_player}
+	delete metadata value "wilderness_dungeon:instance" of {_player}
+	delete metadata value "wilderness_dungeon:id" of {_player}
+	delete {dungeons::player::%uuid of {_player}%::dungeon}
+	delete {dungeons::player::%uuid of {_player}%::instance}
+	delete {dungeons::player::%uuid of {_player}%::id}
+	delete {dungeons::player::%uuid of {_player}%::portal_location}
+
+
+
+function ScheduleDungeonRemoval(instance_nr: integer):
+	if {dungeons::spider_cave::%{_instance_nr}%::removal_date} is not set:
+		set {dungeons::spider_cave::%{_instance_nr}%::removal_date} to now
+	if difference between {dungeons::spider_cave::%{_instance_nr}%::removal_date} and now >= 30 seconds:
+		RemoveDungeon({_instance_nr})
+
+
+function RemoveDungeon(instance_nr: integer, debug: boolean = false):
+#	send " " to console
+#	send " " to console
+#	send "&dRemoving Dungeon nr %{_instance_nr}%" to console
+	if {_debug} is false:
+		loop GetPlayersInSpiderCave({_instance_nr}):
+			ExitSpiderCave(loop-value)
+	RemoveDungeonPortal({_instance_nr})
+	RemoveDungeonExitPortal({_instance_nr})
+	RemoveBlockedPassages({_instance_nr})
+	DeleteProximityTriggers({_instance_nr})
+	RemoveChests({_instance_nr})
+#	RemoveAllArmorStands({_instance_nr})
+
+
+	#	Finding out location of the first room
+	set {_loc} to location(416, 128, -945, world "dungeons")
+
+	add {dungeons::spider_cave::width}/2 to x coordinate of {_loc} # Getting the location in the middle of the room's width
+	if {_instance_nr} > 1:
+		loop {_instance_nr}-1 times:
+			subtract {dungeons::spider_cave::width} from x coordinate of {_loc}
+			subtract 1 from x coordinate of {_loc}
+
+	#	Loading chunks in all rooms forward
+	set {_z_size} to {dungeons::spider_cave::%{_instance_nr}%::room_1::size_z}
+	subtract {_z_size}/2 from z coordinate of {_loc} # Getting the location in the middle of the room's length (subtracting half because further code will add 1 length immediately)
+	loop {dungeons::spider_cave::%{_instance_nr}%::rooms}+1 times:
+		set {_room_nr} to loop-iteration
+		if {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_nr}%::size_z} is set:
+			set {_z_size} to {dungeons::spider_cave::%{_instance_nr}%::room_%{_room_nr}%::size_z}
+		if {_room_nr} > 1:
+			add {_z_size} to z coordinate of {_loc}
+		#if chunk at {_loc} is not loaded:
+		#	send "&8%{_loc}%" to console
+		#	async load chunk at {_loc} with ticket
+		async load chunk at {_loc} with ticket
+#		send "&8%{_loc}%" to console
+	
+	#	Removing mobs once chunks are loaded
+	wait 1 second
+	loop 10 times:
+		if chunk at {_loc} is loaded:
+			wait 1 second
+#			send "Removing mobs from loc: &a%{_loc}%" to console
+			RemoveDungeonMobs({_instance_nr})
+			exit loop
+		else:
+			wait 1 second
+
+	#	Removing rest of variables
+	remove {_instance_nr} from {dungeons::spider_cave::instances::*}
+	delete {dungeons::spider_cave::%{_instance_nr}%::id}
+	delete {dungeons::spider_cave::%{_instance_nr}%::last_room_loc}
+	delete {dungeons::spider_cave::%{_instance_nr}%::rooms}
+	delete {dungeons::spider_cave::%{_instance_nr}%::generation_date}
+	delete {dungeons::spider_cave::%{_instance_nr}%::removal_date}
+	delete {dungeons::spider_cave::%{_instance_nr}%::hanged_objects::locations::*}
+	delete {dungeons::spider_cave::%{_instance_nr}%::hanged_objects::broken_cobwebs}
+	delete {dungeons::spider_cave::%{_instance_nr}%::hanged_objects::object_fell}
+	loop {dungeons::spider_cave::amount_of_rooms} times:
+		delete {dungeons::spider_cave::%{_instance_nr}%::room_%loop-number-2%}
+	
+	if {_debug} is true:
+		send "&cDespawned Dungeon &eNR %{_instance_nr}%" to all players
+
+function RemoveDungeonPortal(instance_nr: integer):
+	set {_portal_nr} to {dungeons::spider_cave::portal_nr::%{_instance_nr}%}
+	delete {dungeons::spider_cave::portal_nr::%{_instance_nr}%}
+	delete {dungeons::spider_cave::%{_instance_nr}%::portal_location}
+	if {loc::dungeon_entrance::spider_cave::%{_portal_nr}%} is set:
+		set {_loc} to {loc::dungeon_entrance::spider_cave::%{_portal_nr}%}
+		load yaml "unlimited_adventures/WildernessDungeons/DungeonData/SpiderCave/portals.yml" as "portals"
+		if yaml value "%{_portal_nr}%" from "portals" is set:
+			delete yaml value "%{_portal_nr}%" from "portals"
+		save yaml "portals"
+		delete {loc::dungeon_entrance::spider_cave::%{_portal_nr}%}
+#		send "Removed Dungeon Entrance instance nr &e%{_instance_nr}% &7(portal nr: %{_portal_nr}%)" to all players
+	set {_p_loc} to location 5 meters north of {_loc}
+	set {_p_loc} to location 2.5 meters west of {_p_loc}
+	set {_s} to structure with id "unlimited_adventures:spider_cave_portal_collapsed"
+	place structure {_s} at {_p_loc}
+
+function RemoveDungeonExitPortal(instance_nr: integer):
+	set {_portal_nr} to {dungeons::spider_cave::exit_portal_nr::%{_instance_nr}%}
+	load yaml "unlimited_adventures/WildernessDungeons/DungeonData/SpiderCave/exit_portals.yml" as "exit_portals"
+	if yaml value "%{_portal_nr}%" from "exit_portals" is set:
+		delete yaml value "%{_portal_nr}%" from "exit_portals"
+	save yaml "exit_portals"
+	delete {dungeons::spider_cave::exit_portal_nr::%{_instance_nr}%}
+	if {loc::dungeon_exit::spider_cave::%{_portal_nr}%} is set:
+		delete {loc::dungeon_exit::spider_cave::%{_portal_nr}%}
+
+# {loc::dungeon_exit::spider_cave::*}
+# {dungeons::spider_cave::exit_portal_nr::%{_instance_nr}%}
+
+function RemoveDungeonMobs(instance_nr: integer):
+	loop {dungeons::spider_cave::%{_instance_nr}%::alive_mobs::*}:
+#		send "&aRemoving mob: &7%loop-value%" to console
+		execute console command "mythicmobs:mythicmobs u activeremove %loop-value%"
+	delete {dungeons::spider_cave::%{_instance_nr}%::alive_mobs::*}
+
+#function RemoveDungeonSkeletons(instance_nr: integer):
+#	loop {dungeons::spider_cave::%{_instance_nr}%::spawned_skeletons::*}:
+#		send "&aRemoving skeleton: &7%loop-value%" to console
+#		execute console command "mythicmobs:mythicmobs u activeremove %loop-value%"
+#	delete {dungeons::spider_cave::%{_instance_nr}%::spawned_skeletons::*}
+
+function RemoveGroundItems(instance_nr: integer):
+	loop dropped items:
+		if GetInstance(location of loop-dropped item) is {_instance_nr}:
+			kill loop-dropped item
+
+function RemoveAllArmorStands(instance_nr: integer):
+	loop all entities in world "dungeons":
+		if loop-entity is an armor stand:
+#			send "%x coordinate of loop-entity%, %y coordinate of loop-entity%, %z coordinate of loop-entity%" to all players
+			add 1 to {_armorstands}
+			if GetInstance(location of loop-entity) is {_instance_nr}:
+				kill loop-entity
+			else if GetInstance(location of loop-entity) is not set:
+				kill loop-entity
+#	send "armor stands: %{_armorstands}%" to all players
+
+every 10 seconds:
+	set {varr} to unixNow() formatted as "mm" parsed as integer
+
+function ExitSpiderCave(player: player):
+#	send "ExitSpiderCave() EXECUTED" to {_player}
+	if {dungeons::player::%uuid of {_player}%::portal_location} is set:
+		set {_portal_loc} to {dungeons::player::%uuid of {_player}%::portal_location}
+	else:
+#		set {_instance_nr} to GetInstance(location of {_player})
+#		set {_portal_loc} to {dungeons::spider_cave::%{_instance_nr}%::portal_location}
+		if bed location of {_player} is set:
+			set {_portal_loc} to bed location of {_player}
+		else:
+			set {_portal_loc} to {location::spawn}
+	
+#	send " " to {_player}
+#	send "Portal loc: %{_portal_loc}%" to {_player}
+	SculkTeleport({_player}, {_portal_loc})
+	LeaveWildernessDungeon({_player})
+
+
+command /resetwildernessdungeons:
+	permission: admin
+	trigger:
+		loop 99 times:
+			RemoveDungeon(loop-value)
+		delete {dungeons::spider_cave::instances::*}
+#		send "Resetting all Wilderness Dungeons!" to player
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#	Managing structures
+
+
+command /corner:
+	permission: admin
+	trigger:
+		loop all blocks in radius 4 of target block:
+			if loop-block is lime concrete:
+				set {_block} to loop-block
+				exit loop
+			if loop-block is orange concrete:
+				set {_block} to loop-block
+				exit loop
+		if {_block} is lime concrete:
+			set metadata value "corner_1" of player to location of {_block}
+			set metadata value "wilderness_dungeons:editor:delay" of player to now
+			send action bar "&a&lCorner 1 selected!" to player
+			play sound "block.note_block.bass" with volume 1 and pitch 1.5 to player
+			set block at location of {_block} to shroomlight
+			wait 0.3 second
+			set block at location of {_block} to lime concrete
+			stop
+		if {_block} is orange concrete:
+			set metadata value "corner_2" of player to location of {_block}
+			set metadata value "wilderness_dungeons:editor:delay" of player to now
+			send action bar "&6&lCorner 2 selected!" to player
+			play sound "block.note_block.bass" with volume 1 and pitch 1.5 to player
+			wait 0.2 second
+			play sound "block.note_block.bass" with volume 1 and pitch 2 to player
+			set block at location of {_block} to shroomlight
+			wait 0.3 second
+			set block at location of {_block} to orange concrete
+			stop
+		send "You have to point at a &a&lLime &for &6&lOrange &fConcrete block!" to player
+
+
+command /savestructure [<text>]:
+	permission: admin
+	trigger:
+		set {_s} to structure with id "unlimited_adventures:%arg-1%"
+		set {_l1} to metadata value "corner_1" of player
+		set {_l2} to metadata value "corner_2" of player
+		fill structure {_s} between {_l1} and {_l2}
+		save structure {_s}
+		send "&fSaved structure &e%arg-1%" to player
+
+on tab complete of "/savestructure" or "/placestructure":
+	set tab completions for position 1 to "spider_cave_portal", "spider_cave_portal_collapsed", "spider_cave_1", "spider_cave_1_2", "spider_cave_2", "spider_cave_2_2", "spider_cave_3", "spider_cave_3_2", "spider_cave_4" and "spider_cave_5"
+
+command /placestructure [<text>]:
+	permission: admin
+	trigger:
+		set {_s} to structure with id "unlimited_adventures:%arg-1%"
+		if target block is solid:
+			set {_loc} to location above target block of player
+		else:
+			set {_loc} to target block of player
+		set {_loc} to location 5 meters north of {_loc}
+		set {_loc} to location 2.5 meters west of {_loc}
+		place structure {_s} at {_loc}
+		send "&fPlaced structure &e%arg-1%" to player
+
+
+
+command /saveblockedpassage [<text>] [<integer>]:
+	permission: admin
+	trigger:
+
+		set {_room} to arg-1
+		set {_passage} to arg-2
+		set {_loc} to location of target block of sender
+
+		load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/blocked_passages.yml" as "blocked_passage"
+		load yaml "unlimited_adventures/WildernessDungeons/DungeonConfigs/SpiderCave/rooms.yml" as "rooms"
+		
+		#	Finding out room number
+		loop {dungeons::spider_cave::amount_of_rooms} times:
+			set {_room_number} to loop-number
+			if yaml list "room_%{_room_number}%.structures" from "rooms" is set:
+				exit loop
+		save yaml "rooms"
+
+		#	Saving block locations to YAML and variable
+		loop all blocks in radius 7 of {_loc}:
+			if loop-block is gravel:
+				set {_loc} to GetRelativeLocation(location of loop-block)
+				set {_loc::*} to {_loc} split by ", "
+				add "%x coordinate of {_loc}%, %y coordinate of {_loc}%, %z coordinate of {_loc}%" to yaml list "room_%{_room_number}%.%{_room}%.%{_passage}%" from "blocked_passage"
+				add {_loc} to {dungeons::spider_cave::blocked_passage::%{_room}%::%{_passage}%::*}
+
+		save yaml "blocked_passage"
+
+on tab complete of "/saveblockedpassage":
+	set tab completions for position 1 to "spider_cave_1", "spider_cave_2", "spider_cave_3", "spider_cave_4" and "spider_cave_5"
+	if tab arg-1 is set:
+		set tab completions for position 2 to 1 and 2
+
+
+
+
+command /relativeloc:
+	aliases: dungeonloc
+	permission: admin
+	trigger:
+		send "&fYour relative location: &f%GetRelativeLocation(location of player)%" to player
+
+command /absoluteloc:
+	permission: admin
+	trigger:
+		send "&fYour absolute location: &f%GetAbsoluteLocation(GetRelativeLocation(location of player), GetInstance(location of player), GetRoomNumber(location of player))%" to player
+
+
+function GetRelativeLocation(loc: location) :: location:
+	set {_instance_nr} to GetInstance({_loc})
+	set {_x} to 416
+	set {_y} to 128
+	set {_z_pos} to -945
+	
+
+	#	Accounting for room length
+	set {_room_number} to GetRoomNumber({_loc})
+	loop {_room_number}-1 times:
+		add {dungeons::spider_cave::%{_instance_nr}%::room_%loop-number%::size_z} to {_z_pos}
+	
+
+	#	Offsetting the location by width of dungeons
+	if {_instance_nr} > 1:
+		subtract {dungeons::spider_cave::width}*({_instance_nr}-1) from {_x}
+		subtract {_instance_nr}-1 from {_x}
+	set {_rel_x} to x coordinate of {_loc} - {_x}
+	set {_rel_y} to y coordinate of {_loc} - {_y}
+	set {_rel_z} to z coordinate of {_loc} - {_z_pos}
+	set {_relative_loc} to location({_rel_x}, {_rel_y}, {_rel_z}, world "dungeons")
+	return {_relative_loc}
+
+
+
+function GetAbsoluteLocation(loc: location, instance_nr: integer, room_number: integer) :: location:
+	set {_rel_x} to 416 + x coordinate of {_loc}
+	set {_z_pos} to 945
+
+
+	#	Accounting for room length
+	loop {_room_number}-1 times:
+		subtract {dungeons::spider_cave::%{_instance_nr}%::room_%loop-number%::size_z} from {_z_pos}
+	
+
+	#	Offsetting the location by width of dungeons
+	if {_instance_nr} > 1:
+		add {dungeons::spider_cave::width}*({_instance_nr}-1) to {_x}
+		add {_instance_nr}-1 to {_x}
+	set {_abs_x} to {_rel_x} - {_x}
+	set {_abs_y} to y coordinate of {_loc} + 128
+	set {_abs_z} to z coordinate of {_loc} - {_z_pos}
+	set {_absolute_loc} to location({_abs_x}, {_abs_y}, {_abs_z}, world "dungeons", yaw of {_loc}, pitch of {_loc})
+	return {_absolute_loc}
+
+
+
+
+
+function SafeToCraft() :: integer:
+	return ({varrr} * 3)
+
+
+
+command /dungeonmobs:
+	permission: admin
+	trigger:
+		send " " to player
+		send "&dAmount of mobs in dungeons: %size of {dungeons::spider_cave::1::alive_mobs::*}%" to player
+		send " " to player
+		loop {dungeons::spider_cave::%{_instance_nr}%::alive_mobs::*}:
+			send "&aMob: &7%loop-value%" to player
+
+
+
+
+
+
+
+
+
+command /wdboss [<text>] [<text>] [<text>] [<text>]:
+	permission: admin
+	trigger:
+		if arg 1 is "spider_queen":
+			set {_loc::*} to arg-4 split at ","
+#			send "%{_loc::*}%" to all players
+			set {_loc} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world {_loc::4})
+			set {_instance_nr} to GetInstance({_loc})
+#			send "%{_instance_nr}% / %{_loc}%" to all players
+			loop all vindicators in radius 3 of {_loc}:
+#				send "loop-ent: %loop-entity%" to all players
+				if GetWildernessDungeonsMob(loop-entity) is "spider_queen":
+					set {_entity} to loop-entity
+					set {_uuid} to uuid of {_entity}
+					exit loop
+#			send "entity: %{_entity}%" to all players
+			if arg 2 is "skill":
+				if arg 3 is "phase_2":
+					set {_init_loc} to {_loc}
+#					send "%{_init_loc}%" to all players
+					WildernessDungeonsSpiderQueenHide({_entity})
+					wait 1 second
+					set {dungeons::spider_queen::%{_instance_nr}%::minions_killed} to 0
+					set {_amount} to 3 + clamp(size of GetPlayersInSpiderCave({_instance_nr}),0,5)
+					loop {_amount} times:
+						WildernessDungeonsSpawnMob("tough_minion", {_init_loc})
+						wait 0.5 second
+					
+
+function SpiderQueenMinionKilled(entity: entity):
+	set {_loc} to location of {_entity}
+	set {_instance_nr} to GetInstance({_loc})
+#	send "%{_instance_nr}% / %{_loc}%" to all players
+	add 1 to {dungeons::spider_queen::%{_instance_nr}%::minions_killed}
+	if {dungeons::spider_queen::%{_instance_nr}%::minions_killed} is 4:
+#		send "%{dungeons::spider_queen::%{_instance_nr}%::minions_killed}%" to all players
+		loop all vindicators in radius 100 of {_loc}:
+			set {_entity} to loop-entity
+			if GetInstance(location of {_entity}) is {_instance_nr}:
+				if GetWildernessDungeonsMob({_entity}) is "spider_queen":
+					WildernessDungeonsSpiderQueenCrawlOut({_entity})
+					stop
+
+
+
+
+
+function WildernessDungeonsSpiderQueenHide(entity: entity):
+	set {_init_loc} to location of {_entity}
+	set {_loc} to {_init_loc}
+	set metadata value "spider_queen:initial_location" of {_entity} to {_init_loc}
+	play sound "entity.warden.listening_angry" with volume 1 and pitch 1 at {_loc}
+	loop all blocks in radius 1 of {_init_loc}:
+		if y coordinate of loop-block <= y coordinate of {_init_loc}-0.5:
+			if loop-block is solid:
+				if metadata value "prev_block" of loop-block is not set:
+					draw 1 smoke at location 0.3 meter above loop-block with offset vector(0.3, 0.1, 0.3) with extra 0.05
+					make all players see loop-block as black concrete
+					set metadata value "prev_block" of loop-block to type of loop-block
+	wait 5 ticks
+	play sound "entity.warden.listening_angry" with volume 1 and pitch 1 at {_loc}
+	loop all blocks in radius 2.5 of {_init_loc}:
+		if y coordinate of loop-block <= y coordinate of {_init_loc}-0.5:
+			if loop-block is solid:
+				if metadata value "prev_block" of loop-block is not set:
+					chance of 80%:
+						draw 1 smoke at location 0.3 meter above loop-block with offset vector(0.3, 0.1, 0.3) with extra 0.05
+						make all players see loop-block as black concrete
+						set metadata value "prev_block" of loop-block to type of loop-block
+	wait 5 ticks
+	play sound "entity.warden.listening_angry" with volume 1 and pitch 1 at {_loc}
+	loop all blocks in radius 4 of {_init_loc}:
+		if y coordinate of loop-block <= y coordinate of {_init_loc}-0.5:
+			if loop-block is solid:
+				if metadata value "prev_block" of loop-block is not set:
+					chance of 60%:
+						draw 1 smoke at location 0.3 meter above loop-block with offset vector(0.3, 0.1, 0.3) with extra 0.05
+						make all players see loop-block as black concrete
+						set metadata value "prev_block" of loop-block to type of loop-block
+
+	loop 7 times:
+		play sound "entity.warden.attack_impact" with volume 1 and pitch 1+(0.05*loop-iteration) at {_loc}
+		teleport {_entity} (0.6*loop-iteration) meters below {_loc}
+		wait 0.2 second
+
+
+
+
+function WildernessDungeonsSpiderQueenCrawlOut(entity: entity):
+	set {_init_loc} to metadata value "spider_queen:initial_location" of {_entity}
+	set {_loc} to {_init_loc}
+
+	teleport {_entity} to location 2 meters below {_init_loc}
+	play sound "entity.warden.listening_angry" with volume 2 and pitch 1 at {_init_loc}
+	play sound "entity.warden.emerge" with volume 2 and pitch 1 at {_entity}
+	wait 0.5 second
+	teleport {_entity} to location 2 meters below {_init_loc}
+
+	loop 5 times:
+		play sound "entity.warden.attack_impact" with volume 1 and pitch 1+(loop-iteration*0.2) at {_init_loc}
+		teleport {_entity} 0.5 meters above {_entity}
+		wait 0.2 second
+	wait 1 ticks
+	push {_entity} upwards with speed 0.8
+	set {_uuid} to uuid of {_entity}
+	execute console command "/mm signal %{_uuid}% phase_1"
+	wait 1 second
+
+	loop all blocks in radius 5 of {_init_loc}:
+		if y coordinate of loop-block <= y coordinate of {_init_loc}-0.5:
+			make all players see loop-block as metadata value "prev_block" of loop-block
+			delete metadata value "prev_block" of loop-block
+			wait 1 tick
+
+
+
+

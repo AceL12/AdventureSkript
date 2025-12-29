@@ -1,0 +1,960 @@
+import:
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+	org.bukkit.Bukkit
+
+on load:
+	if {-Threads::Global} is not set:
+		set {-Threads::Global} to Executors.newFixedThreadPool(2)
+	loop 80 times:
+		if YamlQueueCheck("sounds") is true:
+			YamlQueueAdd("sounds")
+			LoadSounds()
+			RegisterTags()
+			exit loop
+		wait 1 second
+	wait 10 seconds
+
+
+function RegisterTags():
+	register an item tag named "skript:food" containing apple, golden apple, enchanted golden apple, melon slice, sweet berries, glow berries, chorus fruit, carrot, golden carrot, potato, baked potato, poisonous potato, beetroot, dried kelp, beef, cooked beef, porkchop, cooked porkchop, mutton, cooked mutton, chicken, cooked chicken, rabbit, cooked rabbit, cod, cooked cod, salmon, cooked salmon, tropical fish, pufferfish, bread, cookie, cake, mushroom stew, beetroot soup, rabbit stew, and pumpkin pie
+#	register an item tag named "skript:metal_armor" containing chainmail helmet, chainmail chestplate, chainmail leggings, chainmail boots, iron helmet, iron chestplate, iron leggings, iron boots, golden helmet, golden chestplate, golden leggings, golden boots, diamond helmet, diamond chestplate, diamond leggings, diamond boots, netherite helmet, netherite chestplate, netherite leggings and netherite boots
+
+command /ambientsreload:
+	aliases: reloadsounds, reloadambients
+	permission: admin
+	trigger:
+		LoadSounds()
+
+function LoadSounds():
+
+	load yaml "unlimited_adventures/Sounds/config.yml" as "config"
+	if {ambients::*} is set:
+		clear {ambients::*}
+	clear {-ambients::*}
+	delete {-ambients::biomes::forests::*}
+	delete {-ambients::biomes::green::*}
+	delete {-ambients::biomes::arid::*}
+	delete {-ambients::biomes::winter::*}
+	delete {-ambients::biomes::high::*}
+	delete {-ambients::biomes::ocean::*}
+
+	set {-ambients::enabled} to yaml value "enabled" from "config"
+	set {-ambients::biomes::forests::*} to yaml list "forest-biomes" from "config"
+	set {-ambients::biomes::green::*} to yaml list "green-biomes" from "config"
+	set {-ambients::biomes::arid::*} to yaml list "arid-biomes" from "config"
+	set {-ambients::biomes::winter::*} to yaml list "winter-biomes" from "config"
+	set {-ambients::biomes::high::*} to yaml list "high-biomes" from "config"
+	set {-ambients::biomes::ocean::*} to yaml list "ocean-biomes" from "config"
+
+	set {sounds::hotbar_slot_sound} to yaml value "hotbar_slot_sound" from "config"
+	set {sounds::tool_draw_sound} to yaml value "tool_draw_sound" from "config"
+	set {sounds::inventory_sounds} to yaml value "inventory_sounds" from "config"
+	set {sounds::block_interact} to yaml value "block_interact" from "config"
+	set {sounds::item_craft} to yaml value "item_craft" from "config"
+	set {sounds::item_drop} to yaml value "item_drop" from "config"
+	save yaml "config"
+	
+	load yaml "unlimited_adventures/Sounds/ambients.yml" as "sounds"
+	loop yaml node keys "" from "sounds":
+		set {_sound} to loop-value
+		set {_sound_name} to yaml value "%{_sound}%.sound" from "sounds"
+		set {-ambients::%{_sound}%::sound} to yaml value "%{_sound}%.sound" from "sounds"
+		
+		if yaml list "%{_sound}%.worlds" from "sounds" is set:
+			set {-ambients::%{_sound}%::worlds::*} to yaml list "%{_sound}%.worlds" from "sounds"
+		if yaml list "%{_sound}%.biomes" from "sounds" is set:
+			set {-ambients::%{_sound}%::biomes::*} to yaml list "%{_sound}%.biomes" from "sounds"
+		if yaml list "%{_sound}%.levels" from "sounds" is set:
+			set {-ambients::%{_sound}%::levels::*} to yaml list "%{_sound}%.levels" from "sounds"
+		if yaml list "%{_sound}%.time_of_day" from "sounds" is set:
+			set {-ambients::%{_sound}%::time_of_day::*} to yaml list "%{_sound}%.time_of_day" from "sounds"
+		if yaml list "%{_sound}%.weather" from "sounds" is set:
+			set {-ambients::%{_sound}%::weather::*} to yaml list "%{_sound}%.weather" from "sounds"
+		set {_time} to yaml value "%{_sound}%.delay" from "sounds"
+		set {-ambients::%{_sound}%::delay} to "%{_time}% seconds" parsed as timespan
+		set {-ambients::%{_sound}%::amplitude} to yaml value "%{_sound}%.amplitude" from "sounds"
+		if yaml value "%{_sound}%.volume" from "sounds" is set:
+			set {-ambients::%{_sound}%::volume} to yaml value "%{_sound}%.volume" from "sounds"
+		if yaml value "%{_sound}%.pitch" from "sounds" is set:
+			set {-ambients::%{_sound}%::pitch} to yaml value "%{_sound}%.pitch" from "sounds"
+		if yaml value "%{_sound}%.play_when_submerged" from "sounds" is set:
+			set {-ambients::%{_name}%::play_when_submerged} to yaml value "%{_sound}%.play_when_submerged" from "sounds"
+		if yaml value "%{_sound}%.prevent_stacking" from "sounds" is set:
+			set {_time} to yaml value "%{_sound}%.prevent_stacking" from "sounds"
+			set {-ambients::%{_sound}%::prevent_stacking} to "%{_time}% seconds" parsed as timespan
+		add {_sound} to {-ambients::sounds::*}
+
+	save yaml "sounds"
+		
+
+	load yaml "unlimited_adventures/Sounds/location_sounds.yml" as "location_sounds"
+#	delete {-location_sounds::*}
+	loop {-location_sounds::sounds::*}:
+		set {_sound} to loop-value
+#		send "&c%{-location_sounds::%{_sound}%::*}%" to all players
+		delete {-location_sounds::%{_sound}%::*}
+	delete {-location_sounds::sounds::*}
+
+	loop yaml node keys "" from "location_sounds":
+		set {_sound} to loop-value
+		set {_sound_name} to yaml value "%{_sound}%.sound" from "location_sounds"
+		delete {-location_sounds::%{_sound}%::*}
+		set {-location_sounds::%{_sound}%::sound} to yaml value "%{_sound}%.sound" from "location_sounds"
+		if yaml value "%{_sound}%.location" from "location_sounds" is set:
+#			set {_loc::*} to yaml value "%{_sound}%.location" from "location_sounds" split at ", "
+			set {_loc} to yaml value "%{_sound}%.location" from "location_sounds"
+			set {_loc::*} to {_loc} split at ", "
+			set {-location_sounds::%{_sound}%::location} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, {_loc::4})
+#			send "%{location_sounds::%{_sound}%::location}%" to all players
+		set {_time} to yaml value "%{_sound}%.delay" from "location_sounds"
+		set {-location_sounds::%{_sound}%::delay} to "%{_time}% seconds" parsed as timespan
+		set {-location_sounds::%{_sound}%::amplitude} to yaml value "%{_sound}%.amplitude" from "location_sounds"
+		if yaml value "%{_sound}%.volume" from "location_sounds" is set:
+			set {-location_sounds::%{_sound}%::volume} to yaml value "%{_sound}%.volume" from "location_sounds"
+		if yaml value "%{_sound}%.pitch" from "location_sounds" is set:
+			set {-location_sounds::%{_sound}%::pitch} to yaml value "%{_sound}%.pitch" from "location_sounds"
+		if yaml value "%{_sound}%.play_when_submerged" from "location_sounds" is set:
+			set {-location_sounds::%{_name}%::play_when_submerged} to yaml value "%{_sound}%.play_when_submerged" from "location_sounds"
+		add {_sound} to {-location_sounds::sounds::*}
+	save yaml "location_sounds"
+
+	set {-sound::wooden} to "item.crossbow.loading_end, 0.2, 1, 1.2"
+	set {-sound::sword} to "custom.items.sword_unsheath, 0.3, 0.5, 1"
+	set {-sound::pickaxe_or_shovel} to "item.bundle.drop_contents, 0.7, 0.8, 1"
+	set {-sound::axe} to "custom.items.axe_unsheath, 0.8, 0.45, 1"
+	set {-sound::hoe} to "item.bundle.drop_contents, 0.3, 0.8, 1"
+	set {-sound::trident} to "custom.items.sword_unsheath, 0.7, 0.5, 1"
+	set {-sound::mace} to "custom.items.axe_unsheath, 1.5, 0.45, 1"
+	set {-sound::shield} to "block.fence_gate.close, 0.25, 0.7, 1"
+	set {-sound::bow} to "item.crossbow.loading_end, 0.2, 1, 1.5"
+	set {-sound::crossbow} to "item.crossbow.loading_end, 0.2, 1, 1.2"
+	set {-sound::water_bucket} to "item.bucket.fill, 0.1, 1, 1"
+	set {-sound::lava_bucket} to "item.bucket.fill_lava, 0.1, 0.5, 1"
+	set {-sound::axolotl_bucket} to "item.bucket.fill_axolotl, 0.1, 0.5, 1"
+	set {-sound::powder_snow_bucket} to "item.bucket.fill_powder_snow, 0.1, 0.5, 1"
+	set {-sound::cod_bucket} to "item.bucket.fill_fish, 0.1, 0.5, 1"
+	set {-sound::salmon_bucket} to "item.bucket.fill_fish, 0.1, 0.5, 1"
+	set {-sound::tropical_fish_bucket} to "item.bucket.fill_fish, 0.1, 0.5, 1"
+	set {-sound::tadpole_bucket} to "item.bucket.fill_tadpole, 0.1, 0.5, 1"
+	set {-sound::milk} to "item.bucket.fill, 0.1, 0.5, 1.5"
+	set {-sound::bucket} to "item.armor.equip_iron, 0.1, 0.5, 1"
+	set {-sound::potion} to "item.bottle.empty, 0.1, 0.5, 1"
+	set {-sound::grappling_hook} to "custom.items.grappling_hook.equip, 0, 1, 1"
+
+
+	load yaml "unlimited_adventures/Sounds/item_sounds.yml" as "item_sounds"
+	loop yaml node keys "" from "item_sounds":
+		set {_item} to loop-value
+		loop 3 times:
+			set {_nr} to loop-iteration-2
+			if {_nr} is 1:
+				set {-item_sounds::%{_item}%::sound} to yaml value "%{_item}%.sound" from "item_sounds"
+				set {-item_sounds::%{_item}%::volume} to yaml value "%{_item}%.volume" from "item_sounds"
+				set {-item_sounds::%{_item}%::pitch} to yaml value "%{_item}%.pitch" from "item_sounds"
+			else:
+				if "%{_item}%.sound%{_nr}%" is set:
+					set {-item_sounds::%{_item}%::sound%{_nr}%} to yaml value "%{_item}%.sound%{_nr}%" from "item_sounds"
+					set {-item_sounds::%{_item}%::volume%{_nr}%} to yaml value "%{_item}%.volume%{_nr}%" from "item_sounds"
+					set {-item_sounds::%{_item}%::pitch%{_nr}%} to yaml value "%{_item}%.pitch%{_nr}%" from "item_sounds"
+	save yaml "item_sounds"
+
+
+	if {-ambients::enabled} is true:
+		set {_msg} to "&f &fAmbient Sounds config file has been reloaded! &a(Ambients Enabled)"
+	else:
+		set {_msg} to "&f &fAmbient Sounds config file has been reloaded! &c(Ambients Disabled)"
+
+	YamlQueueRemove("sounds")
+
+	loop {-players::*}:
+		if loop-value has permission "admin":
+			send {_msg} to loop-value
+
+every second:
+	loop {-players::*}:
+		AmbientTickPlayer(loop-value)
+		LocationSoundsTickPlayer(loop-value)
+
+function AsyncAmbientTickPlayer(player: player):
+	set {_functions::run} to function reference "AmbientTickPlayer" called with {_player}
+	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+	{-Threads::Global}.submit({_runnable})
+function AsyncLocationSoundsTickPlayer(player: player):
+	set {_functions::run} to function reference "LocationSoundsTickPlayer" called with {_player}
+	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+	{-Threads::Global}.submit({_runnable})
+#	set {_size} to {-Threads::Global}.getPoolSize()
+#	set {_queue} to {-Threads::Global}.getQueue().size()
+#	set {_active} to {-Threads::Global}.getActiveCount()
+#	set {_largest} to {-Threads::Global}.getLargestPoolSize()
+#	set {_task_count} to {-Threads::Global}.getTaskCount()
+#	set {_completed_task_count} to {-Threads::Global}.getCompletedTaskCount()
+#	send "&7Active: &f%{_active}%&7, Queue: &f%{_queue}%&7, Total: &f%{_size}% &8[%{_largest}%]" to console
+#	send "&7Tasks: &f%{_task_count}%&7, &f%{_completed_task_count}%" to console
+
+function AmbientTickPlayer(player: player):
+	if {-ambients::enabled} is false:
+		stop
+	if {player_setting::ambient_sounds::%uuid of {_player}%} is false:
+		stop
+
+	#	Don't play regular ambients in Wilderness Dungeons
+	if IsInDungeon(location of {_player}) is true:
+		stop
+
+	if block above {_player} is water or falling water:
+		set {_submerged} to true
+	set {_biome} to GetBiomeID(location of {_player})
+	set {_world} to world of {_player}
+	set {_weather} to weather in {_player}'s world
+	set {_region} to "%region at {_player}%"
+	replace all "in world %{_world}%" in {_region} with ""
+
+	set {_level} to "surface"
+	if y coordinate of {_player} > 64+90:
+		set {_level} to "sky"
+	if y coordinate of {_player} < 64-20:
+		set {_level} to "underground"
+
+	if {_region} contains "dungeon":
+		set {_biome} to "dungeons"
+		set {_level} to "surface"
+		set {_outside} to false
+
+	if {_region} contains "spawn":
+		set {_level} to "surface"
+
+#	send action bar "%{_biome}%" to {_player}
+#	send "&8%{_biome}%" to {_player}
+
+	set {_current_time} to "night"
+	if {_player}'s world's time > 5:00:
+		set {_current_time} to "morning"
+	if {_player}'s world's time > 10:00:
+		set {_current_time} to "noon"
+	if {_player}'s world's time > 16:00:
+		set {_current_time} to "evening"
+	if {_player}'s world's time > 20:00:
+		set {_current_time} to "night"
+
+	
+	if {-ambients::sounds::*} is set:
+		loop {-ambients::sounds::*}:
+			set {_name} to loop-value
+			set {_sound_name} to {-ambients::%{_name}%::sound}
+
+#			if {-ambients::%{_name}%::play_when_submerged} is not true:
+#				if block above {_player} is water or falling water:
+#					stop sound {_sound_name} for {_player}
+
+			if {-ambients::%{_name}%::worlds::*} is set:
+				set {_worlds::*} to {-ambients::%{_name}%::worlds::*}
+				if {_worlds::*} doesn't contain {_world}:
+#					send "wrong world %{_name}%" to {_player}
+					continue loop
+
+			if BiomeCheck({_player}, {_name}) is false:
+#				send "wrong biome" to {_player}
+				continue loop
+
+			if {-ambients::%{_name}%::levels::*} is set:
+				set {_levels::*} to {-ambients::%{_name}%::levels::*}
+				if {_levels::*} doesn't contain {_level}:
+#					send "wrong level" to {_player}
+					continue loop
+
+			if {-ambients::%{_name}%::weather::*} is set:
+				set {_weather::*} to {-ambients::%{_name}%::weather::*}
+				if {_weather::*} doesn't contain "%{_weather}%":
+#					send "wrong weather" to {_player}
+					continue loop
+			
+			if {-ambients::%{_name}%::time_of_day::*} is set:
+				set {_time_of_day::*} to {-ambients::%{_name}%::time_of_day::*}
+				if {_time_of_day::*} doesn't contain {_current_time}:
+#					send "wrong time" to {_player}
+					continue loop
+				if {_current_time} is "night":
+					if syncPing() is not between ({varrr}*3)-1 and ({varrr}*3)+1:
+						if syncPing() is not 23 or 24 or 0 or 1:
+							chance of 49%:
+								continue loop
+
+			if {-ambients::%{_name}%::play_when_submerged} is not true:
+				if {_submerged} is true:
+#					send "can't be submerged!" to {_player}
+					continue loop
+
+			if {-ambients::%{_name}%::prevent_stacking} is set:
+				if difference between metadata value "ambients_lastsound_cooldown" of {_player} and now < {-ambients::%{_name}%::prevent_stacking}:
+					continue loop
+
+			set {_delay} to {-ambients::%{_name}%::delay}
+			set {_amplitude} to {-ambients::%{_name}%::amplitude}
+			
+			set {_playsound} to false
+			if metadata value "ambients_%{_name}%_cooldown" of {_player} is not set:
+				chance of 20%:
+					set {_playsound} to true
+			else if difference between metadata value "ambients_%{_name}%_cooldown" of {_player} and now >= {_delay}:
+				set {_playsound} to true
+			if {_playsound} is true:
+				set {_now} to now
+				add "%random number between 0-{_amplitude} and {_amplitude}% seconds" parsed as timespan to {_now}
+				set metadata value "ambients_lastsound_cooldown" of {_player} to {_now}
+				set metadata value "ambients_%{_name}%_cooldown" of {_player} to {_now}
+
+				set {_loc} to location of {_player}
+				add random number between -10 and 10 to x coordinate of {_loc}
+				add random number between 0 and 5 to y coordinate of {_loc}
+				add random number between -10 and 10 to z coordinate of {_loc}
+				set {_volume} to 1
+				if {-ambients::%{_name}%::volume} is set:
+					set {_volume} to {-ambients::%{_name}%::volume}
+				set {_pitch} to 1
+				if {-ambients::%{_name}%::pitch} is set:
+					set {_pitch} to {-ambients::%{_name}%::pitch}
+				set {_pitch} to random number between {_pitch}*0.9 and {_pitch}*1.1
+				set {_range1} to 0-{_volume}*0.1
+				set {_range2} to {_volume}*0.1
+#				add "%{_sound_name}%||%world of {_loc}%||%x coordinate of {_loc}%||%y coordinate of {_loc}%||%z coordinate of {_loc}%||%{_volume}%||%{_pitch}%" to {-soundsToPlay::%uuid of {_player}%::*}
+				play sound {_sound_name} in ambient category with volume ({_volume} + random number between {_range1} and {_range2}) and pitch {_pitch} at {_loc} to {_player}
+#				send "%{_sound_name}% (%{_name}%), %{_volume}%, %random number between {_range1} and {_range2}%, %{_pitch}%" to {_player}
+#				send "%{_sound_name}% (%{_name}%)" to {_player}
+
+#	loop {_soundsToPlay::*}:
+#		set {_soundToPlay} to loop-value
+#		set {_functions::run} to function reference "PlaySoundsSync" called with {_player}, {_soundToPlay}
+#		set {_runnable} to new proxy instance of Runnable using {_functions::*}
+#		Bukkit.getScheduler().runTask(Skript.getInstance(), {_runnable})
+
+#	set {_functions::run} to function reference "PlaySoundsSync2" called with {_player}
+#	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+#	Bukkit.getScheduler().runTask(Skript.getInstance(), {_runnable})
+
+
+
+
+#	play sound {_sound_name} in ambient category with volume ({_volume} + random number between {_range1} and {_range2}) and pitch {_pitch} at {_loc} to {_player}
+
+#				send "[WILDERNESS] %{_sound_name}% (%{_name}%)" to {_player}
+
+
+
+
+
+
+function LocationSoundsTickPlayer(player: player):
+	if {-ambients::enabled} is false:
+		stop
+	if {player_setting::ambient_sounds::%uuid of {_player}%} is false:
+		stop
+
+	set {_p_world} to world of {_player}
+	set {_p_loc} to location of {_player}
+
+
+	if {-location_sounds::sounds::*} is set:
+		loop {-location_sounds::sounds::*}:
+			set {_name} to loop-value
+			set {_sound_name} to {-location_sounds::%{_name}%::sound}
+
+
+#			send "%world of {_player}% / %world of {-location_sounds::%{_name}%::location}%" to {_player}
+			if {_p_world} is not world of {-location_sounds::%{_name}%::location}:
+				continue loop
+			if distance between {-location_sounds::%{_name}%::location} and {_p_loc} > 50:
+				continue loop
+
+			set {_delay} to {-location_sounds::%{_name}%::delay}
+			set {_amplitude} to {-location_sounds::%{_name}%::amplitude}
+			
+			set {_playsound} to false
+			if metadata value "location_sounds_%{_name}%_cooldown" of {_player} is not set:
+				chance of 20%:
+					set {_playsound} to true
+			else if difference between metadata value "location_sounds_%{_name}%_cooldown" of {_player} and now >= {_delay}:
+				set {_playsound} to true
+			if {_playsound} is true:
+				set {_now} to now
+				add "%random number between 0-{_amplitude} and {_amplitude}% seconds" parsed as timespan to {_now}
+				set metadata value "location_sounds_%{_name}%_cooldown" of {_player} to {_now}
+
+				set {_loc} to {-location_sounds::%{_name}%::location}
+				add random number between -10 and 10 to x coordinate of {_loc}
+				add random number between 0 and 5 to y coordinate of {_loc}
+				add random number between -10 and 10 to z coordinate of {_loc}
+				set {_volume} to 1
+				if {-location_sounds::%{_name}%::volume} is set:
+					set {_volume} to {-location_sounds::%{_name}%::volume}
+				set {_pitch} to 1
+				if {-location_sounds::%{_name}%::pitch} is set:
+					set {_pitch} to {-location_sounds::%{_name}%::pitch}
+				set {_pitch} to random integer between {_pitch}*0.9 and {_pitch}*1.1
+				set {_range1} to 0-{_volume}*0.1
+				set {_range2} to {_volume}*0.1
+				add "%{_sound_name}%||%world of {_loc}%||%x coordinate of {_loc}%||%y coordinate of {_loc}%||%z coordinate of {_loc}%||%{_volume}%||%{_pitch}%" to {-soundsToPlay::%uuid of {_player}%::*}
+				play sound {_sound_name} in ambient category with volume ({_volume} + random number between {_range1} and {_range2}) and pitch {_pitch} at {_loc} to {_player}
+
+#	loop {_soundsToPlay::*}:
+#		set {_soundToPlay} to loop-value
+#		set {_functions::run} to function reference "PlaySoundsSync" called with {_player}, {_soundToPlay}
+#		set {_runnable} to new proxy instance of Runnable using {_functions::*}
+#		Bukkit.getScheduler().runTask(Skript.getInstance(), {_runnable})
+
+#	set {_functions::run} to function reference "PlaySoundsSync2" called with {_player}
+#	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+#	Bukkit.getScheduler().runTask(Skript.getInstance(), {_runnable})
+
+
+
+
+function PlaySoundsSync(player: player, soundData: string):
+	if {_player} is not online:
+		stop
+	set {_data::*} to {_soundData} split at "||"
+	set {_soundName} to {_data::1}
+	set {_world} to world({_data::2})
+	set {_x} to {_data::3} parsed as number
+	set {_y} to {_data::4} parsed as number
+	set {_z} to {_data::5} parsed as number
+	set {_volume} to {_data::6} parsed as number
+	set {_pitch} to {_data::7} parsed as number
+	set {_loc} to location at {_x}, {_y}, {_z} in {_world}
+#	send "%{_soundName}%, %{_world}%, %{_x}%, %{_y}%, %{_z}%, %{_volume}%, %{_pitch}%" to {_player}
+	play sound {_soundName} in ambient category with volume {_volume} and pitch {_pitch} at {_loc} to {_player}
+
+function PlaySoundsSync2(player: player):
+	if {_player} is not online:
+		stop
+	loop {-soundsToPlay::%uuid of {_player}%::*}:
+		set {_data::*} to loop-value split at "||"
+		set {_soundName} to {_data::1}
+		set {_world} to world({_data::2})
+		set {_x} to {_data::3} parsed as number
+		set {_y} to {_data::4} parsed as number
+		set {_z} to {_data::5} parsed as number
+		set {_volume} to {_data::6} parsed as number
+		set {_pitch} to {_data::7} parsed as number
+		set {_loc} to location at {_x}, {_y}, {_z} in {_world}
+	#	send "%{_soundName}%, %{_world}%, %{_x}%, %{_y}%, %{_z}%, %{_volume}%, %{_pitch}%" to {_player}
+		play sound {_soundName} in ambient category with volume {_volume} and pitch {_pitch} at {_loc} to {_player}
+	clear {-soundsToPlay::%uuid of {_player}%::*}
+
+
+
+
+
+
+
+
+function InCave(player: player) :: boolean:
+	if difference between metadata value "in_cave_last_check" of {_player} and now < 1.5 seconds:
+		return metadata value "in_cave_status" of {_player}
+	if world of {_player} is "dungeons":
+		return false
+
+	set metadata value "in_cave_last_check" of {_player} to now
+	set {_y} to y coordinate of highest block at location of {_player}
+
+	#	Depth
+	if y coordinate of {_player} <= {_y}-15:
+		set {_diff} to difference between {_y} and y coordinate of {_player}
+		set {_force} to ({_diff}-14)/35
+		if {_force} > 1:
+			set {_force} to 1
+		add {_force}/1.5 to {_score}
+
+	#	Light
+	set {_force} to sunlight level at {_player}
+	set {_force} to (15 - {_force})/15
+	add {_force}/2.5 to {_score}
+
+	set metadata value "in_cave_status" of {_player} to false
+	if {_score} >= 0.5:
+		set metadata value "in_cave_status" of {_player} to true
+		return true
+
+
+
+
+
+
+
+
+function BiomeCheck(player: player, name: string) :: boolean:
+	set {_biome_correct} to false
+
+	if {-ambients::%{_name}%::biomes::*} is not set:
+		set {_biome_correct} to true
+		return {_biome_correct}
+
+#	set {_biome} to "%biome of block at {_player}%"
+	set {_biome} to GetBiomeID(location of {_player})
+#	replace all " " with "_" in {_biome}
+#	replace all "terralith:" with "t:" in {_biome}
+
+	set {_world} to world of {_player}
+	set {_region} to "%region at {_player}%"
+	replace all " in world %{_world}%" in {_region} with ""
+	if {_region} contains "dungeon":
+		set {_biome} to "dungeons"
+		set {_dungeon} to {_region}
+
+	if {_region} contains "spawn":
+		set {_biome} to "spawn"
+
+	if InCave({_player}) is true:
+		set {_biome} to "cave"
+
+#	send "%{_biome}%" to {_player}
+
+	
+	set {_biomes::*} to {-ambients::%{_name}%::biomes::*}
+
+	#	Checking if biomes list contains current biome, and doesn't exclude it:
+	if {_biomes::*} contains "%{_biome}%":
+		if {_biomes::*} doesn't contain "!%{_biome}%":
+			set {_biome_correct} to true
+
+	#	Checking if biomes list contains current dungeon, and doesn't exclude it:
+
+	if "%{_biomes::*}%" contains "dungeon":
+		if "%{_biomes::*}%" contains "%{_dungeon}%":
+			if {_biomes::*} contains {_dungeon}:
+				if {_biomes::*} doesn't contain "!%{_dungeon}%":
+					set {_biome_correct} to true
+
+
+	#	Checking if biomes list contains any of the biome groups:
+	if {_biomes::*} contains "all forests" or "all forest biomes" or "forest biomes":
+		if {-ambients::biomes::forests::*} contains "%{_biome}%":
+			set {_biome_correct} to true
+	if {_biomes::*} contains "all green" or "all green biomes" or "green biomes":
+		if {-ambients::biomes::green::*} contains "%{_biome}%":
+			set {_biome_correct} to true
+	if {_biomes::*} contains "all winter" or "all winter biomes" or "winter biomes":
+		if {-ambients::biomes::winter::*} contains "%{_biome}%":
+			set {_biome_correct} to true
+	if {_biomes::*} contains "all arid" or "all arid biomes" or "arid biomes":
+		if {-ambients::biomes::arid::*} contains "%{_biome}%":
+			set {_biome_correct} to true
+	if {_biomes::*} contains "all high" or "all high biomes" or "high biomes":
+		if {-ambients::biomes::high::*} contains "%{_biome}%":
+			set {_biome_correct} to true
+	if {_biomes::*} contains "all ocean" or "all ocean biomes" or "ocean biomes":
+		if {-ambients::biomes::ocean::*} contains "%{_biome}%":
+			set {_biome_correct} to true
+
+	return {_biome_correct}
+
+
+
+
+
+
+on step on grass block or dirt or coarse dirt:
+	if player is sprinting:
+		BirdsTakeoffRunningThroughForest(player)
+	if block at player is tagged with minecraft tag "flowers":
+		set {_type} to "plant"
+	if block at player is short grass:
+		set {_type} to "plant"
+	if {_type} is "plant":
+		chance of 25%:
+			set {_volume} to random number between 0.3 and 0.5
+			set {_pitch} to random number between 0.9 and 1.4
+			play sound "custom.bush_trampling" with volume {_volume} and pitch {_pitch} at player
+	if block at player is tall grass:
+		chance of 50%:
+			set {_volume} to random number between 0.5 and 0.7
+			set {_pitch} to random number between 0.6 and 1.1
+			play sound "custom.bush_trampling" with volume {_volume} and pitch {_pitch} at player
+
+
+
+on break:
+	if event-block is tagged with minecraft tag "logs":
+		if block 4 meters above event-block is tagged with minecraft tag "leaves":
+			BirdsTakeoffSound(player, location of event-block)
+		if block 9 meters above event-block is tagged with minecraft tag "leaves":
+			BirdsTakeoffSound(player, location of event-block)
+
+function BirdsTakeoffSound(player: player, loc: location):
+	if difference between metadata value "birds_takeoff_sound" of {_player} and now < 30 seconds:
+		stop
+	chance of 30%:
+		set metadata value "birds_takeoff_sound" of {_player} to now
+		set {_loc} to location 4 meters above {_loc}
+		set {_volume} to random number between 0.6 and 0.9
+		set {_pitch} to random number between 0.9 and 1.1
+		play sound "custom.birds_takeoff" with volume {_volume} and pitch {_pitch} at {_loc}
+
+function BirdsTakeoffRunningThroughForest(player: player):
+	if difference between metadata value "birds_takeoff_sound" of {_player} and now < 30 seconds:
+		stop
+	if {-ambients::biomes::forests::*} contains "%{_player}'s biome%":
+		chance of 5%:
+			set metadata value "birds_takeoff_sound" of {_player} to now
+			set {_volume} to random number between 0.6 and 0.9
+			set {_pitch} to random number between 0.9 and 1.1
+			play sound "custom.birds_takeoff" with volume {_volume} and pitch {_pitch} at location 4 meters above {_player}
+
+
+on tool change:
+	if {sounds::hotbar_slot_sound} is true:
+		play sound "ui.button.click" with volume 0.1 and pitch 2 to player
+	ToolDrawSound(player)
+
+function ToolDrawSound(player: player):
+	if {sounds::tool_draw_sound} is not true:
+		stop
+	wait 1 tick
+	if tool of {_player} is tagged with minecraft tag "swords":
+		set {_tool} to "sword"
+	if tool of {_player} is tagged with minecraft tag "pickaxes":
+		set {_tool} to "pickaxe_or_shovel"
+	if tool of {_player} is tagged with minecraft tag "shovels":
+		set {_tool} to "pickaxe_or_shovel"
+	if tool of {_player} is tagged with minecraft tag "axes":
+		set {_tool} to "axe"
+	if tool of {_player} is tagged with minecraft tag "hoes":
+		set {_tool} to "hoe"
+	if tool of {_player} is fishing rod or carrot on a stick or warped fungus on a stick:
+		set {_tool} to "wooden"
+	if GetCustomItemId(tool of {_player}) is "grappling_hook":
+		set {_tool} to "grappling_hook"
+
+	set {_p_tool} to type of tool of {_player}
+	if {_tool} is not set:
+		set {_tool} to "%type of tool of {_player}%"
+	replace all " " with "_" in {_tool}
+
+
+	if {-sound::%{_tool}%} is set:
+		if type of tool of {_player} is {_p_tool}:
+			set {_sound::*} to {-sound::%{_tool}%} split at ", "
+			wait "%{_sound::2}% second" parsed as timespan
+			if type of tool of {_player} is {_p_tool}:
+				if difference between metadata value "tool_draw_sound" of {_player} and now < 0.25 second:
+					stop
+				set metadata value "tool_draw_sound" of {_player} to now
+				play sound {_sound::1} with volume {_sound::3} parsed as number and pitch {_sound::4} parsed as number at {_player}
+
+
+
+
+
+
+
+
+on inventory click:
+	set {_pass} to false
+	set {_inv} to event-inventory
+	set {_item} to event-item # Store item for passing to PlayItemSound
+
+	if {_inv} is player inventory or workbench inventory or furnace inventory or barrel inventory or ender chest inventory:
+		set {_pass} to true
+	if player's current inventory is (metadata value "custom_items_menu" of player):
+		if name of event-slot is not "&aNext Page →" or "&c← Previous Page":
+			set {_pass} to true
+	if player's current inventory is (metadata value "backpack_inventory" of player):
+		set {_pass} to true
+	if player's current inventory is (metadata value "accessories_menu" of player):
+		if name of event-slot is not " ":
+			if name of event-slot doesn't contain "About Gear" or "Previous Menu" or "Your Stats":
+				set {_pass} to true
+	
+	if {_pass} is true:
+		if event-slot is not air:
+			PlayItemSound(player, GetClickedItem(event-item))
+		else:
+			wait 1 tick
+			PlayItemSound(player, GetClickedItem(event-item))
+
+
+on right click:
+	if {sounds::block_interact} is true:
+#		if event-block is crafting table or stonecutter or cartography table or smithing table or grindstone or loom or furnace or smoker or blast furnace or anvil or chipped anvil or damaged anvil or enchanting table or brewing stand or beacon:
+		set {_blocks::*} to crafting table, stonecutter, cartography table, smithing table, grindstone, loom, furnace, smoker, blast furnace, anvil, chipped anvil, damaged anvil, brewing stand and beacon
+		if {_blocks::*} contains event-block:
+			set {_pitch} to random number between 1.4 and 2 
+			play sound "ui.button.click" with volume 0.5 and pitch {_pitch} at block
+	if player's tool is tagged with minecraft tag "spawn_eggs":
+		if distance between player and target block < 3.8:
+			set {_pitch} to random number between 1.5 and 2
+			play sound "entity.item.pickup" with volume 0.3 and pitch {_pitch} at target block
+
+on craft:
+	if {sounds::item_craft} is true:
+		set {_pitch} to random number between 0.8 and 1.2
+		play sound "custom.craft_item" with volume 0.15 and pitch {_pitch} at player
+on drop:
+	if {sounds::item_drop} is true:
+		set {_pitch} to random number between 1.5 and 2
+		play sound "entity.item.pickup" with volume 0.25 and pitch {_pitch} at player
+
+function GetClickedItem(item: item) :: string:
+	
+	set {_type} to "unknown"
+
+	if IsBackpack({_item}) is true:
+		set {_type} to "backpack"
+
+#	if {_item} is set:
+#		if {_i1etem} is not air:
+#			set {_type} to "unknown"
+#		if IsBackpack({_item}) is true:
+#			set {_type} to "backpack"
+
+
+#	shears, spyglass, clock, compass, recovery compass, any horse armor, wolf armor, saddle, any bucket and bucket of tadpole
+	if {_item} is tagged with minecraft tag "swords":
+		set {_type} to "tool"
+	if {_item} is tagged with minecraft tag "pickaxes":
+		set {_type} to "tool"
+	if {_item} is tagged with minecraft tag "axes":
+		set {_type} to "tool"
+	if {_item} is tagged with minecraft tag "shovels":
+		set {_type} to "tool"
+	if {_item} is tagged with minecraft tag "hoes":
+		set {_type} to "tool"
+	if {_item} is chainmail helmet or chainmail chestplate or chainmail leggings or chainmail boots or iron helmet or iron chestplate or iron leggings or iron boots or golden helmet or golden chestplate or golden leggings or golden boots or diamond helmet or diamond chestplate or diamond leggings or diamond boots or netherite helmet or netherite chestplate or netherite leggings or netherite boots:
+		set {_type} to "tool"
+	if {_item} is bow or crossbow or shield or mace or trident or fishing rod or carrot on a stick or warped fungus on a stick or shears or spyglass or clock or compass or recovery compass or wolf armor or saddle:
+		set {_type} to "tool"
+
+	if {_type} is "tool":
+		if {_item} is enchanted:
+			return "enchanted_tool"
+
+
+	if GetCustomItemId({_item}) contains "crystal":
+		return "gem"
+
+
+	#	Metal
+	if {_item} is iron ingot or copper ingot or gold ingot or netherite ingot or heavy core or breeze rod or shulker shell or lantern or soul lantern or chain or anvil or chipped anvil or damaged anvil or bell or cauldron or furnace or blast furnace or smithing table or coal block or iron block or gold block:
+		return "metal"
+	if {_item} is tagged with minecraft tag "raw_ores":
+		return "metal"
+	if "%{_item}%" contains "smithing template":
+		return "metal"
+	if GetCustomItemId({_item}) contains "key":
+		return "metal"
+	if GetCustomItemId({_item}) is "dragonscale":
+		return "dragonscale"
+	if GetCustomItemId({_item}) is "arachnite_shell":
+		return "arachnite_shell"
+	if "%{_item}%" contains "amethyst":
+		if {_item} is not tagged with minecraft tag "enchantable":
+			return "gem"
+	if {_item} is diamond or emerald or ender pearl item or ender eye or emerald block or diamond block or nether star:
+		return "gem"
+	if {_item} is end crystal item:
+		return "end_crystal"
+	if {_item} is arrow or spectral arrow or tipped arrow or stick or bamboo or sugar cane or torch or redstone torch or soul torch or ladder or painting or bowl:
+		if GetCustomItemId({_item}) is not set:
+			return "stick"
+	if GetCustomItemId({_item}) is "silkscourge_arrow":
+		return "stick"
+	if GetCustomItemId({_item}) is "silkscourge_vial":
+		return "potion"
+	
+	if {_item} is redstone block or lapis block or netherite block:
+		return "metal"
+	if {_item} is copper block or waxed copper block:
+		return "metal"
+	if {_item} is grass block or dirt or coarse dirt or rooted dirt or podzol or mycelium or dirt path or moss block or moss carpet:
+		set {_type} to "grass"
+	if {_item} is mud or packed mud or muddy mangrove roots:
+		set {_type} to "wet"
+	if {_item} is sand or red sand:
+		set {_type} to "sand"
+	if {_item} is tagged with minecraft tag "concrete_powder":
+		set {_type} to "sand"
+	
+	if {_item} is tagged with minecraft tag "mineable/axe":
+		set {_type} to "wood"
+	if {_item} is tagged with minecraft tag "beds":
+		set {_type} to "wood"
+	if {_item} is tagged with minecraft tag "boats":
+		set {_type} to "wood"
+	if {_item} is lectern or chest or barrel:
+		set {_type} to "wood"
+#	if {_item} is any stone or cobblestone or any terracotta or any glazed terracotta or any concrete or any sandstone or stone stairs or any shulker box:
+	if {_item} is tagged with minecraft tag "mineable/pickaxe":
+		if {_item} is not tagged with minecraft tag "enchantable":
+			set {_type} to "stone"
+
+	if {_item} is tagged with paper tag "glass":
+		set {_type} to "ceramic"
+	if {_item} is tagged with paper tag "glass_panes":
+		set {_type} to "ceramic"
+	if {_item} is brick or nether brick or glass bottle or decorated pot or flower pot or lightning rod:#resin brick
+		set {_type} to "ceramic"
+	if {_item} is tagged with minecraft tag "decorated_pot_ingredients":
+		set {_type} to "ceramic"
+	if {_item} is tagged with minecraft tag "wool_carpets":
+		set {_type} to "wool"
+	if {_item} is tagged with minecraft tag "wool":
+		set {_type} to "wool"
+
+	if {_item} is honey block or honeycomb block or honeycomb:
+		set {_type} to "honey"
+	if {_item} is slime block or slime ball:
+		set {_type} to "slime"
+
+	if {_item} is bone:
+		set {_type} to "bone"
+	if {_item} is egg item or turtle egg or sniffer egg:
+		set {_type} to "egg"
+	if {_item} is elytra:
+		set {_type} to "elytra"
+
+	if {_item} is tagged with minecraft tag "skript:food":
+		set {_type} to "food"
+	if {_item} is wheat seeds or pumpkin seeds or melon seeds or beetroot seeds:
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "crops":
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "flowers":
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "leaves":
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "saplings":
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "mushrooms":
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "coral_blocks":
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "corals":
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "coral_fans":
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "dyes":
+		set {_type} to "plant"
+	if {_item} is crimson fungus or warped fungus or cactus or crimson roots or warped roots or nether sprouts or weeping vines or twisting vines or vine or hay block or nether wart or bone meal or mangrove roots:
+		set {_type} to "plant"
+	if {_item} is tagged with minecraft tag "ores":
+		set {_type} to "ore"
+	if {_item} is tagged with minecraft tag "raw_ore_blocks":
+		set {_type} to "ore"
+	if {_item} is netherite scrap or coal or charcoal or gold nugget or iron nugget or flint or quartz or prismarine shard or prismarine crystals or resin clump or lapis lazuli:
+		set {_type} to "ore"
+	if {_item} is any potion or ominous bottle or honey bottle or experience bottle or dragon breath:
+		set {_type} to "potion"
+	if {_item} is shroomlight:
+		set {_type} to "shroomlight"
+	if {_item} is water bucket or milk bucket:
+		set {_type} to "water_bucket"
+	if {_item} is lava bucket:
+		set {_type} to "lava_bucket"
+	if {_item} is cod bucket or salmon bucket or tropical fish bucket or pufferfish bucket or axolotl bucket or tadpole bucket:
+		set {_type} to "fish_bucket"
+	if {_item} is totem of undying:
+		set {_type} to "totem_of_undying"
+	if {_item} is bottle o' enchanting:
+		set {_type} to "experience_bottle"
+	if {_item} is enchanted golden apple:
+		set {_type} to "enchanted_golden_apple"
+	if {_item} is enchanting table:
+		set {_type} to "enchanting_table"
+#	if {_item} is wind charge:
+#		set {_type} to "wind_charge"
+	if GetCustomItemId({_item}) is "home_teleportation_scroll" or "random_teleportation_scroll":
+		set {_type} to "magic_scroll"
+	if GetCustomItemId({_item}) is "portal_stone":
+		set {_type} to "portal_stone"
+	if {_item} is tagged with minecraft tag "buckets":
+		set {_type} to "liquid"
+	if {_item} is bucket:
+		set {_type} to "metal"
+	if {_item} is enchanted book or enchantment table:
+		set {_type} to "enchanted"
+	if {_item} is redstone or sugar or blaze powder or gunpowder:
+		set {_type} to "powder"
+	if {forge::accessories_list::*} contains GetCustomItemId({_item}):
+		set {_type} to "accessory"
+	if boolean tag "accessory" of custom nbt of {_item} is true:
+		set {_type} to "accessory"
+	if boolean tag "artifact" of custom nbt of {_item} is true:
+		set {_type} to "accessory"
+	if GetCustomItemId({_item}) is "unidentified_item":
+		set {_type} to "accessory"
+	if GetCustomItemId({_item}) is "grappling_hook":
+		set {_type} to "grappling_hook"
+	return {_type}
+
+
+function PlayItemSound(player: player, item: string):
+	if {sounds::inventory_sounds} is not true:
+		stop
+	
+	set {_sounds_amount} to 1
+	if {-item_sounds::%{_item}%::sound2} is set:
+		set {_sounds_amount} to 2
+	if {-item_sounds::%{_item}%::sound3} is set:
+		set {_sounds_amount} to 3
+
+	set {_sound} to {-item_sounds::%{_item}%::sound}
+	set {_volume} to {-item_sounds::%{_item}%::volume}
+	if {-item_sounds::%{_item}%::pitch} contains "-":
+		set {_pitch::*} to {-item_sounds::%{_item}%::pitch} split at "-"
+		set {_min} to {_pitch::1} parsed as number
+		set {_max} to {_pitch::2} parsed as number
+		set {_pitch} to random number between {_min} and {_max}
+	else:
+		set {_pitch} to {-item_sounds::%{_item}%::pitch}
+	
+	if {_sounds_amount} >= 2:
+		set {_sound2} to {-item_sounds::%{_item}%::sound2}
+		set {_volume2} to {-item_sounds::%{_item}%::volume2}
+		if {-item_sounds::%{_item}%::pitch2} contains "-":
+			set {_pitch::*} to {-item_sounds::%{_item}%::pitch2} split at "-"
+			set {_min} to {_pitch::1} parsed as number
+			set {_max} to {_pitch::2} parsed as number
+			set {_pitch2} to random number between {_min} and {_max}
+		else:
+			set {_pitch2} to {-item_sounds::%{_item}%::pitch2}
+
+	if {_sounds_amount} >= 3:
+		set {_sound3} to {-item_sounds::%{_item}%::sound3}
+		set {_volume3} to {-item_sounds::%{_item}%::volume3}
+		if {-item_sounds::%{_item}%::pitch3} contains "-":
+			set {_pitch::*} to {-item_sounds::%{_item}%::pitch3} split at "-"
+			set {_min} to {_pitch::1} parsed as number
+			set {_max} to {_pitch::2} parsed as number
+			set {_pitch3} to random number between {_min} and {_max}
+		else:
+			set {_pitch3} to {-item_sounds::%{_item}%::pitch3}
+
+	play sound {_sound} with volume {_volume} and pitch {_pitch} to {_player}
+	if {_sounds_amount} >= 2:
+		play sound {_sound2} with volume {_volume2} and pitch {_pitch2} to {_player}
+	if {_sounds_amount} >= 3:
+		play sound {_sound3} with volume {_volume3} and pitch {_pitch3} to {_player}
+
+
+
+
+command /premiumpurchasesound [<player>]:
+	permission: admin
+	trigger:
+		play sound "custom.purchase_complete" with volume 0.4 and pitch 1 to player-arg
+
+command /itempurchasesound [<player>]:
+	permission: admin
+	trigger:
+		play sound "custom.purchase_item" with volume 0.2 and pitch 1 to player-arg
+
+command /itemsellsound [<player>]:
+	permission: admin
+	trigger:
+		play sound "custom.sell_item" with volume 0.2 and pitch 1 to player-arg
+
+
+

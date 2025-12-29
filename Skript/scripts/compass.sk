@@ -1,0 +1,114 @@
+every second:
+	loop {-players::*}:
+		UpdateCompass(loop-value)
+
+function UpdateCompass(player: player):
+	
+	if {-death_location::%world of {_player}%::%uuid of {_player}%} is set:
+		set {_death_location} to {-death_location::%world of {_player}%::%uuid of {_player}%}
+	loop 20 times:
+
+		set {_1} to metadata value "yaw" of {_player}
+		set {_loc} to metadata value "loc" of {_player}
+		if round({_1}/10) is round({_player}'s yaw/10):
+			if distance between {_loc} and location of {_player} < 0.4:
+				wait 1 tick
+				continue
+		set metadata value "yaw" of {_player} to {_player}'s yaw
+		set metadata value "loc" of {_player} to location of {_player}
+		set {_yaw} to {_player}'s yaw
+		set {_yaw} to round({_yaw})
+		if {_yaw} < 0:
+			set {_yaw} to abs({_yaw})
+			add 180 to {_yaw}
+
+		set {_section} to round({_yaw}/10)
+		
+		set {_section_0} to "&f&lS"
+		loop 8 times:
+			set {_section_%loop-number-2%} to " &8 "
+		set {_section_9} to "&f&lW"
+		loop 8 times:
+			set {_section_%loop-number-2+9%} to " &8 "
+		set {_section_18} to "&c&lN"
+		loop 8 times:
+			set {_section_%loop-number-2+18%} to " &8 "
+		set {_section_27} to "&f&lE"
+		loop 8 times:
+			set {_section_%loop-number-2+27%} to " &8 "
+#		set {_section_36} to "&f&lS"
+		loop 6 times:
+			set {_section_%loop-number-2+36%} to " &8 "
+		loop 8 times:
+			set {_section_-%loop-number-2%} to " &8 "
+			
+		
+		set {_loc} to location of {_player}
+		if {_death_location} is set:
+			set {_loc2} to {_death_location}
+			set {_vector} to vector from {_loc} to {_loc2}
+			set {_rot} to round((yaw of {_vector}) * 0.1)
+			if {_rot} is 36:
+				set {_rot} to 0
+			set {_section_%{_rot}%} to "&f☠"
+
+		if world of {_player} is not "world_nether" or "world_the_end":
+			if bed location of {_player} is set:
+				set {_loc2} to bed location of {_player}
+				set {_vector} to vector from {_loc} to {_loc2}
+				set {_rot} to round((yaw of {_vector}) * 0.1)
+				if {_rot} is 36:
+					set {_rot} to 0
+				set {_section_%{_rot}%} to "&f"
+
+#		send action bar "%{_rot}% &7(%{_section}%)" to all players		
+		
+		set {_width} to 11 #Has to be an odd number
+		set {_nr} to round({_width}/2) - round({_width}/2) - round({_width}/2)
+#		set {_nr} to -7
+		loop {_width} times:
+			add 1 to {_nr}
+			set {_i_%loop-number-2%} to {_section}+{_nr}
+			if {_i_%loop-number-2%} < 0:
+				set {_i_%loop-number-2%} to 36+{_i_%loop-number-2%}
+			if {_i_%loop-number-2%} > 35:
+				set {_i_%loop-number-2%} to {_i_%loop-number-2%} - 36
+			set {_display::%loop-number-2%} to {_section_%{_i_%loop-number-2%}%}
+
+		set {_display} to "%{_display::*}%"
+		replace all " and " with " " in {_display}
+		replace all ", " with " " in {_display}
+
+		if {_section} is 5 or 14 or 23 or 32:#	Eliminates a little visual offset when on these rotations
+			set {_display} to "%{_display}%"
+
+		set metadata value "compass" of {_player} to "豈&8%{_display}%"
+
+		wait 1 tick
+
+on join:
+	if {death_location::world::%uuid of player%} is set:
+		set {-death_location::world::%uuid of player%} to {death_location::world::%uuid of player%}
+	if {death_location::world_nether::%uuid of player%} is set:
+		set {-death_location::world_nether::%uuid of player%} to {death_location::world_nether::%uuid of player%}
+	if {death_location::world_the_end::%uuid of player%} is set:
+		set {-death_location::world_the_end::%uuid of player%} to {death_location::world_the_end::%uuid of player%}
+
+on death:
+	if victim is player:
+		delete {death_location::%world of victim%::%uuid of victim%}
+		delete {-death_location::%world of victim%::%uuid of victim%}
+		set {death_location::%world of victim%::%uuid of victim%} to location of victim
+		set {-death_location::%world of victim%::%uuid of victim%} to location of victim
+
+
+
+command /wipedeathlocations:
+	permission: admin
+	trigger:
+		delete {death_location::*}
+		delete {death_location::spawn::*}
+		delete {death_location::world::*}
+		delete {death_location::world_nether::*}
+		delete {death_location::world_the_end::*}
+		delete {death_location::dungeons::*}

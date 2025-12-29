@@ -1,0 +1,272 @@
+on load:
+	TestServerToggle()
+
+function TestServerToggle():
+	if yaml file "test_server.yml" exists:
+		set {server::test_server} to true
+	else:
+		set {server::test_server} to false
+
+every 5 seconds:
+	if {server::test_server} is true:
+		execute console command "dh enable test_server"
+		execute console command "/lp group default permission set essentials.gamemode.all true"
+		execute console command "/lp group default permission set essentials.gamemode true"
+		execute console command "/lp group default permission set essentials.heal true"
+		execute console command "/lp group default permission set essentials.feed true"
+		execute console command "/lp group default permission set essentials.sun true"
+		execute console command "/lp group default permission set bukkit.command.tps true"
+	else:
+		execute console command "dh disable test_server"
+		execute console command "/lp group default permission unset essentials.gamemode.all"
+		execute console command "/lp group default permission unset essentials.gamemode"
+		execute console command "/lp group default permission unset essentials.heal"
+		execute console command "/lp group default permission unset essentials.feed"
+		execute console command "/lp group default permission unset essentials.sun"
+		execute console command "/lp group default permission unset bukkit.command.tps"
+
+command /testserver:
+	permission: admin
+	trigger:
+		if {server::test_server} is not true:
+			set {server::test_server} to true
+			load yaml "test_server.yml" as "test_server"
+			send "&aTest server mode enabled" to player
+			send "&aTest server mode enabled" to console
+			stop
+		if {server::test_server} is true:
+			set {server::test_server} to false
+			load yaml "test_server.yml" as "test_server"
+			delete yaml "test_server"
+			send "&cTest server mode disabled" to player
+			send "&cTest server mode disabled" to console
+
+on join:
+	TrackJoins(player)
+	if {server::test_server} is not true:
+		stop
+	IntroductionMessage(player)
+	wait 8 minutes
+	FollowUpMessage(player)
+
+#on quit:
+#	if player is op:
+#		wait 2 minutes
+#		if player is not online:
+#			deop player
+
+
+
+on command:
+	if command is "pl" or "plugins" or "bukkit:pl" or "bukkit:plugins" or "help" or "bukkit:help" or "versions" or "ver" or "bukkit:?" or "bukkit:about" or "about" or "?" or "version":
+		if player has permission "admin.plugins":
+			stop
+		else:
+			cancel event
+			if {server::test_server} is true:
+				send " " to player
+				send "&6&lSelected Custom Features" to player
+				send "&7• Dungeons" to player
+				send "&7• New Biomes & Structures" to player
+				send "&7• New mobs, Loot Balloons" to player
+				send "&7• Adventure Pass" to player
+				send "&7• Ambient Sounds" to player
+				send "&7• 3D Backpacks and Waist Tools" to player
+				send "&7• New Items & Accessories" to player
+				send " " to player
+			else:
+				send "&cYou don't have necessary permission for this command!" to player
+
+
+function IntroductionMessage(player: player):
+	if {introduction::%uuid of {_player}%} is not true:
+		execute console command "eco set %{_player}% 100000"
+		execute console command "premiumcurrency %{_player}% set 10000"
+		execute console command "cc give virtual AdventureCrate 2 %{_player}%"
+		execute console command "cc give virtual HeroCrate 2 %{_player}%"
+		execute console command "cc give virtual LegendaryCrate 2 %{_player}%"
+		
+		loop 4 times:
+			loop 8 times:
+				send " " to {_player}
+			wait 0.5 second
+
+		wait 1 second
+		loop 8 times:
+			send " " to {_player}
+		send "<##31ed96>Welcome to <##6dd444>&lUnlimited Adventures <##31ed96>Test Server!" to {_player}
+		send " " to {_player}
+		play sound "entity.chicken.egg" with volume 0.5 and pitch 1 to {_player}
+		
+		wait 1.1 second
+		loop 8 times:
+			send " " to {_player}
+		send "<##31ed96>Welcome to <##6dd444>&lUnlimited Adventures <##31ed96>Test Server!" to {_player}
+		send " " to {_player}
+		send "<##31ed96>We have given you following items, so you can test the server easily:" to {_player}
+		play sound "entity.chicken.egg" with volume 0.5 and pitch 1 to {_player}
+		
+		wait 1 second
+		loop 8 times:
+			send " " to {_player}
+		send "<##31ed96>Welcome to <##6dd444>&lUnlimited Adventures <##31ed96>Test Server!" to {_player}
+		send " " to {_player}
+		send "<##31ed96>We have given you following items, so you can test the server easily:" to {_player}
+		send "&f• &e20,000 Gold &f" to {_player}
+		play sound "entity.chicken.egg" with volume 0.5 and pitch 1.15 to {_player}
+		
+		wait 0.5 second
+		loop 8 times:
+			send " " to {_player}
+		send "<##31ed96>Welcome to <##6dd444>&lUnlimited Adventures <##31ed96>Test Server!" to {_player}
+		send " " to {_player}
+		send "<##31ed96>We have given you following items, so you can test the server easily:" to {_player}
+		send "&f• &e100,000 Gold &f" to {_player}
+		send "&f• <##e84848>10,000 Gems &f" to {_player}
+		play sound "entity.chicken.egg" with volume 0.5 and pitch 1.3 to {_player}
+		
+		wait 0.45 second
+		loop 8 times:
+			send " " to {_player}
+		send "<##31ed96>Welcome to <##6dd444>&lUnlimited Adventures <##31ed96>Test Server!" to {_player}
+		send " " to {_player}
+		send "<##31ed96>We have given you following items, so you can test the server easily:" to {_player}
+		send "&f• &e100,000 Gold &f" to {_player}
+		send "&f• <##e84848>10,000 Gems &f" to {_player}
+		play sound "entity.chicken.egg" with volume 0.5 and pitch 1.45 to {_player}
+		
+		wait 0.4 second
+		loop 8 times:
+			send " " to {_player}
+		send "<##31ed96>Welcome to <##6dd444>&lUnlimited Adventures <##31ed96>Test Server!" to {_player}
+		send " " to {_player}
+		send "<##31ed96>We have given you following items, so you can test the server easily:" to {_player}
+		send "&f• &e100,000 Gold &f" to {_player}
+		send "&f• <##e84848>10,000 Gems &f" to {_player}
+		send "&f• <##41c967>2 Keys for each Crate type" to {_player}
+		play sound "entity.chicken.egg" with volume 0.5 and pitch 1.6 to {_player}
+		
+		wait 1 second
+		loop 8 times:
+			send " " to {_player}
+		send "<##31ed96>Welcome to <##6dd444>&lUnlimited Adventures <##31ed96>Test Server!" to {_player}
+		send " " to {_player}
+		send "<##31ed96>We have given you following items, so you can test the server easily:" to {_player}
+		send "&f• &e100,000 Gold &f" to {_player}
+		send "&f• <##e84848>10,000 Gems &f" to {_player}
+		send "&f• <##41c967>2 Keys for each Crate type" to {_player}
+
+
+		set {introduction::%uuid of {_player}%} to true
+
+function FollowUpMessage(player: player):
+	send " " to {_player}
+	send "&fWould you like to know more about Unlimited Adventures?" to {_player}
+	play sound "entity.chicken.egg" with volume 0.5 and pitch 1 to {_player}
+	wait 1 second
+	send component mini message from "<click:open_url:https://discord.gg/wdBFC7Hc6X>&f <blue><bold>Talk to the creator directly on Discord!" to {_player}
+	send " " to {_player}
+	play sound "entity.chicken.egg" with volume 0.5 and pitch 1.2 to {_player}
+
+
+command /test:
+	cooldown: 5 seconds
+	trigger:
+		if {server::test_server} is true:
+			give 2 of {item::skeleton_key} to player
+			give 2 of {item::dracula_key} to player
+			give 2 of {item::desert_key} to player
+			give 1 of {item::flashlight} to player
+			execute console command "eco give %player% 100000"
+			execute console command "premiumcurrency %player% add 10000"
+			send " " to player
+			send "&aI've given you 2 keys for each dungeon + gold and gems. Have fun!" to player
+			send " " to player
+
+
+
+
+
+
+
+
+
+#	Analytics
+
+function TrackJoins(player: player):
+	set metadata value "server_join_date" of {_player} to now
+
+	#	Tracking account registration
+	set {_date} to now formatted as "MM.YYYY"
+	load yaml "analytics/data/%{_date}%.yml" as "analytics"
+	load yaml "analytics/registered_accounts.yml" as "registered_accounts"
+
+	if yaml list "accounts" from "registered_accounts" doesn't contain name of {_player}:
+		add name of {_player} to yaml list "accounts" from "registered_accounts"
+		set {analytics::first_join::%uuid of {_player}%} to now
+		set {_first_time_join} to true
+	save yaml "registered_accounts"
+
+	#	Saving account registrations
+	if {_first_time_join} is true:
+		set yaml value "%now formatted as "dd"%.new_users" from "analytics" to yaml value "%now formatted as "dd"%.new_users" from "analytics" + 1
+
+	#	Saving first time join of the day
+	if {analytics::last_join::%uuid of {_player}%} formatted as "DD" is not now formatted as "DD":
+		set yaml value "%now formatted as "dd"%.today_users" from "analytics" to yaml value "%now formatted as "dd"%.today_users" from "analytics" + 1
+
+	save yaml "analytics"
+	set {analytics::last_join::%uuid of {_player}%} to now
+
+
+
+
+
+on quit:
+	set {_player} to player
+	set {_date} to now formatted as "MM.YYYY"
+	if {analytics::last_join::%uuid of {_player}%} formatted as "DD" is not now formatted as "DD":
+		delete {analytics::today_playtime::%uuid of {_player}%}
+	add difference between metadata value "server_join_date" of {_player} and now to {analytics::today_playtime::%uuid of {_player}%}
+
+	CalculateAveragePlaytime()
+
+
+
+
+
+function CalculateAveragePlaytime():
+	#	Calculating all users playtime
+	loop {analytics::today_playtime::*}:
+		if last login of loop-index parsed as offlineplayer formatted as "DD" is now formatted as "DD":
+			add {analytics::today_playtime::%loop-index%} to {_average_playtime}
+			add 1 to {_players}
+		if {analytics::first_join::%loop-index%} formatted as "DD" is now formatted as "DD":
+			add {analytics::today_playtime::%loop-index%} to {_new_users_average_playtime}
+			add 1 to {_new_players}
+
+	set {_average_playtime} to {_average_playtime} / {_players}
+	set {_new_users_average_playtime} to {_new_users_average_playtime} / {_new_players}
+
+#	send "%{analytics::today_playtime::*}% / %{_average_playtime}% / %{_players}%" to console
+#	send "%{analytics::today_playtime::*}%  /  %{_new_users_average_playtime}% / %{_new_players}%" to console
+
+
+	#	Saving data about playtime to yaml
+	load yaml "analytics/data/%now formatted as "MM.YYYY"%.yml" as "analytics"
+	set yaml value "%now formatted as "dd"%.average_playtime" from "analytics" to "%{_average_playtime}%"
+#	if metadata value "first_time_join" of {_player} is true:
+	set yaml value "%now formatted as "dd"%.new_users_average_playtime" from "analytics" to "%{_new_users_average_playtime}%"
+	save yaml "analytics"
+
+
+
+
+command /resetplayeranalytics:
+	permission: admin
+	trigger:
+		delete {analytics::last_join::%uuid of player%}
+
+
+
+

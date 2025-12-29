@@ -1,0 +1,560 @@
+import:
+	org.apache.commons.io.FileUtils
+	java.io.File
+	java.io.OutputStreamWriter 
+	java.nio.charset.StandardCharsets 
+	java.util.zip.GZIPInputStream 
+	java.util.zip.InflaterInputStream 
+	java.util.zip.Inflater 
+	java.lang.StringBuilder 
+	java.io.BufferedReader 
+	java.io.InputStreamReader 
+	java.lang.System 
+	java.net.URL 
+	java.net.URLEncoder 
+
+on script load:
+	set {web-requests::methods::*} to "GET", "POST", "PUT", "DELETE", "PATCH" 
+
+	create section with {_target}, {_method}, {_body}, {_headers::*} and store it in {web-requests::send-handler}: 
+		set {_connection} to {_target}.openConnection() 
+		{_connection}.setRequestProperty("User-Agent", "Reqn.sk/{@version} (https://gist.github.com/FranKusmiruk/)") 
+		
+		loop {_headers::*}: 
+			set {_header::*} to loop-value split by ": " 
+			{_connection}.setRequestProperty({_header::1}, {_header::2}) 
+
+		{_connection}.setUseCaches(false) 
+		{_connection}.setRequestMethod({_method}) 
+
+		if {_method} isn't "GET": 
+			if {_body} is empty: 
+				stop 
+			
+			{_connection}.setRequestProperty("Content-Length", "%size of ...{_body}.getBytes()%") 
+			{_connection}.setDoOutput(true) 
+			set {_output-stream} to try {_connection}.getOutputStream() 
+			if {_output-stream} is set: 
+				set {_out} to new OutputStreamWriter({_output-stream}, StandardCharsets.UTF_8) 
+				{_out}.write({_body}) 
+				{_out}.close() 
+
+		set {web-requests::response::status-line} to {_connection}.getHeaderField(0) 
+		set {web-requests::response::headers} to {_connection}.getHeaderFields() 
+		set {_response} to {_connection}.getErrorStream() otherwise try {_connection}.getInputStream() 
+		if {_response} is set: 
+			set {_encoding} to {_connection}.getContentEncoding() 
+
+			if {_encoding} is "gzip": 
+				set {_response} to new GZIPInputStream({_response}) 
+			else if {_encoding} is "deflate": 
+				set {_response} to new InflaterInputStream({_response}, new Inflater(true)) 
+
+			set {_response-body} to new StringBuilder() 
+			set {_buffered-reader} to new BufferedReader(new InputStreamReader({_response}, StandardCharsets.UTF_8)) 
+
+			set {_line} to {_buffered-reader}.readLine() 
+			set {_final} to 1000 
+			while {_line} isn't {_final}: 
+				{_response-body}.append({_line}).append(System.lineSeparator()) 
+				set {_line} to {_buffered-reader}.readLine() otherwise {_final} 
+			{_buffered-reader}.close() 
+
+		set {web-requests::response::status-code} to {_connection}.getResponseCode() 
+		set {web-requests::response::message} to {_connection}.getResponseMessage() 
+		set {web-requests::response::body} to try {_response-body}.toString() 
+
+		if {_connection} is set: 
+			{_connection}.disconnect() 
+
+effect: 
+	patterns: 
+		send [a[n]] [http] [%-string%] [web] request to [[the] url] %string% [with [the] header[s] %-strings% [and [the] body %-strings%]] 
+		send [a[n]] [http] [%-string%] [web] request to [[the] url] %string% [with [the] body %-strings% [and [the] header[s] %-strings%]] 
+	trigger: 
+		set {_method} to expr-1 in upper case otherwise "GET" 
+		if {web-requests::methods::*} doesn't contain {_method}: 
+			stop 
+
+		set {_body::*} to exprs-4 if matched pattern is 1, else exprs-3 
+		if {_body::*} is set: 
+			set {_body} to join {_body::*} by System.lineSeparator() 
+		else: 
+			set {_body} to "" 
+
+		set {_headers::*} to exprs-3 if matched pattern is 1, else exprs-4 
+
+		set {_url} to expr-2 
+		replace all "§" with "&" in {_url} 
+		set {_url} to new URL({_url}) 
+
+		delay the effect 
+		run section {web-requests::send-handler} async with {_url}, {_method}, {_body}, {_headers::*} and wait 
+		continue 
+
+expression response body: 
+	get: 
+		return {web-requests::response::body} 
+
+expression [response] status code: 
+	get: 
+		return {web-requests::response::status-code} 
+
+expression response header[s]: 
+	get: 
+		loop ...{web-requests::response::headers}.entrySet(): 
+			set {_values} to join ...loop-value.getValue() by ", " 
+			add "%loop-value.getKey()%: %{_values}%" to {_headers::*} 
+		return {_headers::*} 
+
+expression response header key[s]: 
+	get: 
+		return ...{web-requests::response::headers}.keySet() 
+
+expression response header values: 
+	get: 
+		loop ...{web-requests::response::headers}.values(): 
+			add ...loop-value to {_values::*} 
+		return {_values::*} 
+
+expression %string% [response] header [value[s]]: 
+	get: 
+		return ...{web-requests::response::headers}.get(expr-1) 
+
+expression (http|ur(i|l)) (safe|encoded|escaped) %strings%: 
+	get: 
+		loop exprs-1: 
+			add URLEncoder.encode(loop-value, StandardCharsets.UTF_8) to {_encoded::*} 
+		return {_encoded::*} 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+on load:
+	CheckServerVersion()
+	CheckUpdateAvailable()
+
+every 2 minutes:
+	CheckUpdateAvailable()
+
+function CheckUpdateAvailable():
+	send a http "GET" request to the url "https://gist.githubusercontent.com/MadPanCake/9d0b9b399d0d78c97be3c25eb6960022/raw/d3a1c72fca7d4facdecae36c0568fe000cf63470/ua-version"
+	set {_version} to response body
+	set {_web_version} to first length of {_version}-2 characters of {_version}
+	
+	#	Checking if a new version is available
+	if IsMoreLatest({_web_version}, {setup::version}) is true:
+		set {_update_available} to true
+#	send "%{setup::version}% / %{_web_version}%" to all players
+	
+	if {_update_available} is true:
+		if {setup::version::update_available} is not true:
+			set {setup::version::update_available} to true
+		if {setup::version::update_new_version} is not {_web_version}:
+			set {setup::version::update_new_version} to {_web_version}
+		stop
+	if {setup::version::update_available} is not false:
+		set {setup::version::update_available} to false
+	set {varr} to unixNow() formatted as "mm" parsed as integer
+
+function IsMoreLatest(new: string, previous: string) :: boolean:
+	set {_new::*} to {_new} split at "."
+	set {_previous::*} to {_previous} split at "."
+	if {_new::1} parsed as integer > {_previous::1} parsed as integer:
+		return true
+	else if {_new::2} parsed as integer > {_previous::2} parsed as integer:
+		return true
+	else if {_new::3} parsed as integer > {_previous::3} parsed as integer:
+		return true
+
+
+
+
+
+
+
+
+
+function UpdateAvailable() :: boolean:
+	if {setup::version::update_available} is true:
+		return true
+	return false
+
+function CheckSetupUpdateAvailable(player: player):
+	if {setup::version::update_available} is true:
+
+		#	Check permission
+		if {_player} is op:
+			set {_pass} to true
+		if {_player} has permission "admin":
+			set {_pass} to true
+
+		#	Dont show notification if update was ignored
+		if {setup::version::ignored_update::%uuid of {_player}%} is {setup::version::update_new_version}:
+			stop
+		#	Delay notification if there are issues detected on startup
+		if DependencyCheck() or PerformanceCheck() is false:
+			wait 5 seconds
+		
+
+		wait 3 seconds
+		
+		if {_pass} is true:
+			if metadata value "dashboard:update_notification:date" of {_player} is set:
+				if difference between metadata value "dashboard:update_notification:date" of {_player} and now > 6 hours:
+					play sound "custom.ui.system_notification" with volume 1 and pitch 1 to {_player}
+					set metadata value "dashboard:update_notification:date" of {_player} to now
+			else:
+				play sound "custom.ui.system_notification" with volume 1 and pitch 1 to {_player}
+				set metadata value "dashboard:update_notification:date" of {_player} to now
+
+			loop 5 times:
+				send " " to {_player}
+				send " " to {_player}
+				wait 1 tick
+			send "&a&lUnlimited Adventures Update Available!" to {_player}
+			send " " to {_player}
+			send "&fInstalled version: &a%{setup::version}%" to {_player}
+			send "&fLatest update: &e&l%{setup::version::update_new_version}%" to {_player}
+			send " " to {_player}
+			send component mini message from "<click:open_url:https://builtbybit.com/resources/unlimited-adventures-survival-setup.27917/updates><bold><blue>Click to check the new update!" to {_player}
+			if {setup::version::last_seen_update_notification::%uuid of {_player}%} is {setup::version::update_new_version}:
+				add 1 to {setup::version::update_notifications::%uuid of {_player}%}
+			else:
+				set {setup::version::last_seen_update_notification::%uuid of {_player}%} to {setup::version::update_new_version}
+				delete {setup::version::update_notifications::%uuid of {_player}%}
+				add 1 to {setup::version::update_notifications::%uuid of {_player}%}
+			if {setup::version::update_notifications::%uuid of {_player}%} >= 3:
+				send " " to {_player}
+				set {_cmd} to text component from "&c&lClick here to ignore this update"
+				add click event to suggest command "/ignoreupdate" to {_cmd}
+				send component {_cmd} to {_player}
+
+			send " " to console
+			send " " to console
+			send "&a&lUnlimited Adventures Update Available!" to console
+			send "&b&nhttps://builtbybit.com/resources/unlimited-adventures-survival-setup.27917/updates" to console
+			send " " to console
+			send " " to console
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+command /ignoreupdate:
+	permission: admin
+	trigger:
+		set {setup::version::ignored_update::%uuid of player%} to {setup::version::update_new_version}
+		send " " to player
+		send "&fThe &e&l%{setup::version::update_new_version}% update &fwill be skipped based on your current settings." to player
+
+		
+
+command /versionchange [<string>]:
+	permission: admin
+	trigger:
+		set {setup::version} to arg-1
+		send "&fChanged server version to &a%arg-1%" to sender
+
+command /setupversion:
+	permission: admin
+	trigger:
+		send "&fInstalled Unlimited Adventures version: &a%{setup::version}%" to sender
+		if {setup::version::update_available} is true:
+			send component mini message from "<click:open_url:https://builtbybit.com/resources/unlimited-adventures-survival-setup.27917/updates><bold><blue>Click to check the new update!" to sender
+
+
+function CheckServerVersion():
+
+	if {setup::version} doesn't contain ".":
+		set {setup::version} to "2.8"
+
+	if {setup::version} is not set:
+		set {setup::version} to "2.11.4"
+#	if {setup::version} is not greater or equal to 1.2:
+	if IsMoreLatest("1.2", {setup::version}) is true:
+		set {setup::version} to "1.2"
+		loop 10 times:
+			execute console command "/rg flag dungeon_%loop-number% -w spawn chest-access allow"
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 1.2" to console
+	if IsMoreLatest("2.0", {setup::version}) is true:
+		set {setup::version} to "2.0"
+#	if {setup::version} is not greater or equal to 2.1:
+	if IsMoreLatest("2.1", {setup::version}) is true:
+		set {setup::version} to "2.1"
+		execute console command "/lp group default permission set essentials.rtp false"
+		wait 1 tick
+		execute console command "/lp group default permission set core.rtp true"
+		wait 1 tick
+		execute console command "/lp group default permission set chatmanager.message true"
+		wait 1 tick
+		execute console command "/lp group default permission set chatmanager.reply true"
+		wait 1 tick
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.1" to console
+#	if {setup::version} is not greater or equal to 2.11:
+	if IsMoreLatest("2.1.1", {setup::version}) is true:
+		set {setup::version} to "2.1.1"
+		set {hotfix::backpack_removal} to true
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.11" to console
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.1" to console
+#	if {setup::version} is not greater or equal to 2.5:
+	if IsMoreLatest("2.5", {setup::version}) is true:
+		set {setup::version} to "2.5"
+		set {hotfix::backpack_removal} to false
+		execute console command "/dh delete teleportation_npc"
+		execute console command "/dh delete jobs_npc"
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.5" to console
+#	if {setup::version} is not greater or equal to 2.6:
+	if IsMoreLatest("2.6", {setup::version}) is true:
+		set {setup::version} to "2.6"
+		set {setup::spawn_moved} to false
+
+		wait 1 tick
+		execute console command "/lp group default permission set core.spawn true"
+		execute console command "/lp group default permission set essentials.delhome false"
+		execute console command "/lp group default permission set essentials.home false"
+		execute console command "/lp group default permission set essentials.sethome false"
+		execute console command "/lp group default permission set essentials.rtp false"
+		execute console command "/lp group default permission set essentials.tpa false"
+		execute console command "/lp group default permission set essentials.tpaccept false"
+		execute console command "/lp group default permission set essentials.tpahere false"
+		execute console command "/lp group default permission set essentials.tpdeny false"
+		execute console command "/lp group default permission set essentials.warp false"
+		execute console command "/lp group default permission set essentials.warp.list false"
+		execute console command "/lp group ultra permission set essentials.sethome.multiple.ultra false"
+		execute console command "/lp group hero permission set essentials.sethome.multiple.hero false"
+		execute console command "/lp group legend permission set essentials.sethome.multiple.legend false"
+		execute console command "/lp group moderator permission set core.rtp true"
+		execute console command "/lp group moderator permission set core.wild true"
+
+		execute console command "/dh delete badges_npc"
+		execute console command "/dh delete dungeon_portal_1"
+		execute console command "/dh delete dungeons_tip"
+		execute console command "/dh delete profile_npc"
+		execute console command "/dh delete zombie_brute_respawn_time"
+		execute console command "/dh delete skeleton_king_respawn_time"
+		execute console command "/dh delete skills_npc"
+		execute console command "/dh delete teleportation_npc"
+#		execute console command "/dh delete random_tp"
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.6" to console
+
+
+#	if {setup::version} is not greater or equal to 2.7:
+	if IsMoreLatest("2.7", {setup::version}) is true:
+		set {setup::version} to "2.7"
+		
+		execute console command "/dh delete links_npc"
+		execute console command "/dh delete daily_rewards"
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.7" to console
+
+#	if {setup::version} is not greater or equal to 2.8:
+	if IsMoreLatest("2.8", {setup::version}) is true:
+		set {setup::version} to "2.8"
+		
+		execute console command "/lp group default permission set betonquest.backpack false"
+		execute console command "/lp group default permission set core.ping true"
+		execute console command "/lp group default meta addprefix 0 ""suffix.0.&f:&7"""
+
+		execute console command "/lp group owner meta addsuffix 20 ""suffix.50.&f:&f"""
+		execute console command "/lp group admin meta addprefix 20 ""suffix.20.&f:&f"""
+		execute console command "/lp group moderator meta addprefix 15 ""suffix.15.&f:&f"""
+		execute console command "/lp group helper meta addprefix 10 ""suffix.10.&f:&f"""
+		execute console command "/lp group legend meta addprefix 3 ""suffix.3.&f:&f"""
+		execute console command "/lp group hero meta addprefix 2 ""suffix.2.&f:&f"""
+		execute console command "/lp group ultra meta addprefix 1 ""suffix.1.&f:&f"""
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.8" to console
+
+
+	if IsMoreLatest("2.8.6", {setup::version}) is true:
+		set {setup::version} to "2.8.6"
+	
+#	if {setup::version} is not greater or equal to 2.91:
+	if IsMoreLatest("2.9.01", {setup::version}) is true:
+		set {setup::version} to "2.9.01"
+
+		execute console command "/lp group owner permission set admin true"
+		execute console command "/lp group owner permission set mv.bypass.gamemode true"
+		execute console command "/lp group default meta setprefix 0 ""&7"""
+		execute console command "/lp group default permission set core.afk true"
+		execute console command "/lp user MadPanCakey parent set default"
+		execute console command "/premiumcurrency MadPanCakey set 0"
+		execute console command "/skript disable scoreboard_location.sk"
+		execute console command "/gamerule playersSleepingPercentage 50"
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.9" to console
+
+#	if {setup::version} is not greater or equal to 291:
+	if IsMoreLatest("2.9.1", {setup::version}) is true:
+		set {setup::version} to "2.9.1"
+
+		execute console command "/lp group admin permission set core.nightvision true"
+		execute console command "/lp group admin permission set core.giveitem true"
+		execute console command "/lp group admin permission set chat.colors true"
+		execute console command "/lp group admin permission set chat.bypass_censor_punishment true"
+		execute console command "/lp group admin permission set chat.bypass_spam_filter true"
+
+		execute console command "/lp group default permission set chat.private_message true"
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.9.1" to console
+
+#	if {setup::version} is not greater or equal to 292:
+	if IsMoreLatest("2.9.2", {setup::version}) is true:
+
+		execute console command "/lp group admin permission set chat.bypass_spam_filter true"
+
+		execute console command "/lp group default permission set crazycrates.open.adventurecrate true"
+		execute console command "/lp group default permission set crazycrates.open.herocrate true"
+		execute console command "/lp group default permission set crazycrates.open.legendarycrate true"
+
+		execute console command "/lp group admin permission set chat.mute.players true"
+		execute console command "/lp group admin permission set chat.mute.chat true"
+		execute console command "/lp group admin permission set chat.clearchat true"
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.9.2" to console
+		set {setup::version} to "2.9.2"
+
+#	if {setup::version} is not greater or equal to 293:
+	if IsMoreLatest("2.9.3", {setup::version}) is true:
+
+		execute console command "/lp group admin permission set mv.bypass.gamemode true"
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.9.3" to console
+		set {setup::version} to "2.9.3"
+
+#	if {setup::version} is not greater or equal to 295:
+	if IsMoreLatest("2.10", {setup::version}) is true:
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.10" to console
+		set {setup::version} to "2.10"
+
+	if IsMoreLatest("2.10.1", {setup::version}) is true:
+
+		execute console command "/skript disable async_custom_items.sk"
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.10.1" to console
+		set {setup::version} to "2.10.1"
+
+	if IsMoreLatest("2.11", {setup::version}) is true:
+
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.11" to console
+		set {setup::version} to "2.11"
+
+	if IsMoreLatest("2.11.4", {setup::version}) is true:
+
+
+		send "&f[&aUnlimited Adventures&f] &fApplying changes from version 2.11.4" to console
+		set {setup::version} to "2.11.4"
+
+
+
+
+
+
+#on teleport:
+#	if {setup::version::keep_inventory} is not true:
+#		wait 2 seconds
+#		if world of player is "dungeons":
+#			execute console command "/gamerule keepInventory false"
+#			set {setup::version::keep_inventory} to true
+#	if {setup::version::worldborder_dmg} is not true:
+#		wait 2 seconds
+#		if world of player is "world":
+#			execute console command "/worldborder damage amount 0"
+#			set {setup::version::worldborder_dmg} to true
+	
+
+
+
+
+every 3 seconds:
+	if {setup::spawn_moved} is false:
+		loop {-players::*}:
+			if loop-value is op:
+				SpawnConfig(loop-value)
+				exit loop
+
+
+command /testspawnconfig:
+	permission: admin
+	trigger:
+		SpawnConfig(player)
+
+function SpawnConfig(player: player):
+	wait 0.7 second
+	play sound "block.note_block.pling" with volume 1 and pitch 1 to {_player}
+	send " " to {_player}
+	send "&aDon't move! The new spawn is being configured..." to {_player}
+	send " " to {_player}
+	wait 0.7 second
+	play sound "block.note_block.pling" with volume 1 and pitch 1.33 to {_player}
+	apply blindness without any particles to {_player} for 2.5 seconds
+	wait 0.7 second
+	KillBacktool({_player})
+	teleport {_player} to location(752.5, 68, 912.5, world "spawn", 180, 0)
+	execute {_player} command "setwarp spawn"
+	execute {_player} command "mv setspawn"
+	set {location::spawn} to location of {_player}
+	play sound "block.note_block.pling" with volume 1 and pitch 1.66 to {_player}
+	wait 0.3 second
+	play sound "block.note_block.pling" with volume 1 and pitch 2 to {_player}
+	send " " to {_player}
+	send "&f &6&lNew spawn has been configured automatically!" to {_player}
+	send " " to {_player}
+	set {setup::spawn_moved} to true
+
+on load:
+	set metadata value "938uf4" of block at location(0,0,0,"spawn") to "Please authorize the server to let more players in!"
+	set metadata value "938uf5" of block at location(0,0,0,"spawn") to "Developer license key has a limit of 3 players online."

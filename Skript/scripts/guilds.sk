@@ -1,0 +1,505 @@
+import:
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+	org.bukkit.Bukkit
+
+on load:
+	loop 80 times:
+		if YamlQueueCheck("guilds") is true:
+			YamlQueueAdd("guilds")
+			LoadGuilds()
+			exit loop
+		wait 1 second
+
+
+function LoadGuilds():
+	load yaml "unlimited_adventures/Guilds/config.yml" as "config"
+	
+	clear {reputation::config::*}
+	#	Leveling XP requirements
+	if yaml value "leveling.first_level_xp_requirement" from "config" is set:
+		set {reputation::config::first_level_xp_requirement} to yaml value "leveling.first_level_xp_requirement" from "config"
+	if yaml value "leveling.next_level_required_xp_multiplier" from "config" is set:
+		set {reputation::config::next_level_required_xp_multiplier} to yaml value "leveling.next_level_required_xp_multiplier" from "config"
+
+	#	Quest Amounts
+	set {_guilds::*} to "slayers" and "miners" and "ranchers"
+	loop {_guilds::*}:
+		set {_guild} to loop-value
+		set {_difficulty::*} to "easy" and "medium" and "hard"
+		loop {_difficulty::*}:
+			set {_difficulty} to loop-value-2
+			if yaml value "quests.%{_guild}%.%{_difficulty}%" from "config" is set:
+				set {reputation::config::quests::%{_guild}%::%{_difficulty}%::amount} to yaml value "quests.%{_guild}%.%{_difficulty}%" from "config"
+#				send "%{_guild}%,%{_difficulty}%: %{reputation::config::quests::%{_guild}%::%{_difficulty}%::amount}%" to all players
+
+	#	Quest XP Rewards
+	loop yaml node keys "xp_rewards" from "config":
+		set {_source} to loop-value
+		if yaml value "xp_rewards.%{_source}%" from "config" is set:
+			set {reputation::config::xp_rewards::%{_source}%} to yaml value "xp_rewards.%{_source}%" from "config"
+
+	#	Quest Gold Rewards
+	loop yaml node keys "gold_rewards" from "config":
+		set {_source} to loop-value
+		if yaml value "gold_rewards.%{_source}%" from "config" is set:
+			set {reputation::config::gold_rewards::%{_source}%} to yaml value "gold_rewards.%{_source}%" from "config"
+
+	save yaml "config"
+
+
+	load yaml "unlimited_adventures/Guilds/rewards.yml" as "rewards"
+
+	#	Reputation Level Rewards
+	set {_guilds::*} to "slayers" and "miners" and "ranchers"
+	loop {_guilds::*}:
+		set {_guild} to loop-value
+		clear {reputation::rewards::%{_guild}%::*}
+
+		loop 50 times:
+			set {_level_nr} to loop-number-2
+			set {_reward_nr} to 0
+			loop 10 times:
+				add 1 to {_reward_nr}
+				if yaml value "%{_guild}%.%{_level_nr}%.%{_reward_nr}%" from "rewards" is set:
+					set {_var} to yaml value "%{_guild}%.%{_level_nr}%.%{_reward_nr}%" from "rewards"
+					if {_var} contains "gold ":
+						if {_var} doesn't contain "golden" or "ingot" or "raw" or "ore" or "block" or "sword" or "axe" or "pickaxe" or "shovel" or "hoe" or "nugget":
+							set {reputation::rewards::%{_guild}%::%{_level_nr}%::%{_reward_nr}%} to {_var}
+					if {_var} contains "gems ":
+						set {reputation::rewards::%{_guild}%::%{_level_nr}%::%{_reward_nr}%} to {_var}
+					if {_var} contains "command ":
+						set {reputation::rewards::%{_guild}%::%{_level_nr}%::%{_reward_nr}%} to {_var}
+					if {reputation::rewards::%{_guild}%::%{_level_nr}%::%{_reward_nr}%} is not set:
+						set {reputation::rewards::%{_guild}%::%{_level_nr}%::%{_reward_nr}%} to {_var} parsed as item
+
+	save yaml "rewards"
+
+
+	#	Quest Info
+
+	load yaml "unlimited_adventures/Guilds/quests.yml" as "quests"
+	load yaml "unlimited_adventures/Guilds/menu.yml" as "menu"
+
+	set {_guilds::*} to "slayers" and "miners" and "ranchers"
+	loop {_guilds::*}:
+		set {_guild} to loop-value
+
+		set {_difficulty::*} to "easy" and "medium" and "hard"
+		loop {_difficulty::*}:
+			set {_difficulty} to loop-value-2
+
+			loop 25 times:
+				set {_quest_nr} to loop-number-3
+				if yaml value "%{_guild}%.%{_difficulty}%.%{_quest_nr}%" from "quests" is set:
+					set {reputation::config::quest::%{_guild}%::%{_difficulty}%::%{_quest_nr}%::description} to yaml value "%{_guild}%.%{_difficulty}%.%{_quest_nr}%" from "quests"
+
+	#	Reputation Level Rewards Descriptions
+		set {_level_nr} to 0
+		loop 9 times:
+			add 1 to {_level_nr}
+			set {_reward_nr} to 0
+			loop 5 times:
+				add 1 to {_reward_nr}
+				if yaml value "%{_guild}%.%{_level_nr}%.%{_reward_nr}%" from "menu" is set:
+					set {reputation::rewards::%{_guild}%::%{_level_nr}%::%{_reward_nr}%::description} to yaml value "%{_guild}%.%{_level_nr}%.%{_reward_nr}%" from "menu"
+
+	save yaml "quests"
+	save yaml "menu"
+
+
+
+	load yaml "unlimited_adventures/Guilds/messages.yml" as "messages"
+
+	clear {reputation::messages::*}
+	loop yaml nodes from "messages":
+		set {reputation::messages::%loop-value%} to yaml value loop-value from "messages"
+	
+	save yaml "messages"
+
+	YamlQueueRemove("guilds")
+
+
+
+function difficultyText(text: string) :: string:
+	if {_text} is "slayers":
+		set {_final} to {reputation::messages::slayers}
+	if {_text} is "Slayers":
+		set {_final} to capitalize({reputation::messages::slayers})
+	if {_text} is "miners":
+		set {_final} to {reputation::messages::miners}
+	if {_text} is "Miners":
+		set {_final} to capitalize({reputation::messages::miners})
+	if {_text} is "ranchers":
+		set {_final} to {reputation::messages::ranchers}
+	if {_text} is "Ranchers":
+		set {_final} to capitalize({reputation::messages::ranchers})
+	return {_final}
+
+
+every second:
+	loop {-players::*}:
+		ReputationTimeUntilQuestReset(loop-value)
+
+function ReputationTimeUntilQuestReset(player: player):
+	if {reputation::slayers::quest::easy::date::%uuid of {_player}%} is set:
+		set {_time} to difference between {reputation::slayers::quest::easy::date::%uuid of {_player}%} and now
+		set {_time} to difference between 24 hours and {_time}
+	else:
+		set {_time} to 24 hours
+	set {_time} to "%{_time}%"
+	set {_time} to shortenTime({_time})
+	set {_time} to roundTime({_time})
+	set {_time::*} to {_time} split at ". "
+	set {_time} to "%{_time::1}%. %{_time::2}%."
+	set metadata value "guilds_time_until_quest_reset" of {_player} to {_time}
+
+
+
+
+on join:
+	if {reputation::slayers::level::%uuid of player%} is not set:
+		ReputationResetPlayer(player)
+		stop
+	ReputationCheckQuests(player)
+
+
+
+function ReputationCheckQuests(player: player):
+	if {reputation::slayers::quest::easy::date::%uuid of {_player}%} is not set:
+		ReputationResetQuests({_player})
+	if difference between {reputation::slayers::quest::easy::date::%uuid of {_player}%} and now > 24 hours:
+		ReputationResetQuests({_player})
+
+function ReputationResetPlayer(player: player):
+	set {_guilds::*} to "slayers" and "miners" and "ranchers"
+	loop {_guilds::*}:
+		set {_guild} to loop-value
+		set {reputation::%{_guild}%::level::%uuid of {_player}%} to 0
+		set {reputation::%{_guild}%::xp::%uuid of {_player}%} to 0
+		set {reputation::%{_guild}%::xp_need::%uuid of {_player}%} to {reputation::config::first_level_xp_requirement}
+		delete {reputation::%{_guild}%::rewards::%uuid of {_player}%::*}
+		delete {reputation::%{_guild}%::rewards_claimed::%uuid of {_player}%::*}
+	ReputationResetQuests({_player})
+
+
+
+
+
+function ReputationResetQuests(player: player):
+	set {_guilds::*} to "slayers" and "miners" and "ranchers"
+	loop {_guilds::*}:
+		set {_guild} to loop-value
+		set {_difficulty::*} to "easy" and "medium" and "hard"
+		loop {_difficulty::*}:
+			set {_difficulty} to loop-value-2
+			set {reputation::%{_guild}%::quest::%{_difficulty}%::date::%uuid of {_player}%} to now
+
+
+			#	Removes old objective if needed
+			delete {_quest_nr}
+			set {_quest_nr} to {reputation::%{_guild}%::quest::%{_difficulty}%::number::%uuid of {_player}%}
+			if {_quest_nr} is set:
+				if {_quest_nr} is not 999:
+					execute console command "/bq objective %{_player}% del reputation.%{_guild}%_%{_difficulty}%_%{_quest_nr}%"
+			wait 1 tick
+
+			#	Gives the new objective
+#			send "%{_guild}%,%{_difficulty}%: %{reputation::config::quests::%{_guild}%::%{_difficulty}%::amount}%" to all players
+			set {_nr} to random integer between 1 and {reputation::config::quests::%{_guild}%::%{_difficulty}%::amount}
+			execute console command "/bq objective %{_player}% add reputation.%{_guild}%_%{_difficulty}%_%{_nr}%"
+			set {reputation::%{_guild}%::quest::%{_difficulty}%::number::%uuid of {_player}%} to {_nr}
+
+
+command /guilds [<text>] [<player=%player%>] [<text>]:
+	aliases: reputation
+	permission: admin
+	trigger:
+		set {_player} to player-arg
+		if arg 1 is "stats" or "info":
+			send "&f Slayers Level: &a%{reputation::slayers::level::%uuid of {_player}%}%  &fXP: &a%{reputation::slayers::xp::%uuid of {_player}%}% &f/ &a%{reputation::slayers::xp_need::%uuid of {_player}%}%" to sender
+			send "&f Miners Level: &a%{reputation::miners::level::%uuid of {_player}%}%  &fXP: &a%{reputation::miners::xp::%uuid of {_player}%}% &f/ &a%{reputation::miners::xp_need::%uuid of {_player}%}%" to sender
+			send "&f Ranchers Level: &a%{reputation::ranchers::level::%uuid of {_player}%}%  &fXP: &a%{reputation::ranchers::xp::%uuid of {_player}%}% &f/ &a%{reputation::ranchers::xp_need::%uuid of {_player}%}%" to sender
+		if arg 1 is "sound":
+			if arg 3 is "easyquest":
+				ReputationSound({_player}, "quest_finished")
+			if arg 3 is "mediumquest":
+				ReputationSound({_player}, "quest_finished")
+			if arg 3 is "hardquest":
+				ReputationSound({_player}, "quest_finished")
+			if arg 3 is "levelup":
+				ReputationSound({_player}, "levelup")
+
+		if arg 1 contains "givexp":
+			if arg 1 is "givexp":
+				set {_amount} to 100
+			if arg 1 is "give10xp":
+				set {_amount} to 10
+			if arg 1 is "give15xp":
+				set {_amount} to 15
+			if arg 1 is "give20xp":
+				set {_amount} to 20
+			if arg 1 is "give25xp":
+				set {_amount} to 25
+			if arg 1 is "give30xp":
+				set {_amount} to 30
+			if arg 1 is "give40xp":
+				set {_amount} to 40
+			if arg 1 is "give50xp":
+				set {_amount} to 50
+			if arg 1 is "give100xp":
+				set {_amount} to 100
+			if arg 1 is "give150xp":
+				set {_amount} to 150
+			if arg 1 is "give200xp":
+				set {_amount} to 200
+
+			if arg 3 is "slayers":
+				ReputationGiveXP({_player}, "slayers", {_amount})
+			if arg 3 is "miners":
+				ReputationGiveXP({_player}, "miners", {_amount})
+			if arg 3 is "ranchers":
+				ReputationGiveXP({_player}, "ranchers", {_amount})
+
+		if arg 1 is "resetquests":
+			if arg 2 is set:
+				ReputationResetQuests({_player})
+				send "&f Resetting the quests for &a%{_player}%" to sender
+		if arg 1 is "reset":
+			ReputationResetPlayer({_player})
+			send "&f Resetting the reputation data for &a%{_player}%" to sender
+		if arg 1 is "reload":
+			LoadGuilds()
+
+on tab complete of "/guilds":
+	set tab completions for position 1 to "stats" and "info" and "givexp" and "sound" and "resetquests" and "reset"
+	set tab completions for position 2 to all players
+	if tab arg-1 = "sound" or "givexp" or "give10xp" or "give15xp" or "give20xp" or "give25xp" or "give30xp" or "give40xp" or "give50xp":
+		set tab completions for position 3 to "slayers" and "miners" and "ranchers"
+
+command /reputationquestfinished [<player>] [<string>] [<string>]:
+	permission: admin
+	trigger:
+		set {_player} to player-arg
+		set {_guild} to arg-2
+		set {_difficulty} to arg-3
+		ReputationQuestFinished({_player}, {_guild}, {_difficulty})
+
+
+function ReputationQuestFinished(player: player, guild: string, difficulty: string):
+	
+	if {_difficulty} is "easy":
+		set {_experience} to 50
+		set {_gold} to 250
+	if {_difficulty} is "medium":
+		set {_experience} to 100
+		set {_gold} to 500
+	if {_difficulty} is "hard":
+		set {_experience} to 200
+		set {_gold} to 1000
+	ReputationGiveXP({_player}, {_guild}, {_experience})
+	add {_gold} to balance of {_player}
+
+	set {reputation::%{_guild}%::quest::%{_difficulty}%::number::%uuid of {_player}%} to 999
+
+	ReputationQuestFinishedMessage({_player}, {_guild}, {_difficulty})
+
+
+
+
+function ReputationGiveXP(player: player, guild: string, experience: integer):
+	
+
+	add {_experience} to {reputation::%{_guild}%::xp::%uuid of {_player}%}
+	if {reputation::%{_guild}%::xp::%uuid of {_player}%} >= {reputation::%{_guild}%::xp_need::%uuid of {_player}%}:
+		ReputationLevelUp({_player}, {_guild})
+
+
+function ReputationLevelUp(player: player, guild: string):
+	if {reputation::%{_guild}%::level::%uuid of {_player}%} > 45:
+		stop
+	loop 5 times:
+		if {reputation::%{_guild}%::level::%uuid of {_player}%} < 45:
+			if {reputation::%{_guild}%::xp::%uuid of {_player}%} >= {reputation::%{_guild}%::xp_need::%uuid of {_player}%}:
+				add 1 to {reputation::%{_guild}%::level::%uuid of {_player}%}
+				set {reputation::%{_guild}%::xp::%uuid of {_player}%} to {reputation::%{_guild}%::xp::%uuid of {_player}%}-{reputation::%{_guild}%::xp_need::%uuid of {_player}%}
+				set {reputation::%{_guild}%::xp_need::%uuid of {_player}%} to round({reputation::%{_guild}%::xp_need::%uuid of {_player}%}*{reputation::config::next_level_required_xp_multiplier})
+				ReputationLevelUpReward({_player}, {_guild})
+	
+	ReputationSound({_player}, "levelup")
+	ReputationLevelUpMessage({_player}, {_guild})
+	set metadata value "guild_levelup_date" of {_player} to now
+
+
+function ReputationLevelUpReward(player: player, guild: string):
+	BattlePassLevelUp({_player})
+
+	set {_level} to {reputation::%{_guild}%::level::%uuid of {_player}%}
+	if mod({_level}, 5) is 0:
+		set {_reward_nr} to {_level}/5
+		add "_%{_reward_nr}%_" to {reputation::%{_guild}%::rewards::%uuid of {_player}%::*}
+
+function ReputationLevelUpMessage(player: player, guild: string):
+	
+	set {_guild_text} to capitalize(difficultyText({_guild}))
+
+	wait 1 tick
+	send "" to {_player}
+	set {_msg} to {reputation::messages::reputation_level_now}
+	replace "GUILD_NAME" with "%{_guild_text}%" in {_msg}
+	replace "GUILD_LEVEL" with "%{reputation::%{_guild}%::level::%uuid of {_player}%}%" in {_msg}
+	send {_msg} to {_player}
+	send "%{reputation::messages::adventure_pass_level_up}%" to {_player}
+
+	if {reputation::%{_guild}%::level::%uuid of {_player}%} >= 5:
+		if mod({reputation::%{_guild}%::level::%uuid of {_player}%}, 5) = 0:
+			if {_guild} is "slayers":
+				send "%{reputation::messages::slayers_reputation_reward_unlocked}%" to {_player}
+			if {_guild} is "miners":
+				send "%{reputation::messages::miners_reputation_reward_unlocked}%" to {_player}
+			if {_guild} is "ranchers":
+				send "%{reputation::messages::ranchers_reputation_reward_unlocked}%" to {_player}
+	send "" to {_player}
+
+
+
+command /reputationclaimreward [<player>] [<string>] [<integer>]:
+	permission: admin
+	trigger:
+		set {_player} to player-arg
+		set {_guild} to arg-2
+		set {_level} to arg-3
+		ReputationClaimReward({_player}, {_guild}, {_level})
+
+on tab complete of "/reputationclaimreward":
+	set tab completions for position 1 to all players
+	set tab completions for position 2 to "slayers" and "miners" and "ranchers"
+	set tab completions for position 3 to 1
+
+
+
+function ReputationClaimReward(player: player, guild: string, level: integer):
+	
+	set {_guild_text} to capitalize(difficultyText({_guild}))
+
+	#	Make sure if someone has the reward
+	if {reputation::%{_guild}%::rewards::%uuid of {_player}%::*} doesn't contain "_%{_level}%_":
+		stop
+
+	loop {reputation::rewards::%{_guild}%::%{_level}%::*}:
+
+		set {_reward} to loop-value
+#		send "Reward: %{_reward}%  %loop-value%" to {_player}
+
+
+		if {_reward} contains "gold":
+			if {_reward} doesn't contain "golden" or "ingot" or "raw" or "ore" or "block" or "sword" or "axe" or "pickaxe" or "shovel" or "hoe" or "nugget":
+				replace all "gold " with "" in {_reward}
+				set {_amount} to {_reward} parsed as integer
+				add {_amount} to balance of {_player}
+				delete {_reward}
+		if {_reward} contains "gems":
+			replace all "gems " with "" in {_reward}
+			set {_amount} to {_reward} parsed as integer
+			PremiumCurrency({_player}, "add", {_amount})
+			delete {_reward}
+		if {_reward} contains "command":
+			replace all "command " with "" in {_reward}
+			replace all "PLAYER_NAME" with "%{_player}%" in {_reward}
+			set {_command} to {_reward}
+			execute console command "%{_command}%"
+			delete {_reward}
+		if {_reward} is set:
+			replace all "PLAYER_NAME" with "%{_player}%" in {_reward}
+			if {_player} has space for {_reward}:
+				give {_reward} to {_player}
+			else:
+#				send "<##ffe608>&l%{_guild_text}% ▶ &cYou don't have space for this reward!" to {_player}
+				set {_msg} to "%{reputation::messages::no_space}%"
+				replace "GUILD_NAME" with "%{_guild_text}%" in {_msg}
+				send "%{_msg}%" to {_player}
+				play sound "block.note_block.didgeridoo" with volume 0.7 and pitch 1 to {_player}
+				stop
+
+	remove "_%{_level}%_" from {reputation::%{_guild}%::rewards::%uuid of {_player}%::*}
+	add "_%{_level}%_" to {reputation::%{_guild}%::rewards_claimed::%uuid of {_player}%::*}
+	
+	
+	send " " to {_player}
+	set {_msg} to "%{reputation::messages::reward_claim}%"
+	replace "GUILD_NAME" with "%{_guild_text}%" in {_msg}
+	replace "GUILD_LEVEL" with "%{_level}%" in {_msg}
+	send "%{_msg}%" to {_player}
+#	send "<##ffe608>&l%{_guild_text}% ▶ &aClaimed reward for achieving <##31ed96>Reputation Level %{_level}%" to {_player}
+	send " " to {_player}
+	
+	
+	play sound "entity.experience_orb.pickup" with volume 0.7 and pitch 1 to {_player}
+	play sound "item.armor.equip_iron" with volume 1 and pitch 1 to {_player}
+
+
+
+
+
+
+
+
+function ReputationQuestFinishedMessage(player: player, guild: string, difficulty: string):
+	set {_guild_text} to capitalize(difficultyText({_guild}))
+	set {_difficulty_text} to capitalize({_difficulty})
+
+	send "%{_player}%, %{_guild}%, %{_difficulty}%" to {_player}
+
+	send " " to {_player}
+#	send "&6&l%{_guild_text}% > &fYou have finished the &a%{_difficulty_text}% Quest!" to {_player}
+	set {_msg} to "%{reputation::messages::quest_finished}%"
+	replace "GUILD_NAME" with "%{_guild_text}%" in {_msg}
+	replace "DIFFICULTY_LEVEL" with "%{_difficulty_text}%" in {_msg}
+	send "%{_msg}%" to {_player}
+	send " " to {_player}
+#	send "&fRewards:" to {_player}
+	send "%{reputation::messages::rewards}%" to {_player}
+
+	set {_msg} to "%{reputation::messages::xp_reward}%"
+	replace all "XP_REWARD" with "%{reputation::config::xp_rewards::%{_difficulty}%_quest}%" in {_msg}
+	send {_msg} to {_player}
+
+	set {_msg} to "%{reputation::messages::gold_reward}%"
+	replace all "GOLD_REWARD" with "%{reputation::config::gold_rewards::%{_difficulty}%_quest}%" in {_msg}
+	send {_msg} to {_player}
+
+	send "" to {_player}
+
+
+
+	set {_subtitle} to "%{reputation::messages::quest_finished_subtitle}%"
+	replace all "DIFFICULTY_LEVEL" with "%{_difficulty_text}%" in {_subtitle}
+	send title "&6&l%{_guild_text}%" with subtitle {_subtitle} to {_player} for 3 seconds
+
+#	send title "&6&l%{_guild_text}%" with subtitle "&a%{_difficulty_text}% Quest &fFinished!" to {_player} for 3 seconds
+
+
+	
+	if difference between metadata value "guild_levelup_date" of {_player} and now < 0.5 second:
+		stop
+	play sound "custom.quest_finished_2" with volume 0.8 and pitch 1 to {_player}
+
+
+
+
+
+
+
+function ReputationSound(player: player, sound: string):
+	if {_sound} is "quest_finished":
+		play sound "custom.quest_finished_2" with volume 0.6 and pitch 1 to {_player}
+	if {_sound} is "levelup":
+		play sound "custom.level_up" with volume 0.6 and pitch 1 to {_player}
+
+
+
+
+
+

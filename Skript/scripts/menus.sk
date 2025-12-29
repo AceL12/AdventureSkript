@@ -1,0 +1,520 @@
+
+function StyleIngredientString(text: string) :: string:
+	
+	#	Custom Items Styling
+	if {_text} contains "custom:":
+		if GetIngredientAmount({_text}) > 1:
+			set {_final_text} to "&2%GetIngredientAmount({_text})% of &2%uncoloured name of GetIngredientItem({_text})%"
+		else:
+			set {_final_text} to "&2%uncoloured name of GetIngredientItem({_text})%"
+
+
+	#	Vanilla Items Styling
+	else:
+		set {_ingredient::*} to {_text} split at " "
+		if {_text} contains " of ":
+			set {_text::*} to {_text} split at " of "
+			set {_amount} to {_text::1} parsed as integer
+			set {_ingredient::*} to {_text::2} split at " "
+		loop {_ingredient::*}:
+			set {_ingredient::%loop-index%} to capitalize(loop-value)
+		set {_ingredient} to join {_ingredient::*} with " "
+		if {_amount} > 1:
+			set {_final_text} to "&7%{_amount}% of %{_ingredient}%"
+		else:
+			set {_final_text} to "&7%{_ingredient}%"
+
+	return {_final_text}
+
+
+
+
+
+
+function OpenAncientTravelerMenu(player: player):
+	play sound "item.entity.wandering_trader.appear" with volume 1 and pitch 1 to {_player}
+	set metadata value "ancient_traveler_menu" of {_player} to chest inventory with 3 rows named "&f"
+	set slot 0 of metadata value "ancient_traveler_menu" of {_player} to stick with custom model data 1 named "&c← Previous Menu"
+
+	set {_locked_slot} to stick with custom model data 100 named " "
+
+	set slot 11 of metadata value "ancient_traveler_menu" of {_player} to {accessories::%uuid of {_player}%::items::1}
+	set slot 15 of metadata value "ancient_traveler_menu" of {_player} to {accessories::%uuid of {_player}%::items::2}
+	set slot 21 of metadata value "ancient_traveler_menu" of {_player} to {accessories::%uuid of {_player}%::items::3}
+	set slot 23 of metadata value "ancient_traveler_menu" of {_player} to {accessories::%uuid of {_player}%::items::4}
+
+	loop 8 times:
+		set {_slot} to 0 + loop-number
+		set slot {_slot} of metadata value "ancient_traveler_menu" of {_player} to {_locked_slot}
+	set slot 9 of metadata value "ancient_traveler_menu" of {_player} to {_locked_slot}
+	set slot 10 of metadata value "ancient_traveler_menu" of {_player} to {_locked_slot}
+	loop 3 times:
+		set {_slot} to 11 + loop-number
+		set slot {_slot} of metadata value "ancient_traveler_menu" of {_player} to {_locked_slot}
+	set slot 16 of metadata value "ancient_traveler_menu" of {_player} to {_locked_slot}
+	set slot 17 of metadata value "ancient_traveler_menu" of {_player} to {_locked_slot}
+	loop 3 times:
+		set {_slot} to 17 + loop-number
+		set slot {_slot} of metadata value "ancient_traveler_menu" of {_player} to {_locked_slot}
+	set slot 22 of metadata value "ancient_traveler_menu" of {_player} to {_locked_slot}
+	loop 3 times:
+		set {_slot} to 23 + loop-number
+		set slot {_slot} of metadata value "ancient_traveler_menu" of {_player} to {_locked_slot}
+
+
+	open (metadata value "ancient_traveler_menu" of {_player}) to {_player}
+
+
+
+command /getitems:
+	aliases: getitem, itemslist
+	trigger:
+		OpenCustomItemsMenu(player, 1)
+
+function OpenCustomItemsMenu(player: player, page: integer = 1, filter: string = "none"):
+	if {server::test_server} is not true:
+		if {_player} doesn't have permission "admin":
+			stop
+
+
+	set metadata value "custom_items_menu" of {_player} to chest inventory with 6 rows named "&f"
+	set metadata value "custom_items_menu_page" of {_player} to {_page}
+	if {_filter} is not "respect":
+		set metadata value "custom_items_menu_filter" of {_player} to {_filter}
+
+	set {_all_items::*} to {item::*}
+	loop {_all_items::*}:
+		set {_id} to GetCustomItemId(loop-value)
+		if {forge::item::%{_id}%::is_a_model} is true:
+			remove loop-value from {_all_items::*}
+
+	if metadata value "custom_items_menu_filter" of {_player} is "tools":
+		loop {_all_items::*}:
+			set {_id} to GetCustomItemId(loop-value)
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "swords":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "pickaxes":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "axes":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "shovels":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "hoes":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is leather helmet or leather chestplate or leather leggings or leather boots or chainmail helmet or chainmail chestplate or chainmail leggings or chainmail boots or iron helmet or iron chestplate or iron leggings or iron boots or golden helmet or golden chestplate or golden leggings or golden boots or diamond helmet or diamond chestplate or diamond leggings or diamond boots or netherite helmet or netherite chestplate or netherite leggings or netherite boots:
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is crossbow or bow or fishing rod or elytra or arrow:
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::rows} is set:
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {_id} is "catching_net" or "home_teleportation_scroll" or "random_teleportation_scroll":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {_id} is "skeleton_key" or "dracula_key" or "desert_key" or "jungle_key" or "gate_key" or "ominous_vault_key" or "workshop" or "artifact_workshop" or "portal_stone" or "throwable_dynamite" or "unidentified_weapon" or "unidentified_armor" or "unidentified_item":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+	if metadata value "custom_items_menu_filter" of {_player} is "accessories":
+		loop {_all_items::*}:
+			set {_id} to GetCustomItemId(loop-value)
+			if {forge::accessories_list::*} contains {_id}:
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+	if metadata value "custom_items_menu_filter" of {_player} is "materials":
+		loop {_all_items::*}:
+			set {_id} to GetCustomItemId(loop-value)
+			if {_id} is "arachnite_shell" or "blue_crystal" or "yellow_crystal" or "green_crystal" or "pink_crystal" or "zombie_brain" or "silkscourge_vial" or "fine_thread" or "dragonscale" or "crocodile_tooth" or "broken_cobweb_parachute" or "broken_eight_eyed_mask" or "broken_webwoven_cloak" or "unidentified_weapon" or "unidentified_armor" or "unidentified_item" or "chili_seeds" or "lettuce_seeds" or "tomato_seeds" or "corn_seeds" or "chili" or "tomato" or "corn" or "lettuce":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+
+	if metadata value "custom_items_menu_filter" of {_player} is "food":
+		loop {_all_items::*}:
+			set {_id} to GetCustomItemId(loop-value)
+			if {forge::item::%{_id}%::on_consume::nutrition} is set:
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if loop-value is beef or cooked beef:
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+
+
+	if metadata value "custom_items_menu_filter" of {_player} is "none":
+		loop {_all_items::*}:
+			set {_id} to GetCustomItemId(loop-value)
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "swords":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "pickaxes":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "axes":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "shovels":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is tagged with minecraft tag "hoes":
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is leather helmet or leather chestplate or leather leggings or leather boots or chainmail helmet or chainmail chestplate or chainmail leggings or chainmail boots or iron helmet or iron chestplate or iron leggings or iron boots or golden helmet or golden chestplate or golden leggings or golden boots or diamond helmet or diamond chestplate or diamond leggings or diamond boots or netherite helmet or netherite chestplate or netherite leggings or netherite boots:
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+			if {forge::item::%{_id}%::item} is crossbow or bow or fishing rod or elytra or arrow:
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+	#		if GetCustomItemId({item::%{_id}%}) contains "backpack":
+	#			add loop-value to {_menu_items::*}
+	#			remove loop-value from {_all_items::*}
+		loop {_all_items::*}:
+			set {_id} to GetCustomItemId(loop-value)
+			if {forge::accessories_list::*} contains {_id}:
+				add loop-value to {_menu_items::*}
+				remove loop-value from {_all_items::*}
+	
+	if metadata value "custom_items_menu_filter" of {_player} is "none":
+		add {_all_items::*} to {_menu_items::*}
+
+
+	set {_slot_nr} to -1
+	loop {_menu_items::*}:
+		add 1 to {_nr}
+		if {_page} is not 1:
+			if {_nr} < 44*({_page}-1)+1:
+				continue
+
+		add 1 to {_slot_nr}
+		set {_item} to loop-index
+
+		if {forge::item::%{_item}%::item_id} is set:
+			if {forge::item::%{_item}%::item_id} is "unidentified_item":
+				set slot {_slot_nr} of metadata value "custom_items_menu" of {_player} to GenerateUnidentifiedArtifact()
+			if {forge::item::%{_item}%::item_id} is "catching_net":
+				set slot {_slot_nr} of metadata value "custom_items_menu" of {_player} to GenerateCatchingNet()
+			if {forge::item::%{_item}%::rows} is set:
+				set slot {_slot_nr} of metadata value "custom_items_menu" of {_player} to GenerateBackpack({_item})
+		else:
+			set slot {_slot_nr} of metadata value "custom_items_menu" of {_player} to loop-value
+		if {_slot_nr} is 44:
+			exit loop
+
+
+	if metadata value "custom_items_menu_page" of {_player} > 1:
+		set slot 45 of metadata value "custom_items_menu" of {_player} to stick with custom model data 1 named "&c← Previous Page"
+	if metadata value "custom_items_menu_page" of {_player} < size of {_menu_items::*} / 45:
+		set slot 53 of metadata value "custom_items_menu" of {_player} to stick with custom model data 2 named "&aNext Page →"
+
+	set {_tools} to stick with custom model data 135 named "&aTools"
+	set {_accessories} to stick with custom model data 136 named "&aAccessories"
+	set {_materials} to stick with custom model data 137 named "&aMaterials"
+	set {_food} to stick with custom model data 138 named "&aFood"
+	set slot 47 of metadata value "custom_items_menu" of {_player} to {_tools}
+	set slot 48 of metadata value "custom_items_menu" of {_player} to {_accessories}
+	set slot 49 of metadata value "custom_items_menu" of {_player} to {_materials}
+	set slot 50 of metadata value "custom_items_menu" of {_player} to {_food}
+
+
+	if {_player}'s current inventory is not (metadata value "custom_items_menu" of {_player}):
+		open (metadata value "custom_items_menu" of {_player}) to {_player}
+
+
+
+
+
+
+on inventory click:
+
+	if player's current inventory is (metadata value "cooking_pot_menu" of player):
+		cancel event
+		if event-inventory is inventory of player:
+			stop
+		if CustomItem(event-slot) is set:
+			if {forge::item::%CustomItem(event-slot)%::cooking_pot} is true:
+				set {_cooking_pot} to metadata value "cooking_pot" of player
+				set {_nbt} to custom nbt of {_cooking_pot}
+				set {_item_nbt} to custom nbt of event-slot
+				if string tag "dish" of {_nbt} is not CustomItem(event-slot):
+					if boolean tag "select_dish" of {_item_nbt} is true:
+						SelectCookingPotRecipe(player, CustomItem(event-slot))
+						OpenCookingMenu(player, CustomItem(event-slot))
+				else:
+					if boolean tag "select_dish" of {_item_nbt} is not true:
+						close the inventory of player
+						play sound "custom.ui.switch" with volume 0.5 and pitch 1 to player
+
+
+
+	#	Workshop Menu
+
+	if player's current inventory is (metadata value "workshop_menu" of player):
+		cancel event
+		if event-inventory is inventory of player:
+			stop
+		if name of event-slot is {-workshop::menu::next_page}:
+			loop {-forge::items_list::*}:
+				if {forge::recipe::%loop-value%::*} is set:
+					add loop-value to {_items::*}
+			if metadata value "workshop_menu:page" of player < size of {_items::*} / 21:
+				set metadata value "workshop_menu:page" of player to metadata value "workshop_menu:page" of player + 1
+				OpenWorkshopMenu(player, metadata value "workshop_menu:page" of player)
+				play sound "ui.button.click" with volume 0.5 and pitch 1.5 to player
+		if name of event-slot is {-workshop::menu::previous_page}:
+			if metadata value "workshop_menu:page" of player > 1:
+				set metadata value "workshop_menu:page" of player to metadata value "workshop_menu:page" of player - 1
+				OpenWorkshopMenu(player, metadata value "workshop_menu:page" of player)
+				play sound "ui.button.click" with volume 0.5 and pitch 1.2 to player
+		if GetCustomItemId(event-slot) is set:
+			if ForgeCanCraft(player, GetCustomItemId(event-slot)) is true:
+				ForgeCraftItem(player, GetCustomItemId(event-slot))
+
+
+
+	#	Artifact Workshop Menu
+
+
+	if player's current inventory is (metadata value "artifact_workshop_menu" of player):
+
+		if name of event-slot is " ":
+			cancel event
+		if name of event-slot is {-artifact_workshop::menu::info_item::name}:
+			cancel event
+		if name of event-slot is {-artifact_workshop::menu::identify_item} or {-artifact_workshop::menu::identify_item_locked}:
+			cancel event
+			ArtifactWorkshopIdentifyItem(player)
+
+		wait 1 tick
+		set {_pass} to false
+		if slot 10 of player's current inventory is not air:
+			if slot 13 of player's current inventory is amethyst shard:
+				if slot 16 of player's current inventory is air:
+					if IdentifyArtifact(slot 10 of player's current inventory) is set:
+						set {_pass} to true
+		if {_pass} is true:
+			loop 5 times:
+				set {_slot} to 28 + loop-iteration
+				set slot {_slot} of player's current inventory to stick with custom model data 100 named {-artifact_workshop::menu::identify_item}
+		else:
+			loop 5 times:
+				set {_slot} to 28 + loop-iteration
+				set slot {_slot} of player's current inventory to stick with custom model data 100 named {-artifact_workshop::menu::identify_item_locked}
+
+
+
+
+
+	#	Custom Items Menu
+
+	if player's current inventory is (metadata value "custom_items_menu" of player):
+		if name of event-slot is "&aNext Page →":
+			cancel event
+			if metadata value "custom_items_menu_page" of player < size of {item::*} / 45:
+				set metadata value "custom_items_menu_page" of player to metadata value "custom_items_menu_page" of player + 1
+				OpenCustomItemsMenu(player, metadata value "custom_items_menu_page" of player, "respect")
+				play sound "ui.button.click" with volume 0.5 and pitch 1.5 to player
+		if name of event-slot is "&c← Previous Page":
+			cancel event
+			if metadata value "custom_items_menu_page" of player > 1:
+				set metadata value "custom_items_menu_page" of player to metadata value "custom_items_menu_page" of player - 1
+				OpenCustomItemsMenu(player, metadata value "custom_items_menu_page" of player, "respect")
+				play sound "ui.button.click" with volume 0.5 and pitch 1.2 to player
+		if name of event-slot is "&aTools":
+			cancel event
+			OpenCustomItemsMenu(player, 1, "tools")
+			play sound "ui.button.click" with volume 0.5 and pitch 1.5 to player
+		if name of event-slot is "&aAccessories":
+			cancel event
+			OpenCustomItemsMenu(player, 1, "accessories")
+			play sound "ui.button.click" with volume 0.5 and pitch 1.5 to player
+		if name of event-slot is "&aMaterials":
+			cancel event
+			OpenCustomItemsMenu(player, 1, "materials")
+			play sound "ui.button.click" with volume 0.5 and pitch 1.5 to player
+		if name of event-slot is "&aFood":
+			cancel event
+			OpenCustomItemsMenu(player, 1, "food")
+			play sound "ui.button.click" with volume 0.5 and pitch 1.5 to player
+
+	#	Backpack Menu
+
+	if player's current inventory is (metadata value "backpack_inventory" of player):
+
+
+		#	Prevent player from losing his backpack
+#		loop all items in player's current inventory:
+#			if loop-item is a stick:
+#				loop {forge::backpacks_list::*}:
+#					if custom model data of loop-item-1 is {forge::item::%loop-value-2%::custom_model_data}:
+#						set {_item} to loop-item-1
+#						remove loop-item-1 from player's current inventory
+	#					give {_item} to player
+
+		#	Prevent player from misplacing backpack (anti-dupe)
+		if inventory action is swap with hotbar:
+			cancel event
+			stop
+		if IsBackpack(player's tool) is true:
+			set {_pass} to true
+		if {_pass} is not true:
+			close the inventory of player
+			stop
+
+		if gcc() is not between bcc()-1 and bcc()+1:
+			if gcc() is not 28 or 29 or 30 or 31 or 0 or 1:
+				stop
+
+		#	Save inventory every click
+		if IsBackpack(tool of player) is true:
+			set {_n} to nbt of player's tool
+			loop all items in player's current inventory:
+				set {_index} to index of loop-slot
+				set {_item} to full nbt of loop-item
+				set {_items::%{_index}%} to nbt from "{slot:%{_index}%b,item:%{_item}%}"
+			set compound list tag "minecraft:custom_data;items" of {_n} to {_items::*}
+
+
+		#	Prevent player from touching backpacks while in backpack menu (anti-dupe)
+		if IsBackpack(event-item) is true:
+#			if inventory action is instant move:
+			cancel event
+			stop
+
+
+		
+		wait 1 tick
+
+		#	If player doesn't have backpack in hand, close menu
+		if IsBackpack(player's tool) is not true:
+			close the inventory of player
+			stop
+
+		#	If there is a backpack inside of a backpack, remove it and move it back to player's inventory
+		loop all items in player's current inventory:
+			if IsBackpack(loop-item) is true:
+				set {_bp_item} to loop-item-1
+				remove loop-item-1 from player's current inventory
+				give {_bp_item} to player
+				exit loop
+		#	I forgot what it does >_<
+		if {_bp_item} is set:
+			if IsBackpack(tool of player) is not true:
+				loop {forge::backpacks_list::*}:
+					if custom model data of player's tool is not {forge::item::%loop-value-2%::custom_model_data}:
+						remove player's tool from player
+
+
+	#	Accessories Menu
+
+	if player's current inventory is (metadata value "accessories_menu" of player):
+		if event-slot is stick:
+			if name of event-slot is " " or {-gear::menu::your_stats} or {-gear::menu::about_gear::name}:
+				cancel event
+		if name of event-slot is {-gear::menu::previous_menu}:
+			cancel event
+			close the player's inventory
+			execute player command "cp main_menu"
+
+		wait 2 tick
+		if player's current inventory is (metadata value "accessories_menu" of player):
+			set {_slot_nr::*} to 11 and 15 and 21 and 23
+
+			#	Remove non-accessories from accessory slots
+			loop 4 times:
+				if slot {_slot_nr::%loop-number%} of player's current inventory is not air:
+					set {_item::%loop-number%} to item in slot {_slot_nr::%loop-number%} of player's current inventory#	Items need to be saved to variable to be able to safely give them back to the player
+
+				set {_remove} to false
+				if gcc() is not between bcc()-1 and bcc()+1:
+					if gcc() is not 28 or 29 or 30 or 31 or 0 or 1:
+						set {_remove} to true
+				if IsAccessory({_item::%loop-number%}) is false:
+					set {_remove} to true
+				if {_remove} is true:
+					if player has space for {_item::%loop-number%}:
+						give {_item::%loop-number%} to player
+					else:
+						drop {_item::%loop-number%} at player
+					set slot {_slot_nr::%loop-number%} of player's current inventory to air
+
+	#	Ancient Traveler Menu
+
+#	if player's current inventory is (metadata value "ancient_traveler_menu" of player):
+#		if event-slot is stick:
+#			if name of event-slot is " " or "<##31ed96>Your Stats" or "<##31ed96>About Gear":
+#				cancel event
+
+#		wait 2 tick
+#		if player's current inventory is (metadata value "ancient_traveler_menu" of player):
+
+
+#		set slot 23 of player's current inventory to air
+
+
+
+
+
+
+
+
+
+
+#
+#		Backpacks
+#
+
+
+
+function BackpackOpen(player: player, backpack: string):
+	if IsBackpack(tool of {_player}) is not true:
+		stop
+	if difference between metadata value "backpack_open_date" of {_player} and now < 1.2 second:
+		stop
+	set metadata value "backpack_open_date" of {_player} to now
+	set metadata value "backpack_inventory" of {_player} to chest inventory with {forge::item::%{_backpack}%::rows} rows named {forge::item::%{_backpack}%::name}
+
+	set metadata value "backpack_item" of {_player} to {_player}'s tool
+	set {_n} to nbt of {_player}'s tool
+	set {_bp_items::*} to compound list tag "minecraft:custom_data;items" of {_n}
+
+
+	loop {_bp_items::*}:
+		set {_value} to loop-value
+		set {_slot} to byte tag "slot" of {_value}
+		set {_item} to compound tag "item" of {_value}
+		set {_item} to item from nbt {_item}
+		set slot {_slot} of metadata value "backpack_inventory" of {_player} to {_item}
+
+	open (metadata value "backpack_inventory" of {_player}) to {_player}
+
+	loop all items in {_player}'s current inventory:
+		if IsBackpack(loop-item) is true:
+			set {_item} to loop-item-1
+			remove loop-item-1 from {_player}'s current inventory
+			give {_item} to {_player}
+
+on inventory close:
+	set {_player} to player
+
+	if event-inventory is (metadata value "backpack_inventory" of {_player}):
+		set {_n} to nbt of {_player}'s tool #metadata value "backpack_item" of {_player}
+		loop all items in {_player}'s current inventory:
+			set {_index} to index of loop-slot
+			set {_item} to full nbt of loop-item
+			set {_items::%{_index}%} to nbt from "{slot:%{_index}%b,item:%{_item}%}"
+		set compound list tag "minecraft:custom_data;items" of {_n} to {_items::*}
+
+	if event-inventory is (metadata value "accessories_menu" of {_player}):
+		set {accessories::%uuid of {_player}%::items::1} to slot 11 of {_player}'s current inventory
+		set {accessories::%uuid of {_player}%::items::2} to slot 15 of {_player}'s current inventory
+		set {accessories::%uuid of {_player}%::items::3} to slot 21 of {_player}'s current inventory
+		set {accessories::%uuid of {_player}%::items::4} to slot 23 of {_player}'s current inventory
+
+	if event-inventory is (metadata value "artifact_workshop_menu" of {_player}):
+		drop slot 10 of {_player}'s current inventory at {_player}
+		drop slot 13 of {_player}'s current inventory at {_player}
+		drop slot 16 of {_player}'s current inventory at {_player}

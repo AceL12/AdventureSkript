@@ -1,0 +1,128 @@
+on load:
+	AncientTravelerReload()
+
+function AncientTravelerCreateConfig():
+	load yaml "unlimited_adventures/AncientTraveler/config.yml" as "config"
+	set yaml value "version" from "config" to 1
+	set the comments of yaml node "version" from "config" to "Please DO NOT change version number!"
+
+
+	set yaml value "refresh_cooldown" from "config" to 0.01
+
+	set yaml value "items.1" from "config" to "amethyst shard"
+	set yaml value "items.2" from "config" to "heart of the sea"
+	set yaml value "items.3" from "config" to "shulker shell"
+	set yaml value "items.4" from "config" to "diamond horse armor"
+	set yaml value "items.5" from "config" to "enchanted golden apple"
+	set yaml value "items.6" from "config" to "totem of undying"
+	set yaml value "items.7" from "config" to "bamboo"
+	set yaml value "items.8" from "config" to "turtle shell"
+	set yaml value "items.9" from "config" to "dragon breath"
+	set yaml value "items.10" from "config" to "trident"
+	set yaml value "items.11" from "config" to "netherite ingot"
+	
+	set yaml value "items.12" from "config" to "harm arrow 2"
+	
+	set yaml value "items.13" from "config" to "strength potion 2"
+	set yaml value "items.14" from "config" to "splash healing potion 2"
+	set yaml value "items.15" from "config" to "splash instant damage 2"
+	
+	set yaml value "items.16" from "config" to "looting"
+	set yaml value "items.17" from "config" to "smite"
+	set yaml value "items.18" from "config" to "feather falling"
+	set yaml value "items.19" from "config" to "frost walker"
+	set yaml value "items.20" from "config" to "piercing"
+	set yaml value "items.21" from "config" to "quick charge"
+	set yaml value "items.22" from "config" to "luck of the sea"
+	set the comments of yaml node "items" from "config" to "" and "Feel free to set up your own items for the Ancient Traveler. Remember to follow the formatting." and "In case of any issues, feel free to contact us on our Discord server." and ""
+	set the comments of yaml node "refresh_cooldown" from "config" to "Item stock refresh cooldown in hours."
+	save yaml "config"
+
+
+function AncientTravelerReload():
+	load yaml "unlimited_adventures/AncientTraveler/config.yml" as "config"
+	if yaml value "items.1" from "config" is not set:
+		wait 1 tick
+		AncientTravelerCreateConfig()
+
+	#	Update that adds refresh_cooldown
+	if yaml value "version" from "config" is 1:
+		wait 1 tick
+		set yaml value "version" from "config" to 2
+		set yaml value "refresh_cooldown" from "config" to 24
+		set the comments of yaml node "refresh_cooldown" from "config" to "Item stock refresh cooldown in hours."
+	
+	clear {ancient_traveler::items::*}
+	
+	if yaml value "refresh_cooldown" from "config" is set:
+		set {ancient_traveler::cooldown} to yaml value "refresh_cooldown" from "config"
+	else:
+		set {ancient_traveler::cooldown} to 24
+	loop yaml node keys "items" from "config":
+		add yaml value "items.%loop-key%" from "config" to {ancient_traveler::items::*}
+	save yaml "config"
+
+every 5 seconds:
+	if {ancient_traveler::refresh_date} is not set:
+		AncientTravelerRefreshItems()
+	if difference between {ancient_traveler::refresh_date} and now > "%{ancient_traveler::cooldown}% hours" parsed as timespan:
+		AncientTravelerRefreshItems()
+
+function AncientTravelerRefreshItems():
+	set {ancient_traveler::refresh_date} to now
+
+	set {_items::*} to {ancient_traveler::items::*}
+	
+	loop 3 times:
+		set {_item} to random element out of {_items::*}
+		remove {_item} from {_items::*}
+		set {ancient_traveler::item::%loop-number%} to {_item}
+
+command /ancienttraveler [<text>]:
+	permission: admin
+	trigger:
+		if arg 1 is "help":
+			set {_help} to true
+		if arg 1 is not set:
+			set {_help} to true
+		if {_help} is true:
+			send " " to sender
+			send "&f[&6Ancient Traveler&f] &7Available commands:" to sender
+			send "&7/ancienttraveler &frefreshitems &7- refreshes the item stock." to sender
+			send "&7/ancienttraveler &freload &7- reloads the config." to sender
+			send " " to sender
+			stop
+		if arg 1 is "refreshitems":
+			AncientTravelerRefreshItems()
+			send "&f[&6Ancient Traveler&f] &aRefreshed the item store!" to sender
+		if arg 1 is "reload":
+			AncientTravelerReload()
+			send "&f[&6Ancient Traveler&f] &aReloaded config!" to sender
+
+on tab complete of "/ancienttraveler":
+	set tab completions for position 1 to "help" and "refreshitems" and "reload"
+
+
+on right click on wandering trader:
+	if "%region at event-entity%" contains "spawn":
+		stop
+	cancel event
+	if difference between metadata value "ancient_traveler_click_cooldown" of player and now < 1 second:
+		stop
+	set metadata value "ancient_traveler_click_cooldown" of player to now
+	execute console command "cp ancient_traveler %player%"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

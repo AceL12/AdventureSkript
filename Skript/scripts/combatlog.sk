@@ -1,0 +1,65 @@
+on load:
+	CombatLogReload()
+
+function CombatLogReload():
+	load yaml "unlimited_adventures/AdventureCore/combat_log.yml" as "config"
+
+	set {combatlog::config::combat_duration} to "%yaml value "config.combat_duration" from "config"% seconds" parsed as timespan
+	set {combatlog::config::play_tag_sound} to yaml value "config.play_tag_sound" from "config"
+	set {combatlog::config::mobs_tag_player} to yaml value "config.mobs_tag_player" from "config"
+	set {combatlog::config::display_on_top_screen_ui} to yaml value "config.display_on_top_screen_ui" from "config"
+	set {combatlog::config::display_on_action_bar} to yaml value "config.display_on_action_bar" from "config"
+
+	clear {combatlog::messages::*}
+	loop yaml node key "messages" from "config":
+		set {combatlog::messages::%loop-value%} to yaml value "messages.%loop-value%" from "config"
+
+	save yaml "config"
+
+command /combatlog [<text>] [<player>]:
+	permission: admin
+	trigger:
+		if arg 1 is "tag":
+			CombatLogTag(player-arg)
+
+function CombatLogDamage(victim: player, attacker: entity):
+	if {_attacker} is not set:
+		stop
+	if {combatlog::config::mobs_tag_player} is not true:
+		if {_attacker} is not player:
+			stop
+	CombatLogSound({_victim})
+	wait 1 tick
+	CombatLogTag({_victim})
+
+
+function CombatLogSound(player: player):
+	if {combatlog::config::play_tag_sound} is true:
+		if difference between metadata value "combat_log:date" of {_player} and now < {combatlog::config::combat_duration}:
+			stop
+		play sound "block.note_block.didgeridoo" with volume 0.5 and pitch 1 to {_player}
+		play sound "entity.blaze.hurt" with volume 0.7 and pitch 1.5 to {_player}
+
+function CombatLogTag(player: player):
+	set metadata value "combat_log:date" of {_player} to now
+
+on join:
+	if {combat_log::quit_during_combat::%uuid of player%} is true:
+		delete {combat_log::quit_during_combat::%uuid of player%}
+		loop 10 times:
+			wait 1 second
+			if metadata value "resource_pack_loaded" of {_player} is true:
+				exit loop
+		send " " to player
+		send {combatlog::messages::logged_out_during_combat} to player
+
+on quit:
+	if difference between metadata value "combat_log:date" of player and now < {combatlog::config::combat_duration}:
+		kill player
+		set {combat_log::quit_during_combat::%uuid of player%} to true
+
+on command:
+	if player doesn't have permission "combatlog.use_commands_in_combat":
+		if difference between metadata value "combat_log:date" of player and now < {combatlog::config::combat_duration}:
+			cancel event
+			send {combatlog::messages::command_in_combat} to sender

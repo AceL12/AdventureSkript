@@ -1,0 +1,673 @@
+placeholderapi placeholder with the prefix "valiant":
+	
+	set {_player} to player
+	#	Player Rank
+	if the identifier is "rank":
+		set {_rank} to group of player
+		if {_rank} is "Default":
+			set {_rank} to "player"
+		set {_color} to placeholder "color_%{_rank}%" from player
+		set {_rank} to "<%{_color}%>%capitalize({_rank})%"
+		set {_rank} to colored {_rank}
+		set the result to "%{_rank}%"
+
+	if the identifier is "player_title":
+		set {_player_title} to {title::player::%uuid of player%}
+		if {_player_title} is set:
+			set the result to {_player_title}
+		else:
+			set the result to ""
+
+
+	if the identifier is "player_rank_profile_font":
+		set the result to ""
+		if player has permission "group.1":
+			set the result to ""
+		if player has permission "group.2":
+			set the result to ""
+		if player has permission "group.3":
+			set the result to ""
+		if player has permission "group.10":
+			set the result to ""
+		if player has permission "group.15":
+			set the result to ""
+		if player has permission "group.20":
+			set the result to ""
+		if player has permission "group.50":
+			set the result to ""
+
+	if the identifier is "rank_ultra_font":
+		if player has permission "group.1":
+			set the result to ""
+		else:
+			set the result to ""
+
+	if the identifier is "rank_hero_font":
+		if player has permission "group.2":
+			set the result to ""
+		else:
+			set the result to ""
+
+	if the identifier is "rank_legend_font":
+		if player has permission "group.3":
+			set the result to ""
+		else:
+			set the result to ""
+
+	if the identifier is "in_combat":
+		if difference between metadata value "combat_log:date" of player and now < {combatlog::config::combat_duration}:
+			set the result to "true"
+		else:
+			set the result to "false"
+
+	if the identifier is "combat_duration_left":
+		if difference between metadata value "combat_log:date" of player and now < {combatlog::config::combat_duration}:
+			set the result to difference between metadata value "combat_log:date" of player and now
+		else:
+			set the result to "none"
+
+	#	Location
+	
+	if the identifier is "location":
+#		set the result to "%{location::%player%}%"
+		set the result to metadata value "location" of {_player}
+	
+	#	Gems
+	
+	if the identifier is "gems" or "premium_currency":
+		if {premium_currency::%uuid of player%} is set:
+			set the result to "%{premium_currency::%uuid of player%}%"
+		else:
+			set the result to "0"
+	
+	#	Badges
+	
+	if the identifier is "badges_rewardavailable":
+		if size of {player_badges::available_rewards::%uuid of player%::*} > 0:
+			set the result to "true"
+	loop {player_badges::badges_list::*}:
+		set {_type} to loop-value
+		loop 15 times:
+			set {_level} to loop-number-2
+			if the identifier is "badges_rewardavailable_%{_type}%_%{_level}%":
+				if {player_badges::available_rewards::%uuid of player%::*} contains "%{_type}%_%{_level}%":
+					set the result to "true"
+			if the identifier is "badges_requirement_%{_type}%_%{_level}%":
+				set the result to placeholder "%{player_badges::badges::%{_type}%::%{_level}%::requirement}%" from {_player}
+		if the identifier is "badges_level_%{_type}%":
+			set the result to "%{player_badges::level::%{_type}%::%uuid of player%}%"
+	if the identifier is "badges_total_amount":
+		loop {player_badges::badges_list::*}:
+			set {_type} to loop-value
+			add {player_badges::level::%{_type}%::%uuid of player%} to {_total}
+		set the result to {_total}
+	
+	#	Ancient Traveler
+	
+	if the identifier is "ancienttraveler_item_1":
+		set the result to {ancient_traveler::item::1}
+	if the identifier is "ancienttraveler_item_2":
+		set the result to {ancient_traveler::item::2}
+	if the identifier is "ancienttraveler_item_3":
+		set the result to {ancient_traveler::item::3}
+	if the identifier is "ancienttraveler_refresh_time":
+		set {_time} to difference between {ancient_traveler::refresh_date} and now
+		set {_time} to difference between 24 hours and {_time}
+		set {_time} to "%{_time}%"
+		set {_time} to shortenTime({_time})
+		set {_time} to roundTime({_time})
+		set the result to "%{_time}%"
+
+	#	Daily Rewards
+	
+	if the identifier is "dailyrewards_canclaim":
+		if difference between {daily_rewards::date::%uuid of player%} and now >= 24 hours:
+			set the result to "true"
+	if the identifier is "dailyrewards_timeuntilclaim":
+		set {_time} to difference between {daily_rewards::date::%uuid of player%} and now
+		set {_time} to difference between 24 hours and {_time}
+		set {_time} to "%{_time}%"
+		set {_time} to shortenTime({_time})
+		set {_time} to roundTime({_time})
+		set the result to "%{_time}%"
+	if the identifier is "dailyrewards_timeuntilexpiration":
+		set {_time} to difference between {daily_rewards::date::%uuid of player%} and now
+		if {_time} > 48 hours:
+			set the result to "&aA MOMENT!"
+			stop
+		set {_time} to difference between 24 hours and {_time}
+		set {_time} to difference between 24 hours and {_time}
+		set {_time} to "%{_time}%"
+		set {_time} to shortenTime({_time})
+
+		set {_time} to roundTime({_time})
+		set the result to "%{_time}%"
+	if the identifier is "dailyrewards_daynumber":
+		set the result to "%{daily_rewards::day_number::%uuid of player%}%"
+	
+	#	Boosters
+	
+	if the identifier is "booster_protection":
+		if {booster::protection::date} is set:
+			set the result to "yes"
+	if the identifier is "booster_luck":
+		if {booster::luck::date} is set:
+			set the result to "yes"
+	if the identifier is "booster_xp":
+		if {booster::adventure_pass::date} is set:
+			set the result to "yes"
+	if the identifier is "active_boosters":
+		set the result to "&7No active boosters."
+		if {booster::protection::date} is set:
+			set the result to "&fActive Boosters:"
+		if {booster::luck::date} is set:
+			set the result to "&fActive Boosters:"
+		if {booster::adventure_pass::date} is set:
+			set the result to "&fActive Boosters:"
+	if the identifier is "active_boosters_2":
+		set the result to ""
+		set {_1} to ""
+		set {_2} to ""
+		set {_3} to ""
+		if {booster::protection::date} is set:
+			add "#0078f8&lProtection&f" to {_boosters::*}
+		if {booster::luck::date} is set:
+			add "#2ddd4a&lLuck&f" to {_boosters::*}
+		if {booster::adventure_pass::date} is set:
+			add "#fca044&lAdventure Pass XP&f" to {_boosters::*}
+		if {_boosters::*} is set:
+			set the result to "%{_boosters::*}%"
+
+
+
+
+
+	#	Dungeons
+
+
+
+
+
+	set {_image_1} to ""
+	set {_image_2} to ""
+	set {_image_3} to ""
+	set {_image_4} to ""
+
+	loop 30 times:
+		if the identifier is "dungeon_unlocked_%loop-number%":
+			if IsDungeonUnlocked(player, loop-number) is true:
+				set the result to "true"
+			else:
+				set the result to "false"
+		if the identifier is "dungeon_can_enter_%loop-number%":
+			if CanEnterDungeon(player, loop-number) is true:
+				set the result to "true"
+			else:
+				set the result to "false"
+		if the identifier is "dungeon_image_%loop-number%":
+			if CanEnterDungeon(player, loop-number) is true:
+				set the result to "%{_image_%FindDungeon(loop-number)%}%"
+			else:
+				set the result to "               "
+
+
+	if the identifier is "in_boss_fight":
+		set the result to "false"
+		set {_floor} to metadata value "dungeon_floor" of player
+		if {_floor} is set:
+			set {_bosses::*} to "miner_wrath" and "dracula" and "pharaoh" and "golem"
+			loop {_bosses::*}:
+				set {_boss} to loop-value
+				if {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%} is set:
+					if {dungeons::boss_alive::%{_floor}%::%{_boss}%} is true:
+						set the result to "true"
+					else:
+						set the result to "false"
+#		else:
+#			set the result to "false"
+
+
+	if the identifier is "boss_name":
+		set {_floor} to metadata value "dungeon_floor" of player
+		set {_bosses::*} to "miner_wrath" and "dracula" and "pharaoh" and "golem"
+		loop {_bosses::*}:
+			set {_boss} to loop-value
+			if {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%} is set:
+				if {dungeons::boss_alive::%{_floor}%::%{_boss}%} is true:
+					set the result to "%{dungeons::config::boss::%{_boss}%::name}%"
+
+	if the identifier is "boss_health_progress":
+		set {_floor} to metadata value "dungeon_floor" of player
+		set {_bosses::*} to "miner_wrath" and "dracula" and "pharaoh" and "golem"
+		loop {_bosses::*}:
+			set {_boss} to loop-value
+			if {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%} is set:
+				if {dungeons::boss_alive::%{_floor}%::%{_boss}%} is true:
+					set {_health} to ({dungeons::boss_entity::%{_floor}%::%{_boss}%}'s health / {dungeons::boss_entity::%{_floor}%::%{_boss}%}'s max health)*100
+					set the result to "%{_health}%"
+#					if {dungeons::boss_entity::%{_floor}%::%{_boss}%} is alive:
+#						send "%{dungeons::boss_entity::%{_floor}%::%{_boss}%}'s health%" to all players
+
+
+
+	#	The Forge
+
+
+	if the identifier contains "cancraft_":
+		loop {forge::items_list::*}:
+			set {_item} to loop-value
+			if the identifier is "cancraft_%{_item}%":
+				set the result to "%ForgeCanCraft(player, {_item})%"
+
+
+	if the identifier contains "cancraft_single_item_":
+		loop {forge::items_list::*}:
+			set {_item} to loop-value
+			if the identifier is "cancraft_%{_item}%":
+				set the result to "%ForgeCanCraft(player, {_item})%"
+
+
+
+	if the identifier contains "schematic_unlocked_":
+		set {_item} to identifier
+		replace all "schematic_unlocked_" with "" in {_item}
+		if IsSchematicUnlocked(player, {_item}) is true:
+			set the result to "true"
+		else:
+			set the result to "false"
+
+
+	if the identifier contains "setting_animate_block_placement":
+		if {player_setting::animate_block_placement::%uuid of player%} is false:
+			set the result to "false"
+		else:
+			set the result to "true"
+	if the identifier contains "setting_adventure_apparel":
+		if {player_setting::adventure_apparel::%uuid of player%} is false:
+			set the result to "false"
+		else:
+			set the result to "true"
+	if the identifier contains "setting_ambient_sounds":
+		if {player_setting::ambient_sounds::%uuid of player%} is false:
+			set the result to "false"
+		else:
+			set the result to "true"
+
+
+
+
+
+
+
+
+
+
+
+
+
+#	Adventure Pass
+
+placeholderapi placeholder with the prefix "adventurepass":
+
+	
+	if the identifier is "rewardavailable":
+		if size of {battle_pass::available_rewards::%uuid of player%::*} > 0:
+			set the result to "true"
+	
+	if the identifier is "premium":
+		if {battle_pass::premium::%uuid of player%} is true:
+			set the result to "true"
+		else:
+			set the result to "false"
+
+	if the identifier is "menu_font":
+		if {battle_pass::premium::%uuid of player%} is true:
+			set the result to ""
+		else:
+			set the result to ""
+
+	loop 70 times:
+		if the identifier is "menu_item_%loop-number%_level":
+			set the result to "%{battle_pass::menu::%loop-number%::level}%"
+		if the identifier is "menu_item_%loop-number%_lore":
+			set the result to "%{battle_pass::menu::%loop-number%::lore}%"
+		if the identifier is "menu_item_%loop-number%_material":
+			set the result to "%{battle_pass::menu::%loop-number%::material}%"
+		if the identifier is "menu_item_%loop-number%_amount":
+			set the result to "%{battle_pass::menu::%loop-number%::amount}%"
+		if the identifier is "menu_item_%loop-number%_customdata":
+			set the result to "%{battle_pass::menu::%loop-number%::customdata}%"
+	
+
+	set {_nr} to 0
+	loop 7 times:
+		add 1 to {_nr}
+		set {_nr2} to 0
+		loop 10 times:
+			add 1 to {_nr2}
+			set {_number} to {_nr}+({_nr2}*7)-7
+
+			if the identifier is "item_%{_nr}%_%{_nr2}%_level":
+				set the result to "%{_number}%"
+			if the identifier is "item_%{_nr}%_%{_nr2}%_lore":
+				set the result to "%{battle_pass::menu::%{_number}%::lore}%"
+			if the identifier is "item_%{_nr}%_%{_nr2}%_material":
+				set the result to "%{battle_pass::menu::%{_number}%::material}%"
+			if the identifier is "item_%{_nr}%_%{_nr2}%_potion":
+				set the result to "%{battle_pass::menu::%{_number}%::potion}%"
+				if {battle_pass::menu::%{_number}%::potion} is set:
+					set the result to "%{battle_pass::menu::%{_number}%::potion}%"
+				else:
+					set the result to ""
+
+			if the identifier is "item_%{_nr}%_%{_nr2}%_amount":
+				set the result to "%{battle_pass::menu::%{_number}%::amount}%"
+				if {battle_pass::menu::%{_number}%::amount} is set:
+					set the result to "%{battle_pass::menu::%{_number}%::amount}%"
+				else:
+					set the result to "1"
+
+			if the identifier is "item_%{_nr}%_%{_nr2}%_customdata":
+				if {battle_pass::menu::%{_number}%::customdata} is set:
+					set the result to "%{battle_pass::menu::%{_number}%::customdata}%"
+				else:
+					set the result to "0"
+
+
+	if the identifier is "page":
+		set {_level} to {battle_pass::level::%uuid of player%}
+		if {_level} is not greater than -1:
+			set {_level} to 0
+		set {_level} to ceil({_level}/7)
+		set the result to "%{_level}%"
+		if {_level} is 0:
+			set the result to "1"
+
+
+	loop 70 times:
+		set {_level} to loop-number
+		if the identifier is "rewardavailable_%{_level}%_":
+			if {battle_pass::available_rewards::%uuid of player%::*} contains "_%{_level}%_":
+				set the result to "true"
+
+
+
+	set {_nr} to 0
+	loop 7 times:
+		add 1 to {_nr}
+		set {_nr2} to 0
+		loop 10 times:
+			add 1 to {_nr2}
+			set {_number} to {_nr}+({_nr2}*7)-7
+			if the identifier is "rewardavailable_%{_nr}%_%{_nr2}%_":
+				if {battle_pass::available_rewards::%uuid of player%::*} contains "_%{_number}%_":
+					set the result to "true"
+
+
+
+	if the identifier is "dq_timeuntilreset":
+		set {_time} to difference between {battle_pass::daily_quest::date::%uuid of player%} and now
+		set {_time} to difference between 24 hours and {_time}
+		set {_time} to "%{_time}%"
+		set {_time} to shortenTime({_time})
+		set {_time} to roundTime({_time})
+		set the result to "%{_time}%"
+	if the identifier is "dq_timeuntilexpiration":
+		set {_time} to difference between {battle_pass::daily_quest::date::%uuid of player%} and now
+		if {_time} > 48 hours:
+			set the result to "&aA MOMENT!"
+			stop
+		set {_time} to difference between 24 hours and {_time}
+		set {_time} to difference between 24 hours and {_time}
+		set {_time} to "%{_time}%"
+		set {_time} to roundTime({_time})
+		set the result to "%{_time}%"
+	if the identifier is "wq_timeuntilreset":
+		set {_time} to difference between {battle_pass::weekly_quest::date::%uuid of player%} and now
+		set {_time} to difference between 168 hours and {_time}
+		set {_time} to "%{_time}%"
+		set {_time} to shortenTime({_time})
+		set {_time} to roundTime({_time})
+		set the result to "%{_time}%"
+	if the identifier is "wq_timeuntilexpiration":
+		set {_time} to difference between {battle_pass::weekly_quest::date::%uuid of player%} and now
+		if {_time} > 360 hours:
+			set the result to "&aA MOMENT!"
+			stop
+		set {_time} to difference between 168 hours and {_time}
+		set {_time} to difference between 168 hours and {_time}
+		set {_time} to "%{_time}%"
+		set {_time} to roundTime({_time})
+		set the result to "%{_time}%"
+	
+	
+	if the identifier is "dq_number":
+		set the result to "%{battle_pass::daily_quest::number::%uuid of player%}%"
+	if the identifier is "wq_number":
+		set the result to "%{battle_pass::weekly_quest::number::%uuid of player%}%"
+	
+	if the identifier is "level_progress_percent":
+		set {_xp} to {battle_pass::xp::%uuid of player%}
+		set {_xp_need} to {battle_pass::xp_need::%uuid of player%}
+		set {_progress} to round(({_xp}/{_xp_need})*100)
+		set the result to "%{_progress}%"
+		
+		
+	if the identifier is "level_progress_graphic":
+		set {_xp} to {battle_pass::xp::%uuid of player%}
+		set {_xp_need} to {battle_pass::xp_need::%uuid of player%}
+		set {_progress} to round(({_xp}/{_xp_need})*10)
+		
+		set {_bar} to "▌▌▌▌▌▌▌▌▌▌"
+		set {_fill} to first {_progress} characters of {_bar}
+		set {_unfill} to first 10-{_progress} characters of {_bar}
+		if {_fill} is not set:
+			set {_fill} to ""
+		if {_unfill} is not set:
+			set {_unfill} to ""
+		
+		set the result to "##26c95f%{_fill}%&f%{_unfill}%"
+	if the identifier is "level":
+		set the result to "%{battle_pass::level::%uuid of player%}%"
+	if the identifier is "xp":
+		set the result to "%{battle_pass::xp::%uuid of player%}%"
+	if the identifier is "xp_need":
+		set the result to "%{battle_pass::xp_need::%uuid of player%}%"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#	Guilds
+
+
+placeholderapi placeholder with the prefix "guilds":
+
+
+	#	Reputation Level, XP, XP need
+
+	set {_guilds::*} to "slayers" and "miners" and "ranchers"
+	loop {_guilds::*}:
+		set {_guild} to loop-value-1
+		if the identifier is "%{_guild}%_level":
+			set the result to "%{reputation::%{_guild}%::level::%uuid of player%}%"
+		if the identifier is "%{_guild}%_xp":
+			set the result to "%{reputation::%{_guild}%::xp::%uuid of player%}%"
+		if the identifier is "%{_guild}%_xp_need":
+			set the result to "%{reputation::%{_guild}%::xp_need::%uuid of player%}%"
+		if the identifier is "%{_guild}%_level_model_data":
+			set {_model_data} to 400 + {reputation::%{_guild}%::level::%uuid of player%}
+			set the result to "%{_model_data}%"
+		if the identifier is "%{_guild}%_level_bar":
+			if mod({reputation::%{_guild}%::level::%uuid of player%}, 5) is 0:
+				if {reputation::%{_guild}%::level::%uuid of player%} >= 5:
+					set the result to "5"
+				else:
+					set the result to "0"
+			else:
+				set the result to "%mod({reputation::%{_guild}%::level::%uuid of player%}, 5)%"
+		if the identifier is "%{_guild}%_xp_bar":
+			set {_bars} to {reputation::%{_guild}%::xp::%uuid of player%}/{reputation::%{_guild}%::xp_need::%uuid of player%}
+			set {_bars} to {_bars}*0.2
+			set the result to "%{_bars}%"
+		if the identifier is "%{_guild}%_reward_ready":
+			if size of {reputation::%{_guild}%::rewards::%uuid of player%::*} > 0:
+				set the result to "true"
+			else:
+				set the result to "false"
+
+		set {_nr} to 0
+		loop 9 times:
+			add 1 to {_nr}
+			if the identifier is "%{_guild}%_reward_ready_%{_nr}%":
+				if {reputation::%{_guild}%::rewards::%uuid of player%::*} contains "_%{_nr}%_":
+					set the result to "true"
+				else:
+					set the result to "false"
+			if the identifier is "%{_guild}%_reward_claimed_%{_nr}%":
+				if {reputation::%{_guild}%::rewards_claimed::%uuid of player%::*} contains "_%{_nr}%_":
+					set the result to "true"
+				else:
+					set the result to "false"
+			
+
+			set {_nr2} to 0
+			loop 5 times:
+				add 1 to {_nr2}
+				if the identifier is "%{_guild}%_reward_menu_name_%{_nr}%_%{_nr2}%":
+					if {reputation::rewards::%{_guild}%::%{_nr}%::%{_nr2}%::description} is set:
+						set the result to "%{reputation::rewards::%{_guild}%::%{_nr}%::%{_nr2}%::description}%"
+
+
+
+	#	Time until quests reset
+
+	if the identifier is "time_until_quest_reset":
+		set the result to metadata value "guilds_time_until_quest_reset" of player
+
+	#	Quest Gold and XP Rewards
+	set {_difficulty::*} to "easy" and "medium" and "hard"
+	loop {_difficulty::*}:
+		set {_difficulty} to loop-value
+		if the identifier is "%{_difficulty}%_quest_xp_reward":
+			set the result to "%{reputation::config::xp_rewards::%{_difficulty}%_quest}%"
+		if the identifier is "%{_difficulty}%_quest_gold_reward":
+			set the result to "%{reputation::config::gold_rewards::%{_difficulty}%_quest}%"
+
+	#	Quest Description
+	set {_guilds::*} to "slayers" and "miners" and "ranchers"
+	loop {_guilds::*}:
+		set {_guild} to loop-value
+
+		set {_difficulty::*} to "easy" and "medium" and "hard"
+		loop {_difficulty::*}:
+			set {_difficulty} to loop-value-2
+
+			if the identifier is "%{_guild}%_quest_%{_difficulty}%_desc":
+				set {_quest_nr} to {reputation::%{_guild}%::quest::%{_difficulty}%::number::%uuid of player%}
+				set the result to "%{reputation::config::quest::%{_guild}%::%{_difficulty}%::%{_quest_nr}%::description}%"
+
+	#	Quest Progress State
+	set {_guilds::*} to "slayers" and "miners" and "ranchers"
+	loop {_guilds::*}:
+		set {_guild} to loop-value
+
+		set {_difficulty::*} to "easy" and "medium" and "hard"
+		loop {_difficulty::*}:
+			set {_difficulty} to loop-value-2
+
+			if the identifier is "%{_guild}%_quest_%{_difficulty}%_progress":
+				if {reputation::%{_guild}%::quest::%{_difficulty}%::number::%uuid of player%} is set:
+					if {reputation::%{_guild}%::quest::%{_difficulty}%::number::%uuid of player%} is 999:
+						set the result to "finished"
+					else:
+						set the result to "in progress"
+				else:
+					set the result to "none"
+
+
+
+
+
+
+#	Colors
+
+placeholderapi placeholder with the prefix "color":
+	loop {colors::*}:
+		if the identifier is loop-index:
+			set the result to {colors::%loop-index%}
+
+
+
+
+#	UI
+
+placeholderapi placeholder with the prefix "ui":
+	if the identifier is "setup_update_available":
+		set {_char::*} to "", "", "", "", "", "", "" and ""
+		set the result to "%{_char::%{ui::animation::setup_update_available}%}%"
+	if the identifier is "gold":
+		set the result to shortenNumber(floor(player's money))
+	if the identifier is "gems":
+		set {_gems} to {premium_currency::%uuid of player%}
+		if {_gems} is not set:
+			set {_gems} to 0
+		set the result to shortenNumber({_gems})
+	if the identifier is "content":
+		set the result to metadata value "ui_content" of player
+	if the identifier is "compass":
+		set the result to metadata value "compass" of player
+	if the identifier is "afk":
+		set the result to ""
+		if {afk::config::afk_tag_ingame} is true:
+			if metadata value "inactive" of player is true:
+				set the result to " &f"
+	if the identifier is "server_name":
+		set the result to colored {interface::server_name}
+
+	if the identifier contains "helmet" or "chestplate" or "leggings" or "boots":
+		if the identifier contains "helmet":
+			set {_i} to "%type of player's helmet%"
+			set {_type} to GetCustomItemId(player's helmet)
+		if the identifier contains "chestplate":
+			set {_i} to "%type of player's chestplate%"
+			set {_type} to GetCustomItemId(player's chestplate)
+		if the identifier contains "leggings":
+			set {_i} to "%type of player's leggings%"
+			set {_type} to GetCustomItemId(player's leggings)
+		if the identifier contains "boots":
+			set {_i} to "%type of player's boots%"
+			set {_type} to GetCustomItemId(player's boots)
+		
+		if the identifier contains "model_data":
+			if {forge::item::%{_type}%::custom_model_data} is set:
+				set the result to {forge::item::%{_type}%::custom_model_data}
+			else:
+				set the result to 0
+		if the identifier contains "name":
+			if {forge::item::%{_type}%::name} is set:
+				set the result to "%{forge::item::%{_type}%::name}%"
+			else:
+				set the result to capitalize({_i})
+		if the identifier contains "lore":
+			set the result to "%{forge::item::%{_type}%::lore::*}%"
+		if the identifier doesn't contain "name" or "lore" or "model_data":
+			set {_i} to uppercase {_i}
+			replace all " " with "_" in {_i}
+			set the result to "%{_i}%"
+
+			
+
+
+
+
+

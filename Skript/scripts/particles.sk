@@ -1,0 +1,211 @@
+import:
+    java.util.concurrent.ExecutorService
+    java.util.concurrent.Executors
+    ch.njol.skript.Skript
+    java.lang.Runnable
+
+
+on load:
+	ParticlesReload()
+
+function AsyncSpawnParticles():
+	set {_functions::run} to function reference "SpawnParticlesTick"
+	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+	{-Threads::Global}.submit({_runnable})
+
+function SpawnParticlesTick():
+	draw 50 cloud at {-particle::location::big_waterfall} with offset vector(0.5, 0.5, 2.5) with extra 0.02
+	draw 300 ash at {-particle::location::wilderness_portal} with offset vector(4, 2, 2) with extra 0
+	draw 10 spore blossom air at {-particle::location::ranchers_garden} with offset vector(6, 2, 8) with extra 0
+	draw 7 white ash at {-particle::location::ancient_traveler} with offset vector(3, 2, 3) with extra 0
+	draw 50 ash at {-particle::location::mine} with offset vector(7, 3, 7) with extra 0
+	draw 25 cloud at {-particle::location::fountain_1} with offset vector(1.2, 0.2, 0.9) with extra 0.02
+	draw 25 cloud at {-particle::location::fountain_2} with offset vector(1.2, 0.2, 0.9) with extra 0.02
+	draw 25 cloud at {-particle::location::fountain_3} with offset vector(0.9, 0.2, 1.2) with extra 0.02
+	draw 25 cloud at {-particle::location::fountain_4} with offset vector(0.9, 0.2, 1.2) with extra 0.02
+
+
+
+function ParticlesCreateConfigFile():
+	load yaml "unlimited_adventures/AdventureCore/particles.yml" as "config"
+
+	set yaml value "version" from "config" to 1
+	set the comments of yaml node "version" from "config" to "Please DO NOT change version number!"
+
+	set yaml value "enabled.spawn_particles" from "config" to true
+	set yaml value "enabled.armor_glint" from "config" to true
+	set yaml value "enabled.cave_dust" from "config" to true
+	save yaml "config"
+
+
+
+function ParticlesReload():
+	load yaml "unlimited_adventures/AdventureCore/particles.yml" as "config"
+	if yaml value "version" from "config" is not set:
+		wait 1 tick
+		ParticlesCreateConfigFile()
+	
+	
+	if yaml value "enabled.spawn_particles" from "config" is set:
+		set {particles::enabled::spawn_particles} to yaml value "enabled.spawn_particles" from "config"
+	if yaml value "enabled.armor_glint" from "config" is set:
+		set {particles::enabled::armor_glint} to yaml value "enabled.armor_glint" from "config"
+	if yaml value "enabled.cave_dust" from "config" is set:
+		set {particles::enabled::cave_dust} to yaml value "enabled.cave_dust" from "config"
+	save yaml "config"
+
+	set {-particle::location::big_waterfall} to location(639, 59.5, 963, world "spawn")
+	set {-particle::location::wilderness_portal} to location(757, 76, 980, world "spawn")
+	set {-particle::location::ranchers_garden} to location(810, 98, 820, world "spawn")
+	set {-particle::location::ancient_traveler} to location(780, 85, 885, world "spawn")
+	set {-particle::location::mine} to location(706, 72, 852, world "spawn")
+	set {-particle::location::fountain_1} to location(729.5, 69.3, 903.5, world "spawn")
+	set {-particle::location::fountain_2} to location(729.5, 69.3, 897.5, world "spawn")
+	set {-particle::location::fountain_3} to location(732.5, 69.3, 900.5, world "spawn")
+	set {-particle::location::fountain_4} to location(726.5, 69.3, 900.5, world "spawn")
+
+
+
+
+
+
+every 5 seconds:
+	if {particles::enabled} is true:
+		loop 20 times:
+			AsyncSpawnParticles()
+			wait 0.25 second
+
+
+
+command /particlesreload:
+	permission: admin
+	trigger:
+		ParticlesReload()
+
+
+
+
+every second:
+	loop 2 times:
+		loop {-players::*}:
+			AsyncCaveParticles(loop-value-2)
+			AsyncShineParticles(loop-value-2)
+		wait 0.5 second
+
+function AsyncCaveParticles(player: player):
+	set {_functions::run} to function reference "CaveParticles" called with {_player}
+	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+	{-Threads::Global}.submit({_runnable})
+function AsyncShineParticles(player: player):
+	set {_functions::run} to function reference "ShineParticles" called with {_player}
+	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+	{-Threads::Global}.submit({_runnable})
+
+
+
+function CaveParticles(player: player):
+	if world of {_player} is not "spawn":
+		if light level at {_player} <= 14:
+			if y coordinate of {_player} < 30:
+				if highest block at {_player} is set:
+					draw 100 ash at location 3 meter above {_player} with offset vector(7, 2, 7) with extra 0
+
+function ShineParticles(player: player):
+#	if {_player}'s tool is any diamond tool or any netherite tool or diamond sword or netherite sword:
+#		set {_shine} to true
+#	if GetCustomItemId({_player}'s helmet) is "dragonscale_helmet":
+#		set {_shine} to true
+#	if GetCustomItemId({_player}'s chestplate) is "dragonscale_chestplate":
+#		set {_shine} to true
+#	if GetCustomItemId({_player}'s leggings) is "dragonscale_leggings":
+#		set {_shine} to true
+#	if GetCustomItemId({_player}'s boots) is "dragonscale_boots":
+#		set {_shine} to true
+	if {_player}'s helmet slot is diamond helmet or netherite helmet:
+		set {_shine} to true
+	if {_player}'s chestplate slot is diamond chestplate or netherite chestplate:
+		set {_shine} to true
+	if {_player}'s leggings slot is diamond leggings or netherite leggings:
+		set {_shine} to true
+	if {_player}'s boots slot is diamond boots or netherite boots:
+		set {_shine} to true
+	if {_shine} is true:
+		SpawnArmorShineParticles(location of {_player}, 1, 0.85, 0.4, 0.3, 0.35, 0.1)
+		set {_var} to random integer between 1 and 4
+		set {_loc} to location 0.85 meter above {_player}
+		if {_var} is 1:
+			set {_loc} to location 0.4 meter north of {_loc}
+			draw 1 sculk charge pop at {_loc} with offset vector(0.3, 0.35, 0.1) with extra 0
+		if {_var} is 2:
+			set {_loc} to location 0.4 meter south of {_loc}
+			draw 1 sculk charge pop at {_loc} with offset vector(0.3, 0.35, 0.1) with extra 0
+		if {_var} is 3:
+			set {_loc} to location 0.4 meter west of {_loc}
+			draw 1 sculk charge pop at {_loc} with offset vector(0.1, 0.35, 0.3) with extra 0
+		if {_var} is 4:
+			set {_loc} to location 0.4 meter east of {_loc}
+			draw 1 sculk charge pop at {_loc} with offset vector(0.1, 0.35, 0.3) with extra 0
+			
+
+
+
+
+function SpawnArmorShineParticles(init_loc: location, amount: integer = 1, height: number, locationOffset: number, offsetX: number, offsetY: number, offsetZ: number):
+	loop {_amount} times:
+		set {_loc} to location {_height} meter above {_init_loc}
+#		set {_dir} to random element out of north, south, west and east
+#		set {_loc} to location {_locationOffset} meter {_dir} of {_loc}
+		set {_var} to random integer between 1 and 4
+		if {_var} is 1:
+			set {_loc} to location {_locationOffset} meter north of {_loc}
+		if {_var} is 2:
+			set {_loc} to location {_locationOffset} meter south of {_loc}
+		if {_var} is 3:
+			set {_loc} to location {_locationOffset} meter west of {_loc}
+		if {_var} is 4:
+			set {_loc} to location {_locationOffset} meter east of {_loc}
+		draw 1 sculk charge pop at {_loc} with offset vector({_offsetX}, {_offsetY}, {_offsetZ}) with extra 0.01
+
+
+#on damage:
+#	if victim is skeleton:
+#		loop random integer between 2 and 5 times:
+#			BoneParticle(location of victim)
+
+function BoneParticle(loc: location):
+	add 1 to y coordinate of {_loc}
+	set pitch of {_loc} to random integer between -30 and 30
+	set yaw of {_loc} to random integer between -30 and 30
+	spawn item display at {_loc}
+	set {_display} to last spawned item display
+	set display item of {_display} to bone
+	set {_size} to random number between 0.5 and 0.8
+	set display scale of {_display} to vector({_size},{_size},1)
+
+	set {_vector} to {_loc}
+	set pitch of {_vector} to random number between 0 and -50
+	set yaw of {_vector} to random number between -360 and 360
+	set display translation of {_display} to vector(0,-0.1,0)
+	shoot a snowball from {_vector} at speed 0.25
+	set {_bone} to last shot snowball
+	make {_display} ride {_bone}
+
+#    set {_fraction} to {_size}/6
+#    set {_size} to 0.1
+#    loop 5 times:
+#        add {_fraction} to {_size}
+#        set display scale of {_display} to vector({_size},{_size},loop-number/5)
+#        wait 1 tick
+    
+	wait 5 ticks
+	push {_bone} downwards with speed 0.2
+	wait 0.5 second
+    
+#    loop 5 times:
+#        wait 1 tick
+#        subtract {_fraction} from {_size}
+#        set display scale of {_display} to vector({_size},{_size},1-(loop-number/5))
+
+	kill {_display}
+
+

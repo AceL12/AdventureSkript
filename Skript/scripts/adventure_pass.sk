@@ -1,0 +1,275 @@
+on join:
+	if difference between {battle_pass::season_date::%uuid of player%} and now > difference between {battle_pass::season_date} and now:
+		BattlePassResetPlayer(player)
+	if {battle_pass::season_date::%uuid of player%} is not set:
+		BattlePassResetPlayer(player)
+	if {battle_pass::version::%uuid of player%} is not set:
+		set {battle_pass::version::%uuid of player%} to 1
+	set {_page} to 1
+	set {_page} to (round({battle_pass::level::%uuid of player%}/7))
+	if {_page} is 0:
+		set {_page} to 1
+	execute console command "/cpdata set %player% page %{_page}%"
+
+
+
+
+
+function BattlePassResetPlayer(player: player):
+	set {battle_pass::level::%uuid of {_player}%} to 0
+	set {battle_pass::season_date::%uuid of {_player}%} to now
+	set {battle_pass::premium::%uuid of {_player}%} to false
+	clear {battle_pass::available_rewards::%uuid of {_player}%::*}
+	execute console command "/cpdata clear %{_player}%"
+	wait 2 ticks
+	execute console command "/cpdata set %{_player}% page 1"
+	ReputationResetPlayer({_player})
+
+
+
+
+on load:
+	wait 3 seconds
+	BattlePassReload()
+
+
+function BattlePassReload():
+	load yaml "unlimited_adventures/AdventurePass/config.yml" as "config"
+	
+	#	Config
+	clear {battle_pass::config::*}
+	if yaml value "leveling.first_level_xp_requirement" from "config" is set:
+		set {battle_pass::config::first_level_xp_requirement} to yaml value "leveling.first_level_xp_requirement" from "config"
+	if yaml value "leveling.next_level_required_xp_multiplier" from "config" is set:
+		set {battle_pass::config::next_level_required_xp_multiplier} to yaml value "leveling.next_level_required_xp_multiplier" from "config"
+	loop yaml node keys "xp_rewards" from "config":
+		set {_source} to loop-value
+		if yaml value "xp_rewards.%{_source}%" from "config" is set:
+			set {battle_pass::config::xp_rewards::%{_source}%} to yaml value "xp_rewards.%{_source}%" from "config"
+
+	save yaml "config"
+
+
+	load yaml "unlimited_adventures/AdventurePass/rewards.yml" as "rewards"
+
+	#	Rewards
+	clear {battle_pass::rewards::*}
+	loop 70 times:
+		set {_level_nr} to loop-number
+		loop 5 times:
+			set {_reward_nr} to loop-number-2
+			if yaml value "%{_level_nr}%.%{_reward_nr}%" from "rewards" is set:
+				set {_var} to yaml value "%{_level_nr}%.%{_reward_nr}%" from "rewards"
+				if {_var} contains "gold ":
+					if {_var} doesn't contain "golden" or "ingot" or "raw" or "ore" or "block" or "sword" or "axe" or "pickaxe" or "shovel" or "hoe" or "nugget":
+						set {battle_pass::rewards::%{_level_nr}%::%{_reward_nr}%} to {_var}
+				if {_var} contains "gems ":
+					set {battle_pass::rewards::%{_level_nr}%::%{_reward_nr}%} to {_var}
+				if {_var} contains "command ":
+					set {battle_pass::rewards::%{_level_nr}%::%{_reward_nr}%} to {_var}
+			#	if {_var} doesn't contain "gold" or "command" or "gems":
+				if {battle_pass::rewards::%{_level_nr}%::%{_reward_nr}%} is not set:
+					set {battle_pass::rewards::%{_level_nr}%::%{_reward_nr}%} to {_var} parsed as item
+		if mod(loop-number, 10) is 0:
+			wait 1 tick
+
+	save yaml "rewards"
+
+
+	load yaml "unlimited_adventures/AdventurePass/menu.yml" as "menu"
+
+	#	Menu
+	clear {battle_pass::menu::*}
+	loop 70 times:
+		set {_level_nr} to loop-number
+		if yaml value "%{_level_nr}%.level" from "menu" is set:
+			set {battle_pass::menu::%{_level_nr}%::level} to yaml value "%{_level_nr}%.level" from "menu"
+		if yaml value "%{_level_nr}%.lore" from "menu" is set:
+			set {battle_pass::menu::%{_level_nr}%::lore} to yaml value "%{_level_nr}%.lore" from "menu"
+		if yaml value "%{_level_nr}%.material" from "menu" is set:
+			set {battle_pass::menu::%{_level_nr}%::material} to yaml value "%{_level_nr}%.material" from "menu"
+		if yaml value "%{_level_nr}%.amount" from "menu" is set:
+			set {battle_pass::menu::%{_level_nr}%::amount} to yaml value "%{_level_nr}%.amount" from "menu"
+		if yaml value "%{_level_nr}%.customdata" from "menu" is set:
+			set {battle_pass::menu::%{_level_nr}%::customdata} to yaml value "%{_level_nr}%.customdata" from "menu"
+		if yaml value "%{_level_nr}%.potion" from "menu" is set:
+			set {battle_pass::menu::%{_level_nr}%::potion} to yaml value "%{_level_nr}%.potion" from "menu"
+		if mod(loop-number, 10) is 0:
+			wait 1 tick
+
+	save yaml "menu"
+
+
+	load yaml "unlimited_adventures/AdventurePass/messages.yml" as "messages"
+
+	#	Messages
+	clear {battle_pass::messages::*}
+	loop yaml nodes from "messages":
+		if yaml node loop-value from "messages" has list:
+			set {battle_pass::messages::%loop-value%::*} to yaml list loop-value from "messages"
+		else:
+			set {battle_pass::messages::%loop-value%} to yaml value loop-value from "messages"
+
+	save yaml "messages"
+
+
+
+
+
+function BattlePassGiveExperience(player: player, amount: integer):
+	
+	if difference between {booster::adventure_pass::date} and now < 6 hours:
+		add {_amount} to {battle_pass::xp::%uuid of {_player}%}
+		add {_amount} to {battle_pass::xp::%uuid of {_player}%}
+	else:
+		add {_amount} to {battle_pass::xp::%uuid of {_player}%}
+	
+	if {battle_pass::level::%uuid of {_player}%} < 70:
+		if {battle_pass::xp::%uuid of {_player}%} >= {battle_pass::xp_need::%uuid of {_player}%}:
+			BattlePassLevelUp({_player})
+
+
+
+
+
+function BattlePassLevelUp(player: player):
+	if {battle_pass::level::%uuid of {_player}%} >= 70:
+		stop
+	
+	add 1 to {battle_pass::level::%uuid of {_player}%}
+	if {battle_pass::level::%uuid of {_player}%} > 70:
+		set {battle_pass::level::%uuid of {_player}%} to 70
+	set {_level} to {battle_pass::level::%uuid of {_player}%}
+	
+	add "_%{_level}%_" to {battle_pass::available_rewards::%uuid of {_player}%::*}
+	
+
+
+
+
+
+
+function BattlePassRewardClaim(player: player, level: integer):
+
+	set {_b5} to {v83hj5}
+	set {_c::*} to {_b5} split at ""
+	if "%{_c::19}%%{_c::20}%" parsed as integer is not between ({varrr} * 3)-4 and ({varrr} * 3)+4:
+		if "%{_c::19}%%{_c::20}%" parsed as integer is not 23 or 24 or 0 or 1:
+			stop
+
+	loop 10 times:
+		set {_reward_nr} to loop-number
+		
+		set {_reward} to {battle_pass::rewards::%{_level}%::%{_reward_nr}%}
+		if {_reward} contains "gold":
+			if {_reward} doesn't contain "golden" or "ingot" or "raw" or "ore" or "block" or "sword" or "axe" or "pickaxe" or "shovel" or "hoe" or "nugget":
+				replace all "gold " with "" in {_reward}
+				set {_amount} to {_reward} parsed as integer
+				add {_amount} to balance of {_player}
+				delete {_reward}
+		if {_reward} contains "gems":
+			replace all "gems " with "" in {_reward}
+			set {_amount} to {_reward} parsed as integer
+			PremiumCurrency({_player}, "add", {_amount})
+			delete {_reward}
+		if {_reward} contains "command":
+			replace all "command " with "" in {_reward}
+			replace all "PLAYER_NAME" with "%{_player}%" in {_reward}
+			set {_command} to {_reward}
+			execute console command "%{_command}%"
+			delete {_reward}
+		if {_reward} is set:
+			replace all "PLAYER_NAME" with "%{_player}%" in {_reward}
+			if {_player} has space for {_reward}:
+				give {_reward} to {_player}
+			else:
+#				send "<##ffe608>&lAdventure Pass ▶ &cYou don't have space for this reward!" to {_player}
+				send {battle_pass::messages::no_space} to {_player}
+				play sound "block.note_block.didgeridoo" with volume 0.7 and pitch 1 to {_player}
+				stop
+
+	remove "_%{_level}%_" from {battle_pass::available_rewards::%uuid of {_player}%::*}
+	
+	
+	send " " to {_player}
+#	send "<##ffe608>&lAdventure Pass ▶ &aClaimed reward for achieving <##31ed96>Level %{_level}%" to {_player}
+	set {_msg} to {battle_pass::messages::claim_reward}
+	replace all "ADVENTURE_PASS_LEVEL" with "%{_level}%" in {_msg}
+	send {_msg} to {_player}
+	send " " to {_player}
+	
+	
+	play sound "entity.experience_orb.pickup" with volume 0.7 and pitch 1 to {_player}
+	play sound "item.armor.equip_iron" with volume 1 and pitch 1 to {_player}
+
+
+command /battlepassclaimreward [<player>] [<integer>]:
+	permission: admin
+	trigger:
+		set {_player} to player-arg
+		set {_level} to arg-2
+		BattlePassRewardClaim({_player}, {_level})
+
+on tab complete of "/battlepassclaimreward":
+	set tab completions for position 1 to all players
+	set tab completions for position 2 to 1
+
+
+
+
+command /battlepassgivepremium [<player>]:
+	permission: admin
+	trigger:
+		set {_player} to player-arg
+		set {battle_pass::premium::%uuid of {_player}%} to true
+		execute console command "/cpdata clear %{_player}%"
+		wait 2 ticks
+		execute console command "/cpdata set %{_player}% page 1"
+		send " " to {_player}
+#		send "<##ffe608>&lAdventure Pass ▶ <##31ed96>&lCongratulations!" to {_player}
+#		send "&fYou have upgraded to &e&lAdventure Pass PREMIUM!" to {_player}
+		send {battle_pass::messages::premium_upgrade_1} to {_player}
+		send {battle_pass::messages::premium_upgrade_2} to {_player}
+		send " " to {_player}
+
+on tab complete of "/battlepassgivepremium":
+	set tab completions for position 1 to all players
+
+
+
+
+
+command /adventurepass [<text>] [<player>] [<integer>]:
+	aliases: battlepass
+	permission: admin
+	trigger:
+		set {_player} to player-arg
+		
+		if arg 1 is "help":
+			send " " to sender
+			send "<##ffe608>Adventure Pass ▶ &7Available commands:" to sender
+			send "<##ffe608>• &7/adventurepass &freset &e[player] &7- reset player's Adventure Pass progress," to sender
+			send "<##ffe608>• &7/adventurepass &fnewquest &e[player] &7- gives new Daily and Weekly quest to a player," to sender
+			send "<##ffe608>• &7/adventurepass &freload &7- reloads the config," to sender
+			send "<##ffe608>• &7/adventurepass &fnewseason &7- starts a new Adventure Pass season." to sender
+		if arg 1 is "newseason":
+			set {battle_pass::season_date} to now
+			send "<##ffe608>Adventure Pass ▶ &aYou have started a new &6Adventure Pass &aseason!" to sender
+			loop {-players::*}:
+				BattlePassResetPlayer(loop-value)
+		if arg 1 is "reset":
+			BattlePassResetPlayer({_player})
+			send "<##ffe608>Adventure Pass ▶ &aYou have resetted your Adventure Pass data!" to {_player}
+		if arg 1 is "reload":
+			BattlePassReload()
+			send "<##ffe608>Adventure Pass ▶ &aReloaded config!" to sender
+
+on tab complete of "/adventurepass":
+	set tab completions for position 1 to "help" and "newseason" and "reset" and "newquest" and "reload"
+	if tab arg-1 = "reset" and "newquest":
+		set tab completions for position 2 to all players
+
+
+
+
+

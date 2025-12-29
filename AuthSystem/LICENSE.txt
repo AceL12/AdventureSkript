@@ -1,0 +1,6 @@
+SOFTWARE LICENSE AGREEMENT
+
+This software is protected under applicable copyright laws. Unauthorized distribution or modification is prohibited.  
+The software is provided "as is" without any warranty. Attempts to reverse-engineer or bypass security features are strictly forbidden.
+
+All rights reserved © 2025 Ender Nerds

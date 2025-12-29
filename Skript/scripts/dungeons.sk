@@ -1,0 +1,2705 @@
+on skript load:
+	DungeonsSyncMonsters()
+
+on load:
+	DungeonsDataReload()
+	DungeonsFloorsReload()
+	DungeonsChestsReload()
+	DungeonsMobsReload()
+	DungeonsBossesReload()
+	DungeonsMessagesReload()
+
+every 5 seconds:
+	DungeonsCheckSpawnMonsters()
+	DungeonsCheckSpawnBoss()
+	DungeonsCheckDespawnBoss()
+	DungeonsCheckRespawnBlocks()
+	DungeonsCheckSpawnPreview()
+
+options:
+	prefix: <##f74154>Dungeons
+	mob_list: "zombie" and "skeleton" and "spider" and "ghost" and "husk" and "creeper" and "spider"
+
+
+function DungeonsSyncMonsters():
+	delete {dungeons::alive_monsters::*}
+	set {dungeons::killed_monsters::*} to 0
+
+
+function DungeonsPlayerSyncMonsters(player: player, floor: integer):
+	set {_names::*} to "&cZombie" and "&cSkeleton" and "&cSpider" and "&cGhost" and "&cHusk" and "&c&lMiner's Wrath" and "&c&lDracula" and "&c&lPharaoh"
+	if {dungeons::loc::boss_spawn::%{_floor}%::*} is set:
+		if size of GetPlayersInDungeon({_floor}) is 1:
+			DungeonsKillAllBosses()
+
+			loop 30 times:
+				if "%region at {_player}%" contains "dungeon_%loop-number% in":
+					set {_floor} to loop-number
+
+					if {_floor} is 3:
+						set {dungeons::boss_death_date::%{_floor}%::miner_wrath} to now
+						subtract 10 hours from {dungeons::boss_death_date::%{_floor}%::miner_wrath}
+
+					if {_floor} is 6:
+						set {dungeons::boss_death_date::%{_floor}%::dracula} to now
+						subtract 10 hours from {dungeons::boss_death_date::%{_floor}%::dracula}
+
+					if {_floor} is 9:
+						set {dungeons::boss_death_date::%{_floor}%::pharaoh} to now
+						subtract 10 hours from {dungeons::boss_death_date::%{_floor}%::pharaoh}
+
+#		loop all entities in radius 200 around {_player}:
+#			if loop-entity is an skeleton or iron golem or vindicator:
+#				if name of loop-entity is "&c&lMiner's Wrath":
+#					set {_type} to "miner_wrath"
+#				if name of loop-entity is "&c&lDracula" or "&c&lLord Dracula":
+#					set {_type} to "dracula"
+#				if name of loop-entity is "&c&lPharaoh":
+#					set {_type} to "pharaoh"
+#				send "%name of loop-entity%" to {_player}
+#				send "&bSyncing boss! %{_type}%" to all players
+#				send "%{_type}%" to all players
+#				if {_type} is set:
+#					if {dungeons::boss_entity::%{_floor}%::%{_type}%} is not alive:
+#						send "&a&lResetting boss entity!" to all players
+#						set {_entity} to loop-entity
+#						set {_uuid} to uuid of {_entity}
+#						set {dungeons::boss_alive::%{_floor}%::%{_type}%} to true
+#						set {dungeons::boss_entity::%{_floor}%::%{_type}%} to loop-entity
+#						set {dungeons::boss_uuid::%{_floor}%::%{_type}%} to {_uuid}
+#						set metadata value "ability_use_date" of loop-entity to now
+
+
+	if {dungeons::alive_monsters::%{_floor}%::zombie} is not set:
+		set {dungeons::alive_monsters::%{_floor}%::zombie} to 0
+		set {dungeons::alive_monsters::%{_floor}%::skeleton} to 0
+		set {dungeons::alive_monsters::%{_floor}%::spider} to 0
+		set {dungeons::alive_monsters::%{_floor}%::ghost} to 0
+		set {dungeons::alive_monsters::%{_floor}%::husk} to 0
+		loop all entities in radius 200 around {_player}:
+			if "%region at loop-entity%" contains "dungeon_%{_floor}% in":
+
+
+				
+				if {_names::*} contains name of loop-entity:
+					set metadata value "floor" of loop-entity to {_floor}
+
+
+				if name of the loop-entity contains "&cZombie":
+					set {_mob} to "zombie"
+				if name of the loop-entity contains "&cSkeleton":
+					set {_mob} to "skeleton"
+				if name of the loop-entity contains "&cSpider":
+					set {_mob} to "spider"
+				if name of the loop-entity contains "&cGhost":
+					set {_mob} to "ghost"
+				if name of the loop-entity contains "&cHusk":
+					set {_mob} to "husk"
+				
+				if {_mob} is set:
+					if {dungeons::alive_monsters::%{_floor}%::%{_mob}%} > {dungeons::max_monsters::%{_mob}%::%{_floor}%}:
+						delete loop-entity
+					else:
+						add 1 to {dungeons::alive_monsters::%{_floor}%::%{_mob}%}
+
+command /dtest:
+	permission: admin
+	trigger:
+		set {_p_floor} to metadata value "dungeon_floor" of player
+		send "Personal Kills: %{dungeons::killed_monsters::%uuid of player%}%  &7Floor kills: %{dungeons::killed_monsters::%{_p_floor}%}%" to player
+
+
+
+function DungeonsDespawnAllMonsters(player: player):
+	loop all monsters in radius 200 of {_player}:
+		set {_floor_amount} to GetFloorAmount()
+		loop {_floor_amount} times:
+			set {_nr} to loop-number-2
+			if "%region at loop-entity%" contains "dungeon_%{_nr}% in":
+				set {_floor} to {_nr}
+		if name of the loop-entity contains "&cZombie":
+			delete loop-entity
+			if {dungeons::alive_monsters::%{_floor}%::zombie} > 0:
+				remove 1 from {dungeons::alive_monsters::%{_floor}%::zombie}
+		if name of loop-entity contains "&c&lZombie Brute":
+			delete loop-entity
+		if name of the loop-entity contains "&cSkeleton":
+			delete loop-entity
+			if {dungeons::alive_monsters::%{_floor}%::skeleton} > 0:
+				remove 1 from {dungeons::alive_monsters::%{_floor}%::skeleton}
+		if name of loop-entity contains "&c&lSkeleton King":
+			delete loop-entity
+		if name of the loop-entity contains "&cSpider":
+			delete loop-entity
+			if {dungeons::alive_monsters::%{_floor}%::spider} > 0:
+				remove 1 from {dungeons::alive_monsters::%{_floor}%::spider}
+		if name of the loop-entity contains "&cGhost":
+			delete loop-entity
+			if {dungeons::alive_monsters::%{_floor}%::ghost} > 0:
+				remove 1 from {dungeons::alive_monsters::%{_floor}%::ghost}
+		if name of the loop-entity contains "&cHusk":
+			delete loop-entity
+			if {dungeons::alive_monsters::%{_floor}%::husk} > 0:
+				remove 1 from {dungeons::alive_monsters::%{_floor}%::husk}
+
+		set {_mobs::*} to "zombie", "skeleton", "spider", "ghost" and "husk"
+		loop {_mobs::*}:
+			set {dungeons::alive_monsters::%{_floor}%::%loop-value-2%} to 0
+
+	DungeonsKillAllBosses()
+
+	loop 30 times:
+		if "%region at {_player}%" contains "dungeon_%loop-number% in":
+			set {_floor} to loop-number
+
+			if {_floor} is 3:
+				set {dungeons::boss_death_date::%{_floor}%::miner_wrath} to now
+				subtract 10 hours from {dungeons::boss_death_date::%{_floor}%::miner_wrath}
+
+			if {_floor} is 6:
+				set {dungeons::boss_death_date::%{_floor}%::dracula} to now
+				subtract 10 hours from {dungeons::boss_death_date::%{_floor}%::dracula}
+
+			if {_floor} is 9:
+				set {dungeons::boss_death_date::%{_floor}%::pharaoh} to now
+				subtract 10 hours from {dungeons::boss_death_date::%{_floor}%::pharaoh}
+
+
+
+function DungeonsFixSpawning(player: player):
+	set {_loc} to location of {_player}
+	loop 20 times:
+		set {_txt} to "%loop-number%"
+		if {dungeons::loc::%{_txt}%} is set:
+			set metadata value "tp_date" of {_player} to now
+			set metadata value "tp_cooldown" of {_player} to 2 seconds
+			KillBacktool({_player})
+			teleport {_player} to {dungeons::loc::%{_txt}%}
+			play sound "entity.chicken.egg" with volume 0.7 and pitch 1 to {_player}
+			play sound "entity.experience_orb.pickup" with volume 0.3 and pitch 1 to {_player}
+			send action bar "&aFixing dungeon %{_txt}%..." to {_player}
+			wait 14 ticks
+			DungeonsDespawnAllMonsters({_player})
+			wait 2 ticks
+	teleport {_player} to {_loc}
+	wait 8 ticks
+	play sound "entity.player.levelup" with volume 0.8 and pitch 1 to {_player}
+	send "&f[{@prefix}&f] &aYou have succesfully despawned excessive mobs." to {_player}
+	send "&fFrom now on, mobs should be tracked and spawned normally." to {_player}
+
+
+
+
+
+
+
+
+
+on spawn:
+	if event-entity is a monster or animal:
+		if "%region at event-entity%" contains "dungeon":
+			wait 0.5 second
+			if metadata value "floor" of event-entity is not set:
+				delete event-entity
+
+
+
+on command "tpa" or "tpask" or "tpahere" or "etpa" or "call":
+	if player doesn't have permission "admin":
+		loop {-players::*}:
+			if arguments contains "%loop-value%":
+				if "%world of loop-value%" contains "dungeon":
+					cancel event
+					set {_msg} to {dungeons::messages::cant_teleport}
+					replace all "PLAYER_NAME" with "%loop-value%" in {_msg}
+					send {_msg} to sender
+					exit loop
+
+
+
+on command "sethome" or "claim":
+	if "%world of sender%" contains "dungeon":
+		if player doesn't have permission "admin":
+			cancel event
+			send "&cYou cannot use &6/%command% &chere!" to sender
+
+
+
+function DungeonsDataReload():
+	
+	#	Creating data files
+	set {_files::*} to "chests" and "respawnable_blocks" and "portals" and "locations" and "monster_spawns" and "boss_spawns"
+	loop {_files::*}:
+		load yaml "unlimited_adventures/Dungeons/FloorData/%loop-value%.yml" as "%loop-value%"
+		if yaml value "version" from "%loop-value%" is not set:
+			wait 1 tick
+			DungeonsDataCreateFile("%loop-value%")
+		save yaml "%loop-value%"
+
+	#	Loading data files
+	loop {_files::*}:
+		set {_file} to loop-value
+		load yaml "unlimited_adventures/Dungeons/FloorData/%loop-value%.yml" as "%{_file}%"
+		
+
+
+
+
+		if loop-value is "chests":
+			delete {dungeons::chests::locations::*}
+			loop yaml nodes from "chests":
+				loop yaml list loop-value-2 from {_file}:
+					set {_loc::*} to "%loop-value-3%" split by ", "
+					add location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world "dungeons") to {dungeons::chests::locations::*}
+
+
+		if loop-value is "respawnable_blocks":
+			delete {dungeons::respawnable_blocks::*}
+			loop yaml nodes from "respawnable_blocks":
+				set {_floor_nr} to loop-value-2
+				loop yaml node keys "%{_floor_nr}%" from "respawnable_blocks":
+					set {_nr} to loop-value-3
+					set {_loc} to yaml value "%{_floor_nr}%.%{_nr}%.loc" from "respawnable_blocks"
+					set {_loc::*} to "%{_loc}%" split at ", "
+					set {dungeons::respawnable_blocks::%{_floor_nr}%::loc::%{_nr}%} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world "dungeons")
+					set {dungeons::respawnable_blocks::%{_floor_nr}%::type::%{_nr}%} to yaml value "%{_floor_nr}%.%{_nr}%.type" from "respawnable_blocks" parsed as type
+
+
+		if loop-value is "portals":
+			delete {dungeons::portals::*}
+			loop yaml nodes from "portals":
+				set {_portal_nr} to loop-value-2
+
+				set {_world} to yaml value "%{_portal_nr}%.world" from "portals"
+				set {_locations::*} to yaml list "%{_portal_nr}%.loc" from "portals"
+				loop {_locations::*}:
+					set {_nr} to loop-value-3
+					set {_loc::*} to "%loop-value-3%" split at ", "
+					set {dungeons::portals::%{_portal_nr}%::loc::%{_nr}%} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world {_world})
+				
+				if yaml value "%{_portal_nr}%.require_key" from "portals" is set:
+					set {dungeons::portals::%{_portal_nr}%::require_key} to yaml value "%{_portal_nr}%.require_key" from "portals"
+				else:
+					set {dungeons::portals::%{_portal_nr}%::require_key} to false
+#				send "%{dungeons::portals::%{_portal_nr}%::loc::*}%" to all players
+
+
+		if loop-value is "locations":
+			loop 50 times:
+				if {dungeons::loc::%loop-number-2%} is set:
+					delete {dungeons::loc::%loop-number-2%}
+				if yaml value "%loop-number-2%" from "locations" is set:
+					set {_loc} to yaml value "%loop-number-2%" from "locations"
+					set {_loc::*} to {_loc} split at ", "
+					set {dungeons::loc::%loop-number-2%} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world "dungeons", {_loc::4} parsed as number)
+
+
+		if loop-value is "monster_spawns":
+			delete {dungeons::loc::monster_spawn::*}
+
+			loop yaml nodes from "monster_spawns":
+				set {_floor} to loop-value-2
+				loop yaml node keys "%{_floor}%" from "monster_spawns":
+					set {_type} to loop-value-3
+					loop yaml node keys "%{_floor}%.%{_type}%" from "monster_spawns":
+						set {_nr} to loop-value-4
+						if yaml value "%{_floor}%.%{_type}%.%{_nr}%" from "monster_spawns" is set:
+#							set {_loc::*} to yaml value "%{_floor}%.%{_type}%.%{_nr}%" from "monster_spawns" split at ", "
+							set {_loc} to yaml value "%{_floor}%.%{_type}%.%{_nr}%" from "monster_spawns"
+							set {_loc::*} to {_loc} split at ", "
+							set {dungeons::loc::monster_spawn::%{_floor}%::%{_type}%::%{_nr}%} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world "dungeons")
+#							send "Floor: %{_floor}%, Mob: %{_type}%, Nr: %{_nr}%   |   %{dungeons::loc::monster_spawn::%{_floor}%::%{_type}%::%{_nr}%}%" to all players
+		
+
+		if loop-value is "boss_spawns":
+			delete {dungeons::loc::boss_spawn::*}
+
+			loop yaml nodes from "boss_spawns":
+				set {_floor} to loop-value-2
+				loop yaml node keys "%{_floor}%" from "boss_spawns":
+					set {_type} to loop-value-3
+					if yaml value "%{_floor}%.%{_type}%" from "boss_spawns" is set:
+#						set {_loc::*} to yaml value "%{_floor}%.%{_type}%" from "boss_spawns" split at ", "
+						set {_loc} to yaml value "%{_floor}%.%{_type}%" from "boss_spawns"
+						set {_loc::*} to {_loc} split at ", "
+						set {dungeons::loc::boss_spawn::%{_floor}%::%{_type}%} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world "dungeons")
+
+
+
+		save yaml "%loop-value%"
+		wait 1 tick
+#	send {dungeons::chests::locations::*} to all players
+
+
+
+
+
+
+
+function DungeonsDataCreateFile(file: string = "all"):
+	if {_file} is "all":
+		set {_files::*} to "chests" and "respawnable_blocks" and "portals" and "locations" and "monster_spawns" and "boss_spawns"
+		loop {_files::*}:
+			load yaml "unlimited_adventures/Dungeons/FloorData/%loop-value%.yml" as "%loop-value%"
+
+			set yaml value "version" from "%loop-value%" to 1
+			set the comments of yaml node "version" from "%loop-value%" to "Please DO NOT change version number!"
+
+			save yaml "%loop-value%"
+	else:
+		load yaml "unlimited_adventures/Dungeons/FloorData/%{_file}%.yml" as "%{_file}%"
+
+		set yaml value "version" from "%{_file}%" to 1
+		set the comments of yaml node "version" from "%{_file}%" to "Please DO NOT change version number!"
+#		set yaml list "1" from "%{_file}%" to "10.5, 20.5, 50.5" 
+#		set yaml list "2" from "%{_file}%" to "10.5, 20.5, 50.5"
+
+
+		save yaml "%{_file}%"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function DungeonsFloorsReload():
+	load yaml "unlimited_adventures/Dungeons/floors.yml" as "floors"
+	if yaml value "version" from "floors" is not set:
+		wait 1 tick
+		DungeonsFloorsCreateFile()
+
+	loop yaml nodes from "floors":
+		add 1 to {_dungeon_amount}
+	
+	loop {_dungeon_amount} times:
+		set {_nr} to loop-number
+		if yaml value "dungeon_%{_nr}%.name" from "floors" is set:
+			set {dungeons::config::dungeon_%{_nr}%::name} to yaml value "dungeon_%{_nr}%.name" from "floors"
+		if yaml value "dungeon_%{_nr}%.key" from "floors" is set:
+			set {dungeons::config::dungeon_%{_nr}%::key} to yaml value "dungeon_%{_nr}%.key" from "floors"
+
+		loop 3 times:
+			set {_floor_nr} to loop-number-2
+			if yaml value "dungeon_%{_nr}%.%{_floor_nr}%.floor" from "floors" is set:
+				set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::floor} to yaml value "dungeon_%{_nr}%.%{_floor_nr}%.floor" from "floors"
+			if yaml value "dungeon_%{_nr}%.%{_floor_nr}%.name" from "floors" is set:
+				set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::name} to yaml value "dungeon_%{_nr}%.%{_floor_nr}%.name" from "floors"
+			if yaml value "dungeon_%{_nr}%.%{_floor_nr}%.monster_kills_required" from "floors" is set:
+				if {server::test_server} is true:
+					set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::monster_kills_required} to 10
+				else:
+					set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::monster_kills_required} to yaml value "dungeon_%{_nr}%.%{_floor_nr}%.monster_kills_required" from "floors"
+			if yaml value "dungeon_%{_nr}%.%{_floor_nr}%.extra_kills_per_player" from "floors" is set:
+				if {server::test_server} is true:
+					set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::extra_kills_per_player} to 1
+				else:
+					set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::extra_kills_per_player} to yaml value "dungeon_%{_nr}%.%{_floor_nr}%.extra_kills_per_player" from "floors"
+			if yaml value "dungeon_%{_nr}%.%{_floor_nr}%.keep_inventory" from "floors" is set:
+				set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::keep_inventory} to yaml value "dungeon_%{_nr}%.%{_floor_nr}%.keep_inventory" from "floors"
+			if yaml value "dungeon_%{_nr}%.%{_floor_nr}%.announce_boss_death_to_everyone" from "floors" is set:
+				set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::announce_boss_death_to_everyone} to yaml value "dungeon_%{_nr}%.%{_floor_nr}%.announce_boss_death_to_everyone" from "floors"
+
+			set {_mobs::*} to {@mob_list}
+			loop {_mobs::*}:
+				set {_mob} to loop-value-3
+				if yaml value "dungeon_%{_nr}%.%{_floor_nr}%.%{_mob}%_respawn_delay" from "floors" is set:
+					set {_value} to yaml value "dungeon_%{_nr}%.%{_floor_nr}%.%{_mob}%_respawn_delay" from "floors"
+					set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::%{_mob}%_respawn_delay} to "%{_value}% seconds" parsed as timespan
+				if yaml value "dungeon_%{_nr}%.%{_floor_nr}%.%{_mob}%_spawn_limit" from "floors" is set:
+					set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::%{_mob}%_spawn_limit} to yaml value "dungeon_%{_nr}%.%{_floor_nr}%.%{_mob}%_spawn_limit" from "floors"
+					
+
+			if yaml value "dungeon_%{_nr}%.%{_floor_nr}%.block_respawn_delay" from "floors" is set:
+				set {_value} to yaml value "dungeon_%{_nr}%.%{_floor_nr}%.block_respawn_delay" from "floors"
+				set {dungeons::config::dungeon_%{_nr}%::%{_floor_nr}%::block_respawn_delay} to "%{_value}% seconds" parsed as timespan
+		wait 1 tick
+
+	save yaml "floors"
+
+
+
+function DungeonsFloorsCreateFile():
+	load yaml "unlimited_adventures/Dungeons/floors.yml" as "floors"
+
+	set yaml value "version" from "floors" to 1
+	set the comments of yaml node "version" from "floors" to "Please DO NOT change version number!"
+
+	set yaml value "dungeon_1.name" from "floors" to "Abandoned Mining Site"
+	set yaml value "dungeon_1.key" from "floors" to "skeleton_key"
+	set yaml value "dungeon_1.1.floor" from "floors" to 1
+	set yaml value "dungeon_1.1.name" from "floors" to "Forgotten Tunnels"
+	set yaml value "dungeon_1.1.monster_kills_required" from "floors" to 25
+	set yaml value "dungeon_1.1.keep_inventory" from "floors" to true
+	set yaml value "dungeon_1.1.zombie_respawn_delay" from "floors" to 4
+	set yaml value "dungeon_1.1.zombie_spawn_limit" from "floors" to 35
+	set yaml value "dungeon_1.1.block_respawn_delay" from "floors" to 300
+
+	set yaml value "dungeon_1.2.floor" from "floors" to 2
+	set yaml value "dungeon_1.2.name" from "floors" to "Overgrown Mineshaft"
+	set yaml value "dungeon_1.2.monster_kills_required" from "floors" to 28
+	set yaml value "dungeon_1.2.keep_inventory" from "floors" to true
+	set yaml value "dungeon_1.2.zombie_respawn_delay" from "floors" to 5
+	set yaml value "dungeon_1.2.skeleton_respawn_delay" from "floors" to 6
+	set yaml value "dungeon_1.2.zombie_spawn_limit" from "floors" to 35
+	set yaml value "dungeon_1.2.skeleton_spawn_limit" from "floors" to 10
+	set yaml value "dungeon_1.2.block_respawn_delay" from "floors" to 300
+
+	set yaml value "dungeon_1.3.floor" from "floors" to 3
+	set yaml value "dungeon_1.3.name" from "floors" to "Forbidden Cavern"
+	set yaml value "dungeon_1.3.monster_kills_required" from "floors" to 30
+	set yaml value "dungeon_1.3.extra_kills_per_player" from "floors" to 10
+	set yaml value "dungeon_1.3.keep_inventory" from "floors" to true
+	set yaml value "dungeon_1.3.announce_boss_death_to_everyone" from "floors" to false
+	set yaml value "dungeon_1.3.zombie_respawn_delay" from "floors" to 3
+	set yaml value "dungeon_1.3.skeleton_respawn_delay" from "floors" to 5
+	set yaml value "dungeon_1.3.skeleton_respawn_delay" from "floors" to 5
+	set yaml value "dungeon_1.3.zombie_spawn_limit" from "floors" to 50
+	set yaml value "dungeon_1.3.skeleton_spawn_limit" from "floors" to 20
+	set yaml value "dungeon_1.3.block_respawn_delay" from "floors" to 300
+
+	wait 1 tick
+
+
+	set yaml value "dungeon_2.name" from "floors" to "Haunted Cemetery"
+	set yaml value "dungeon_2.key" from "floors" to "dracula_key"
+	set yaml value "dungeon_2.1.floor" from "floors" to 4
+	set yaml value "dungeon_2.1.name" from "floors" to "Haunted Cemetery"
+	set yaml value "dungeon_2.1.monster_kills_required" from "floors" to 32
+	set yaml value "dungeon_2.1.keep_inventory" from "floors" to true
+	set yaml value "dungeon_2.1.zombie_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_2.1.skeleton_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_2.1.ghost_respawn_delay" from "floors" to 8
+	set yaml value "dungeon_2.1.zombie_spawn_limit" from "floors" to 30
+	set yaml value "dungeon_2.1.skeleton_spawn_limit" from "floors" to 10
+	set yaml value "dungeon_2.1.ghost_spawn_limit" from "floors" to 10
+	set yaml value "dungeon_2.1.block_respawn_delay" from "floors" to 300
+
+	set yaml value "dungeon_2.2.floor" from "floors" to 5
+	set yaml value "dungeon_2.2.name" from "floors" to "Crypt"
+	set yaml value "dungeon_2.2.monster_kills_required" from "floors" to 35
+	set yaml value "dungeon_2.2.keep_inventory" from "floors" to true
+	set yaml value "dungeon_2.2.zombie_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_2.2.skeleton_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_2.2.ghost_respawn_delay" from "floors" to 8
+	set yaml value "dungeon_2.2.zombie_spawn_limit" from "floors" to 30
+	set yaml value "dungeon_2.2.skeleton_spawn_limit" from "floors" to 15
+	set yaml value "dungeon_2.2.ghost_spawn_limit" from "floors" to 10
+	set yaml value "dungeon_2.2.block_respawn_delay" from "floors" to 300
+
+	set yaml value "dungeon_2.3.floor" from "floors" to 6
+	set yaml value "dungeon_2.3.name" from "floors" to "Dracula's Castle"
+	set yaml value "dungeon_2.3.monster_kills_required" from "floors" to 40
+	set yaml value "dungeon_2.3.extra_kills_per_player" from "floors" to 12
+	set yaml value "dungeon_2.3.keep_inventory" from "floors" to true
+	set yaml value "dungeon_2.3.announce_boss_death_to_everyone" from "floors" to false
+	set yaml value "dungeon_2.3.zombie_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_2.3.skeleton_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_2.3.ghost_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_2.3.zombie_spawn_limit" from "floors" to 30
+	set yaml value "dungeon_2.3.skeleton_spawn_limit" from "floors" to 15
+	set yaml value "dungeon_2.3.ghost_spawn_limit" from "floors" to 10
+	set yaml value "dungeon_2.3.block_respawn_delay" from "floors" to 300
+
+
+	wait 1 tick
+
+
+
+
+	set yaml value "dungeon_3.name" from "floors" to "Ancient Ruins"
+	set yaml value "dungeon_3.key" from "floors" to "desert_key"
+	set yaml value "dungeon_3.1.floor" from "floors" to 7
+	set yaml value "dungeon_3.1.name" from "floors" to "Desert Canyon"
+	set yaml value "dungeon_3.1.monster_kills_required" from "floors" to 42
+	set yaml value "dungeon_3.1.keep_inventory" from "floors" to true
+	set yaml value "dungeon_3.1.husk_respawn_delay" from "floors" to 5
+	set yaml value "dungeon_3.1.skeleton_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_3.1.husk_spawn_limit" from "floors" to 30
+	set yaml value "dungeon_3.1.skeleton_spawn_limit" from "floors" to 15
+	set yaml value "dungeon_3.1.block_respawn_delay" from "floors" to 300
+
+	set yaml value "dungeon_3.2.floor" from "floors" to 8
+	set yaml value "dungeon_3.2.name" from "floors" to "Ancient City"
+	set yaml value "dungeon_3.2.monster_kills_required" from "floors" to 45
+	set yaml value "dungeon_3.2.keep_inventory" from "floors" to true
+	set yaml value "dungeon_3.2.husk_respawn_delay" from "floors" to 5
+	set yaml value "dungeon_3.2.skeleton_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_3.2.husk_spawn_limit" from "floors" to 30
+	set yaml value "dungeon_3.2.skeleton_spawn_limit" from "floors" to 20
+	set yaml value "dungeon_3.2.block_respawn_delay" from "floors" to 300
+
+	set yaml value "dungeon_3.3.floor" from "floors" to 9
+	set yaml value "dungeon_3.3.name" from "floors" to "Pyramid"
+	set yaml value "dungeon_3.3.monster_kills_required" from "floors" to 50
+	set yaml value "dungeon_3.3.extra_kills_per_player" from "floors" to 16
+	set yaml value "dungeon_3.3.keep_inventory" from "floors" to true
+	set yaml value "dungeon_3.3.announce_boss_death_to_everyone" from "floors" to false
+	set yaml value "dungeon_3.3.husk_respawn_delay" from "floors" to 5
+	set yaml value "dungeon_3.3.skeleton_respawn_delay" from "floors" to 7
+	set yaml value "dungeon_3.3.spider_respawn_delay" from "floors" to 10
+	set yaml value "dungeon_3.3.husk_spawn_limit" from "floors" to 30
+	set yaml value "dungeon_3.3.skeleton_spawn_limit" from "floors" to 10
+	set yaml value "dungeon_3.3.spider_spawn_limit" from "floors" to 8
+	set yaml value "dungeon_3.3.block_respawn_delay" from "floors" to 300
+
+
+
+
+	save yaml "floors"
+
+
+
+
+function DungeonsChestsReload():
+	load yaml "unlimited_adventures/Dungeons/chests.yml" as "chests"
+	if yaml value "version" from "chests" is not set:
+		wait 1 tick
+		DungeonsChestsCreateFile()
+
+	loop yaml node keys "" from "chests":
+		add 1 to {_dungeon_amount}
+#		send "%{_dungeon_amount}%" to all players
+	
+#		loop {_dungeon_amount} times:
+		set {_dungeon_nr} to {_dungeon_amount}
+		loop 3 times:
+			set {_floor_nr} to loop-number
+			if yaml list "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_common_loot" from "chests" is set:
+				set {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_common_loot::*} to yaml list "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_common_loot" from "chests"
+			if yaml list "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_rare_loot" from "chests" is set:
+				set {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_rare_loot::*} to yaml list "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_rare_loot" from "chests"
+			if yaml list "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_epic_loot" from "chests" is set:
+				set {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_epic_loot::*} to yaml list "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_epic_loot" from "chests"
+			if yaml value "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_common_amount" from "chests" is set:
+				set {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_common_amount} to yaml value "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_common_amount" from "chests"
+			if yaml value "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_rare_amount" from "chests" is set:
+				set {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_rare_amount} to yaml value "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_rare_amount" from "chests"
+			if yaml value "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_epic_chance" from "chests" is set:
+				set {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_epic_chance} to yaml value "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_epic_chance" from "chests"
+			if yaml value "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_respawn_delay" from "chests" is set:
+				set {_value} to yaml value "dungeon_%{_dungeon_nr}%.%{_floor_nr}%.chest_respawn_delay" from "chests"
+				set {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_respawn_delay} to "%{_value}% seconds" parsed as timespan
+
+	save yaml "chests"
+
+
+
+function DungeonsChestsCreateFile():
+	load yaml "unlimited_adventures/Dungeons/chests.yml" as "chests"
+
+	set yaml value "version" from "chests" to 1
+	set the comments of yaml node "version" from "chests" to "Please DO NOT change version number!"
+
+	set yaml list "dungeon_1.1.chest_common_loot" from "chests" to "10 of iron ingot" and "8 of lapis lazuli" and "4 of bread" and "5 of apple" and "10 of gunpowder" and "9 of string" and "4 of slime ball" and "8 of bone" and "custom:zombie_brain" and "custom:skeleton_skull" and "custom_spider_venom"
+	set yaml list "dungeon_1.1.chest_rare_loot" from "chests" to "2 of diamond" and "5 of emerald" and "diamond sword"
+	set yaml value "dungeon_1.1.chest_common_amount" from "chests" to 5
+	set yaml value "dungeon_1.1.chest_rare_amount" from "chests" to 1
+	set yaml value "dungeon_1.1.chest_respawn_delay" from "chests" to 300
+
+	set yaml list "dungeon_1.2.chest_common_loot" from "chests" to "12 of iron ingot" and "10 of lapis lazuli" and "5 of bread" and "7 of apple" and "15 of gunpowder" and "14 of string" and "6 of slime ball" and "14 of bone" and "custom:zombie_brain" and "custom:skeleton_skull" and "custom_spider_venom"
+	set yaml list "dungeon_1.2.chest_rare_loot" from "chests" to "2 of diamond" and "7 of emerald" and "diamond sword" and "diamond pickaxe"
+	set yaml value "dungeon_1.2.chest_common_amount" from "chests" to 5
+	set yaml value "dungeon_1.2.chest_rare_amount" from "chests" to 1
+	set yaml value "dungeon_1.2.chest_respawn_delay" from "chests" to 300
+
+	set yaml list "dungeon_1.3.chest_common_loot" from "chests" to "14 of iron ingot" and "12 of lapis lazuli" and "6 of bread" and "10 of apple" and "20 of gunpowder" and "21 of string" and "10 of slime ball" and "20 of bone" and "custom:zombie_brain" and "custom:skeleton_skull" and "custom_spider_venom"
+	set yaml list "dungeon_1.3.chest_rare_loot" from "chests" to "3 of diamond" and "12 of emerald" and "diamond sword" and "diamond pickaxe" and "diamond chestplate"
+	set yaml value "dungeon_1.3.chest_common_amount" from "chests" to 5
+	set yaml value "dungeon_1.3.chest_rare_amount" from "chests" to 1
+	set yaml value "dungeon_1.3.chest_respawn_delay" from "chests" to 300
+
+
+
+	set yaml list "dungeon_2.1.chest_common_loot" from "chests" to "6 of bread" and "10 of apple" and "20 of gunpowder" and "21 of string" and "10 of slime ball" and "26 of bone" and "custom:zombie_brain" and "custom:skeleton_skull" and "custom_spider_venom"
+	set yaml list "dungeon_2.1.chest_rare_loot" from "chests" to "4 of diamond" and "12 of emerald" and "diamond pickaxe" and "diamond chestplate" and "diamond leggings"
+	set yaml value "dungeon_2.1.chest_common_amount" from "chests" to 5
+	set yaml value "dungeon_2.1.chest_rare_amount" from "chests" to 1
+	set yaml value "dungeon_2.1.chest_respawn_delay" from "chests" to 300
+
+	set yaml list "dungeon_2.2.chest_common_loot" from "chests" to "8 of bread" and "12 of apple" and "24 of gunpowder" and "24 of string" and "12 of slime ball" and "42 of bone" and "custom:zombie_brain" and "custom:skeleton_skull" and "custom_spider_venom"
+	set yaml list "dungeon_2.2.chest_rare_loot" from "chests" to "4 of diamond" and "16 of emerald" and "diamond axe" and "diamond chestplate" and "diamond leggings" and "diamond boots"
+	set yaml value "dungeon_2.2.chest_common_amount" from "chests" to 5
+	set yaml value "dungeon_2.2.chest_rare_amount" from "chests" to 1
+	set yaml value "dungeon_2.2.chest_respawn_delay" from "chests" to 300
+
+	set yaml list "dungeon_2.3.chest_common_loot" from "chests" to "12 of bread" and "16 of apple" and "32 of gunpowder" and "32 of string" and "15 of slime ball" and "58 of bone" and "custom:zombie_brain" and "custom:skeleton_skull" and "custom_spider_venom"
+	set yaml list "dungeon_2.3.chest_rare_loot" from "chests" to "5 of diamond" and "16 of emerald" and "diamond helmet" and "diamond chestplate" and "diamond leggings" and "diamond boots"
+	set yaml value "dungeon_2.3.chest_common_amount" from "chests" to 5
+	set yaml value "dungeon_2.3.chest_rare_amount" from "chests" to 1
+	set yaml value "dungeon_2.3.chest_respawn_delay" from "chests" to 300
+
+
+
+	set yaml list "dungeon_3.1.chest_common_loot" from "chests" to "25 of gold ingot" and "golden apple" and "5 of cooked beef" and "custom:zombie_brain" and "custom:skeleton_skull" and "custom_spider_venom"
+	set yaml list "dungeon_3.1.chest_rare_loot" from "chests" to "5 of diamond" and "20 of emerald" and "diamond helmet" and "diamond chestplate" and "diamond leggings" and "diamond boots"
+	set yaml value "dungeon_3.1.chest_common_amount" from "chests" to 5
+	set yaml value "dungeon_3.1.chest_rare_amount" from "chests" to 1
+	set yaml value "dungeon_3.1.chest_respawn_delay" from "chests" to 300
+
+	set yaml list "dungeon_3.2.chest_common_loot" from "chests" to "32 of gold ingot" and "2 of golden apple" and "7 of cooked beef" and "custom:zombie_brain" and "custom:skeleton_skull" and "custom_spider_venom"
+	set yaml list "dungeon_3.2.chest_rare_loot" from "chests" to "5 of diamond" and "24 of emerald" and "diamond helmet" and "diamond chestplate" and "diamond leggings" and "diamond boots"
+	set yaml value "dungeon_3.2.chest_common_amount" from "chests" to 5
+	set yaml value "dungeon_3.2.chest_rare_amount" from "chests" to 1
+	set yaml value "dungeon_3.2.chest_respawn_delay" from "chests" to 300
+
+	set yaml list "dungeon_3.3.chest_common_loot" from "chests" to "40 of gold ingot" and "3 of golden apple" and "10 of cooked beef" and "custom:zombie_brain" and "custom:skeleton_skull" and "custom_spider_venom"
+	set yaml list "dungeon_3.3.chest_rare_loot" from "chests" to "6 of diamond" and "30 of emerald" and "diamond helmet" and "diamond chestplate" and "diamond leggings" and "diamond boots"
+	set yaml value "dungeon_3.3.chest_common_amount" from "chests" to 5
+	set yaml value "dungeon_3.3.chest_rare_amount" from "chests" to 1
+	set yaml value "dungeon_3.3.chest_respawn_delay" from "chests" to 300
+
+
+
+	save yaml "chests"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function DungeonsMobsReload():
+	load yaml "unlimited_adventures/Dungeons/mobs.yml" as "mobs"
+	if yaml value "version" from "mobs" is not set:
+		wait 1 tick
+		DungeonsMobsCreateFile()
+		wait 10 ticks
+
+
+	set {_floor_amount} to GetFloorAmount()
+	set {_mobs::*} to {@mob_list}
+
+	loop {_floor_amount} times:
+		set {_floor_nr} to loop-number
+		loop {_mobs::*}:
+			set {_mob} to loop-value-2
+
+			if yaml value "%{_floor_nr}%.%{_mob}%.type" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::type} to yaml value "%{_floor_nr}%.%{_mob}%.type" from "mobs"
+			if yaml value "%{_floor_nr}%.%{_mob}%.name" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::name} to yaml value "%{_floor_nr}%.%{_mob}%.name" from "mobs"
+			if yaml value "%{_floor_nr}%.%{_mob}%.health" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::health} to yaml value "%{_floor_nr}%.%{_mob}%.health" from "mobs"
+			if yaml value "%{_floor_nr}%.%{_mob}%.invisibility" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::invisibility} to yaml value "%{_floor_nr}%.%{_mob}%.invisibility" from "mobs"
+			if yaml list "%{_floor_nr}%.%{_mob}%.weapon" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::weapon::*} to yaml list "%{_floor_nr}%.%{_mob}%.weapon" from "mobs"
+			if yaml list "%{_floor_nr}%.%{_mob}%.helmet" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::helmet::*} to yaml list "%{_floor_nr}%.%{_mob}%.helmet" from "mobs"
+			if yaml list "%{_floor_nr}%.%{_mob}%.chestplate" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::chestplate::*} to yaml list "%{_floor_nr}%.%{_mob}%.chestplate" from "mobs"
+			if yaml list "%{_floor_nr}%.%{_mob}%.leggings" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::leggings::*} to yaml list "%{_floor_nr}%.%{_mob}%.leggings" from "mobs"
+			if yaml list "%{_floor_nr}%.%{_mob}%.boots" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::boots::*} to yaml list "%{_floor_nr}%.%{_mob}%.boots" from "mobs"
+			if yaml list "%{_floor_nr}%.%{_mob}%.loot.common_loot" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::common_loot::*} to yaml list "%{_floor_nr}%.%{_mob}%.loot.common_loot" from "mobs"
+			if yaml list "%{_floor_nr}%.%{_mob}%.loot.rare_loot" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::rare_loot::*} to yaml list "%{_floor_nr}%.%{_mob}%.loot.rare_loot" from "mobs"
+			if yaml list "%{_floor_nr}%.%{_mob}%.loot.epic_loot" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::epic_loot::*} to yaml list "%{_floor_nr}%.%{_mob}%.loot.epic_loot" from "mobs"
+			if yaml value "%{_floor_nr}%.%{_mob}%.loot.common_chance" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::common_chance} to yaml value "%{_floor_nr}%.%{_mob}%.loot.common_chance" from "mobs"
+			if yaml value "%{_floor_nr}%.%{_mob}%.loot.rare_chance" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::rare_chance} to yaml value "%{_floor_nr}%.%{_mob}%.loot.rare_chance" from "mobs"
+			if yaml value "%{_floor_nr}%.%{_mob}%.loot.epic_chance" from "mobs" is set:
+				set {dungeons::config::mob::%{_floor_nr}%::%{_mob}%::epic_chance} to yaml value "%{_floor_nr}%.%{_mob}%.loot.epic_chance" from "mobs"
+		wait 1 tick
+
+
+
+	save yaml "mobs"
+
+
+
+
+function DungeonsMobsCreateFile():
+	load yaml "unlimited_adventures/Dungeons/mobs.yml" as "mobs"
+
+	set yaml value "version" from "mobs" to 1
+	set the comments of yaml node "version" from "mobs" to "Please DO NOT change version number!"
+
+	set yaml value "1.zombie.type" from "mobs" to "zombie"
+	set yaml value "1.zombie.name" from "mobs" to "&cZombie"
+	set yaml value "1.zombie.health" from "mobs" to 12
+	set yaml list "1.zombie.weapon" from "mobs" to "unbreakable iron sword" and "unbreakable iron pickaxe" and "air"
+	set yaml list "1.zombie.helmet" from "mobs" to "unbreakable iron helmet"
+	set yaml list "1.zombie.chestplate" from "mobs" to "unbreakable iron chestplate" and "air"
+	set yaml list "1.zombie.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "1.zombie.loot.rare_loot" from "mobs" to "custom:zombie_brain"
+	set yaml list "1.zombie.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "1.zombie.loot.common_chance" from "mobs" to 15
+	set yaml value "1.zombie.loot.rare_chance" from "mobs" to 3
+	set yaml value "1.zombie.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "2.zombie.type" from "mobs" to "zombie"
+	set yaml value "2.zombie.name" from "mobs" to "&cZombie"
+	set yaml value "2.zombie.health" from "mobs" to 13
+	set yaml list "2.zombie.weapon" from "mobs" to "iron sword" and "iron pickaxe" and "iron axe"
+	set yaml list "2.zombie.helmet" from "mobs" to "unbreakable iron helmet"
+	set yaml list "2.zombie.chestplate" from "mobs" to "unbreakable iron chestplate" and "air"
+	set yaml list "2.zombie.boots" from "mobs" to "unbreakable iron boots" and "air"
+	set yaml list "2.zombie.loot.common_loot" from "mobs" to "2 of iron ingot" and "2 of carrot"
+	set yaml list "2.zombie.loot.rare_loot" from "mobs" to "custom:zombie_brain"
+	set yaml list "2.zombie.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "2.zombie.loot.common_chance" from "mobs" to 15
+	set yaml value "2.zombie.loot.rare_chance" from "mobs" to 3
+	set yaml value "2.zombie.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "2.skeleton.type" from "mobs" to "skeleton"
+	set yaml value "2.skeleton.name" from "mobs" to "&cSkeleton"
+	set yaml value "2.skeleton.health" from "mobs" to 13
+	set yaml list "2.skeleton.weapon" from "mobs" to "bow of power 1" and "bow" and "diamond axe"
+	set yaml list "2.skeleton.helmet" from "mobs" to "unbreakable iron helmet"
+	set yaml list "2.skeleton.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "2.skeleton.loot.rare_loot" from "mobs" to "custom:skeleton_skull"
+	set yaml list "2.skeleton.loot.epic_loot" from "mobs" to "custom:bone_necklace" and "custom:miner_helmet"
+	set yaml value "2.skeleton.loot.common_chance" from "mobs" to 15
+	set yaml value "2.skeleton.loot.rare_chance" from "mobs" to 3
+	set yaml value "2.skeleton.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "3.zombie.type" from "mobs" to "zombie"
+	set yaml value "3.zombie.name" from "mobs" to "&cZombie"
+	set yaml value "3.zombie.health" from "mobs" to 14
+	set yaml list "3.zombie.weapon" from "mobs" to "diamond sword" and "iron pickaxe" and "iron axe"
+	set yaml list "3.zombie.helmet" from "mobs" to "unbreakable iron helmet"
+	set yaml list "3.zombie.chestplate" from "mobs" to "unbreakable iron chestplate" and "air"
+	set yaml list "3.zombie.leggings" from "mobs" to "unbreakable iron leggings" and "air"
+	set yaml list "3.zombie.boots" from "mobs" to "unbreakable iron boots" and "air"
+	set yaml list "3.zombie.loot.common_loot" from "mobs" to "3 of iron ingot" and "2 of gold ingot"
+	set yaml list "3.zombie.loot.rare_loot" from "mobs" to "custom:zombie_brain" and "emerald"
+	set yaml list "3.zombie.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "3.zombie.loot.common_chance" from "mobs" to 15
+	set yaml value "3.zombie.loot.rare_chance" from "mobs" to 3
+	set yaml value "3.zombie.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "3.skeleton.type" from "mobs" to "skeleton"
+	set yaml value "3.skeleton.name" from "mobs" to "&cSkeleton"
+	set yaml value "3.skeleton.health" from "mobs" to 14
+	set yaml list "3.skeleton.weapon" from "mobs" to "bow of power 2" and "bow of power 1" and "diamond axe of sharpness 1"
+	set yaml list "3.skeleton.helmet" from "mobs" to "unbreakable iron helmet"
+	set yaml list "3.skeleton.chestplate" from "mobs" to "unbreakable iron chestplate" and "air"
+	set yaml list "3.skeleton.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "3.skeleton.loot.rare_loot" from "mobs" to "custom:skeleton_skull"
+	set yaml list "3.skeleton.loot.epic_loot" from "mobs" to "custom:bone_necklace" and "custom:miner_helmet"
+	set yaml value "3.skeleton.loot.common_chance" from "mobs" to 15
+	set yaml value "3.skeleton.loot.rare_chance" from "mobs" to 3
+	set yaml value "3.skeleton.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "4.zombie.type" from "mobs" to "zombie"
+	set yaml value "4.zombie.name" from "mobs" to "&cZombie"
+	set yaml value "4.zombie.health" from "mobs" to 15
+	set yaml list "4.zombie.weapon" from "mobs" to "diamond sword" and "diamond pickaxe" and "diamond axe"
+	set yaml list "4.zombie.helmet" from "mobs" to "unbreakable diamond helmet"
+	set yaml list "4.zombie.chestplate" from "mobs" to "unbreakable iron chestplate" and "air"
+	set yaml list "4.zombie.leggings" from "mobs" to "unbreakable iron leggings" and "air"
+	set yaml list "4.zombie.boots" from "mobs" to "unbreakable iron boots" and "air"
+	set yaml list "4.zombie.loot.common_loot" from "mobs" to "4 of iron ingot" and "3 of gold ingot"
+	set yaml list "4.zombie.loot.rare_loot" from "mobs" to "custom:zombie_brain" and "emerald"
+	set yaml list "4.zombie.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "4.zombie.loot.common_chance" from "mobs" to 15
+	set yaml value "4.zombie.loot.rare_chance" from "mobs" to 3
+	set yaml value "4.zombie.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "4.skeleton.type" from "mobs" to "skeleton"
+	set yaml value "4.skeleton.name" from "mobs" to "&cSkeleton"
+	set yaml value "4.skeleton.health" from "mobs" to 15
+	set yaml list "4.skeleton.weapon" from "mobs" to "bow of power 2" and "bow of power 1" and "diamond axe of sharpness 1"
+	set yaml list "4.skeleton.helmet" from "mobs" to "unbreakable iron helmet"
+	set yaml list "4.skeleton.chestplate" from "mobs" to "unbreakable iron chestplate"
+	set yaml list "4.skeleton.boots" from "mobs" to "unbreakable iron boots" and "air"
+	set yaml list "4.skeleton.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "4.skeleton.loot.rare_loot" from "mobs" to "custom:skeleton_skull"
+	set yaml list "4.skeleton.loot.epic_loot" from "mobs" to "custom:bone_necklace" and "custom:miner_helmet"
+	set yaml value "4.skeleton.loot.common_chance" from "mobs" to 15
+	set yaml value "4.skeleton.loot.rare_chance" from "mobs" to 3
+	set yaml value "4.skeleton.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "4.ghost.type" from "mobs" to "skeleton"
+	set yaml value "4.ghost.name" from "mobs" to "&cGhost"
+	set yaml value "4.ghost.health" from "mobs" to 17
+	set yaml value "4.ghost.invisibility" from "mobs" to true
+	set yaml list "4.ghost.weapon" from "mobs" to "iron sword of sharpness 4 and knockback 1"
+	set yaml list "4.ghost.helmet" from "mobs" to "unbreakable iron helmet"
+	set yaml list "4.ghost.chestplate" from "mobs" to "iron chestplate"
+	set yaml list "4.ghost.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "4.ghost.loot.rare_loot" from "mobs" to "custom:zombie_brain"
+	set yaml list "4.ghost.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "4.ghost.loot.common_chance" from "mobs" to 15
+	set yaml value "4.ghost.loot.rare_chance" from "mobs" to 3
+	set yaml value "4.ghost.loot.epic_chance" from "mobs" to 0.5
+
+
+
+	set yaml value "5.zombie.type" from "mobs" to "zombie"
+	set yaml value "5.zombie.name" from "mobs" to "&cZombie"
+	set yaml value "5.zombie.health" from "mobs" to 16
+	set yaml list "5.zombie.weapon" from "mobs" to "diamond sword of sharpness 1" and "diamond pickaxe of sharpness 1 and knockback 1" and "diamond axe of sharpness 1"
+	set yaml list "5.zombie.helmet" from "mobs" to "unbreakable diamond helmet"
+	set yaml list "5.zombie.chestplate" from "mobs" to "unbreakable iron chestplate" and "air"
+	set yaml list "5.zombie.leggings" from "mobs" to "unbreakable iron leggings" and "air"
+	set yaml list "5.zombie.boots" from "mobs" to "unbreakable diamond boots" and "unbreakable iron boots"
+	set yaml list "5.zombie.loot.common_loot" from "mobs" to "4 of iron ingot" and "3 of gold ingot"
+	set yaml list "5.zombie.loot.rare_loot" from "mobs" to "custom:zombie_brain" and "emerald" and "diamond"
+	set yaml list "5.zombie.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "5.zombie.loot.common_chance" from "mobs" to 15
+	set yaml value "5.zombie.loot.rare_chance" from "mobs" to 3
+	set yaml value "5.zombie.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "5.skeleton.type" from "mobs" to "skeleton"
+	set yaml value "5.skeleton.name" from "mobs" to "&cSkeleton"
+	set yaml value "5.skeleton.health" from "mobs" to 17
+	set yaml list "5.skeleton.weapon" from "mobs" to "bow of power 3" and "bow of power 2" and "diamond axe of sharpness 2"
+	set yaml list "5.skeleton.helmet" from "mobs" to "unbreakable iron helmet"
+	set yaml list "5.skeleton.chestplate" from "mobs" to "unbreakable iron chestplate" and "unbreakable diamond chestplate"
+	set yaml list "5.skeleton.boots" from "mobs" to "unbreakable iron boots" and "air"
+	set yaml list "5.skeleton.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "5.skeleton.loot.rare_loot" from "mobs" to "custom:skeleton_skull"
+	set yaml list "5.skeleton.loot.epic_loot" from "mobs" to "custom:bone_necklace" and "custom:miner_helmet"
+	set yaml value "5.skeleton.loot.common_chance" from "mobs" to 15
+	set yaml value "5.skeleton.loot.rare_chance" from "mobs" to 3
+	set yaml value "5.skeleton.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "5.ghost.type" from "mobs" to "skeleton"
+	set yaml value "5.ghost.name" from "mobs" to "&cGhost"
+	set yaml value "5.ghost.health" from "mobs" to 17
+	set yaml value "5.ghost.invisibility" from "mobs" to true
+	set yaml list "5.ghost.weapon" from "mobs" to "iron sword of sharpness 5 and knockback 1"
+	set yaml list "5.ghost.helmet" from "mobs" to "unbreakable iron helmet"
+	set yaml list "5.ghost.chestplate" from "mobs" to "unbreakable iron chestplate" and "unbreakable diamond chestplate"
+	set yaml list "5.ghost.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "5.ghost.loot.rare_loot" from "mobs" to "custom:zombie_brain"
+	set yaml list "5.ghost.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "5.ghost.loot.common_chance" from "mobs" to 15
+	set yaml value "5.ghost.loot.rare_chance" from "mobs" to 3
+	set yaml value "5.ghost.loot.epic_chance" from "mobs" to 0.5
+
+
+
+
+	wait 1 tick
+
+
+
+	set yaml value "6.zombie.type" from "mobs" to "zombie"
+	set yaml value "6.zombie.name" from "mobs" to "&cZombie"
+	set yaml value "6.zombie.health" from "mobs" to 17
+	set yaml list "6.zombie.weapon" from "mobs" to "diamond sword of sharpness 2" and "diamond pickaxe of sharpness 2 and knockback 1" and "diamond axe of sharpness 2"
+	set yaml list "6.zombie.helmet" from "mobs" to "unbreakable diamond helmet"
+	set yaml list "6.zombie.chestplate" from "mobs" to "unbreakable iron chestplate" and "air"
+	set yaml list "6.zombie.leggings" from "mobs" to "unbreakable diamond leggings" and "unbreakable iron leggings"
+	set yaml list "6.zombie.boots" from "mobs" to "unbreakable diamond boots" and "unbreakable iron boots"
+	set yaml list "6.zombie.loot.common_loot" from "mobs" to "4 of iron ingot" and "3 of gold ingot"
+	set yaml list "6.zombie.loot.rare_loot" from "mobs" to "custom:zombie_brain" and "2 of emerald" and "diamond"
+	set yaml list "6.zombie.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "6.zombie.loot.common_chance" from "mobs" to 15
+	set yaml value "6.zombie.loot.rare_chance" from "mobs" to 3
+	set yaml value "6.zombie.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "6.skeleton.type" from "mobs" to "skeleton"
+	set yaml value "6.skeleton.name" from "mobs" to "&cSkeleton"
+	set yaml value "6.skeleton.health" from "mobs" to 17
+	set yaml list "6.skeleton.weapon" from "mobs" to "bow of power 3" and "bow of power 2" and "diamond axe of sharpness 2"
+	set yaml list "6.skeleton.helmet" from "mobs" to "unbreakable iron helmet" and "unbreakable diamond helmet"
+	set yaml list "6.skeleton.chestplate" from "mobs" to "unbreakable iron chestplate" and "unbreakable diamond chestplate"
+	set yaml list "6.skeleton.leggings" from "mobs" to "unbreakable iron leggings" and "air"
+	set yaml list "6.skeleton.boots" from "mobs" to "unbreakable iron boots" and "air"
+	set yaml list "6.skeleton.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "6.skeleton.loot.rare_loot" from "mobs" to "custom:skeleton_skull"
+	set yaml list "6.skeleton.loot.epic_loot" from "mobs" to "custom:bone_necklace" and "custom:miner_helmet"
+	set yaml value "6.skeleton.loot.common_chance" from "mobs" to 15
+	set yaml value "6.skeleton.loot.rare_chance" from "mobs" to 3
+	set yaml value "6.skeleton.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "6.ghost.type" from "mobs" to "skeleton"
+	set yaml value "6.ghost.name" from "mobs" to "&cGhost"
+	set yaml value "6.ghost.health" from "mobs" to 17
+	set yaml value "6.ghost.invisibility" from "mobs" to true
+	set yaml list "6.ghost.weapon" from "mobs" to "iron sword of sharpness 7 and knockback 1"
+	set yaml list "6.ghost.helmet" from "mobs" to "unbreakable iron helmet" and "unbreakable diamond helmet"
+	set yaml list "6.ghost.chestplate" from "mobs" to "unbreakable iron chestplate" and "unbreakable diamond chestplate"
+	set yaml list "6.ghost.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "6.ghost.loot.rare_loot" from "mobs" to "custom:zombie_brain"
+	set yaml list "6.ghost.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "6.ghost.loot.common_chance" from "mobs" to 15
+	set yaml value "6.ghost.loot.rare_chance" from "mobs" to 3
+	set yaml value "6.ghost.loot.epic_chance" from "mobs" to 0.5
+
+
+
+
+	set yaml value "7.husk.type" from "mobs" to "husk"
+	set yaml value "7.husk.name" from "mobs" to "&cHusk"
+	set yaml value "7.husk.health" from "mobs" to 18
+	set yaml list "7.husk.weapon" from "mobs" to "golden sword of sharpness 5 and unbreaking 3" and "golden pickaxe of sharpness 5 and unbreaking 3 and knockback 1" and "diamond axe of sharpness 4 and knockback 1"
+	set yaml list "7.husk.helmet" from "mobs" to "unbreakable diamond helmet" and "unbreakable golden helmet of protection 1"
+	set yaml list "7.husk.chestplate" from "mobs" to "unbreakable diamond chestplate" and "unbreakable golden chestplate of protection 1"
+	set yaml list "7.husk.leggings" from "mobs" to "unbreakable diamond leggings" and "unbreakable golden leggings of protection 1"
+	set yaml list "7.husk.boots" from "mobs" to "unbreakable diamond boots" and "unbreakable golden boots of protection 1"
+	set yaml list "7.husk.loot.common_loot" from "mobs" to "4 of iron ingot" and "3 of gold ingot"
+	set yaml list "7.husk.loot.rare_loot" from "mobs" to "custom:zombie_brain" and "2 of diamond"
+	set yaml list "7.husk.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "7.husk.loot.common_chance" from "mobs" to 15
+	set yaml value "7.husk.loot.rare_chance" from "mobs" to 3
+	set yaml value "7.husk.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "7.skeleton.type" from "mobs" to "skeleton"
+	set yaml value "7.skeleton.name" from "mobs" to "&cSkeleton"
+	set yaml value "7.skeleton.health" from "mobs" to 18
+	set yaml list "7.skeleton.weapon" from "mobs" to "bow of power 4" and "bow of power 3 and punch 1" and "diamond axe of sharpness 3"
+	set yaml list "7.skeleton.helmet" from "mobs" to "unbreakable iron helmet" and "unbreakable diamond helmet"
+	set yaml list "7.skeleton.chestplate" from "mobs" to "unbreakable iron chestplate" and "unbreakable diamond chestplate"
+	set yaml list "7.skeleton.leggings" from "mobs" to "unbreakable iron leggings" and "unbreakable diamond boots" and "air"
+	set yaml list "7.skeleton.boots" from "mobs" to "unbreakable iron boots" and "unbreakable diamond boots"
+	set yaml list "7.skeleton.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "7.skeleton.loot.rare_loot" from "mobs" to "custom:skeleton_skull"
+	set yaml list "7.skeleton.loot.epic_loot" from "mobs" to "custom:bone_necklace" and "custom:miner_helmet"
+	set yaml value "7.skeleton.loot.common_chance" from "mobs" to 15
+	set yaml value "7.skeleton.loot.rare_chance" from "mobs" to 3
+	set yaml value "7.skeleton.loot.epic_chance" from "mobs" to 0.5
+
+
+
+
+	set yaml value "8.husk.type" from "mobs" to "husk"
+	set yaml value "8.husk.name" from "mobs" to "&cHusk"
+	set yaml value "8.husk.health" from "mobs" to 19
+	set yaml list "8.husk.weapon" from "mobs" to "unbreakable golden sword of sharpness 5" and "unbreakable golden pickaxe of sharpness 5 and unbreaking 3" and "diamond axe of sharpness 4 and knockback 1"
+	set yaml list "8.husk.helmet" from "mobs" to "unbreakable diamond helmet" and "unbreakable golden helmet of protection 1"
+	set yaml list "8.husk.chestplate" from "mobs" to "unbreakable diamond chestplate" and "unbreakable golden chestplate of protection 1"
+	set yaml list "8.husk.leggings" from "mobs" to "unbreakable diamond leggings" and "unbreakable golden leggings of protection 1"
+	set yaml list "8.husk.boots" from "mobs" to "unbreakable diamond boots" and "unbreakable golden boots of protection 1"
+	set yaml list "8.husk.loot.common_loot" from "mobs" to "4 of iron ingot" and "3 of gold ingot"
+	set yaml list "8.husk.loot.rare_loot" from "mobs" to "custom:zombie_brain" and "2 of diamond"
+	set yaml list "8.husk.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "8.husk.loot.common_chance" from "mobs" to 15
+	set yaml value "8.husk.loot.rare_chance" from "mobs" to 3
+	set yaml value "8.husk.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "8.skeleton.type" from "mobs" to "skeleton"
+	set yaml value "8.skeleton.name" from "mobs" to "&cSkeleton"
+	set yaml value "8.skeleton.health" from "mobs" to 19
+	set yaml list "8.skeleton.weapon" from "mobs" to "bow of power 5" and "bow of power 4 and punch 1" and "diamond axe of sharpness 4"
+	set yaml list "8.skeleton.helmet" from "mobs" to "unbreakable iron helmet" and "unbreakable diamond helmet"
+	set yaml list "8.skeleton.chestplate" from "mobs" to "unbreakable iron chestplate" and "unbreakable diamond chestplate"
+	set yaml list "8.skeleton.leggings" from "mobs" to "unbreakable iron leggings" and "unbreakable diamond boots"
+	set yaml list "8.skeleton.boots" from "mobs" to "unbreakable iron boots" and "unbreakable diamond boots"
+	set yaml list "8.skeleton.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "8.skeleton.loot.rare_loot" from "mobs" to "custom:skeleton_skull"
+	set yaml list "8.skeleton.loot.epic_loot" from "mobs" to "custom:bone_necklace" and "custom:miner_helmet"
+	set yaml value "8.skeleton.loot.common_chance" from "mobs" to 15
+	set yaml value "8.skeleton.loot.rare_chance" from "mobs" to 3
+	set yaml value "8.skeleton.loot.epic_chance" from "mobs" to 0.5
+
+
+
+
+	set yaml value "9.husk.type" from "mobs" to "husk"
+	set yaml value "9.husk.name" from "mobs" to "&cHusk"
+	set yaml value "9.husk.health" from "mobs" to 20
+	set yaml list "9.husk.weapon" from "mobs" to "unbreakable golden sword of sharpness 5" and "unbreakable golden pickaxe of sharpness 5 and knockback 1" and "diamond axe of sharpness 4 and knockback 1"
+	set yaml list "9.husk.helmet" from "mobs" to "unbreakable diamond helmet" and "unbreakable golden helmet of protection 1"
+	set yaml list "9.husk.chestplate" from "mobs" to "unbreakable diamond chestplate" and "unbreakable golden chestplate of protection 1"
+	set yaml list "9.husk.leggings" from "mobs" to "unbreakable diamond leggings" and "unbreakable golden leggings of protection 1"
+	set yaml list "9.husk.boots" from "mobs" to "unbreakable diamond boots" and "unbreakable golden boots of protection 1"
+	set yaml list "9.husk.loot.common_loot" from "mobs" to "4 of iron ingot" and "3 of gold ingot"
+	set yaml list "9.husk.loot.rare_loot" from "mobs" to "custom:zombie_brain" and "2 of diamond"
+	set yaml list "9.husk.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "9.husk.loot.common_chance" from "mobs" to 15
+	set yaml value "9.husk.loot.rare_chance" from "mobs" to 3
+	set yaml value "9.husk.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "9.skeleton.type" from "mobs" to "skeleton"
+	set yaml value "9.skeleton.name" from "mobs" to "&cSkeleton"
+	set yaml value "9.skeleton.health" from "mobs" to 20
+	set yaml list "9.skeleton.weapon" from "mobs" to "bow of power 6" and "bow of power 5 and punch 1" and "diamond axe of sharpness 5"
+	set yaml list "9.skeleton.helmet" from "mobs" to "unbreakable diamond helmet" and "unbreakable netherite helmet"
+	set yaml list "9.skeleton.chestplate" from "mobs" to "unbreakable diamond chestplate" and "unbreakable netherite chestplate"
+	set yaml list "9.skeleton.leggings" from "mobs" to "unbreakable iron leggings" and "unbreakable diamond boots"
+	set yaml list "9.skeleton.boots" from "mobs" to "unbreakable diamond boots"
+	set yaml list "9.skeleton.loot.common_loot" from "mobs" to "iron ingot" and "gold ingot"
+	set yaml list "9.skeleton.loot.rare_loot" from "mobs" to "custom:skeleton_skull"
+	set yaml list "9.skeleton.loot.epic_loot" from "mobs" to "custom:bone_necklace" and "custom:miner_helmet"
+	set yaml value "9.skeleton.loot.common_chance" from "mobs" to 15
+	set yaml value "9.skeleton.loot.rare_chance" from "mobs" to 3
+	set yaml value "9.skeleton.loot.epic_chance" from "mobs" to 0.5
+
+	set yaml value "9.spider.type" from "mobs" to "spider"
+	set yaml value "9.spider.name" from "mobs" to "&cSpider"
+	set yaml value "9.spider.health" from "mobs" to 15
+	set yaml list "9.spider.loot.common_loot" from "mobs" to "iron ingot" and "carrot"
+	set yaml list "9.spider.loot.rare_loot" from "mobs" to "custom:zombie_brain"
+	set yaml list "9.spider.loot.epic_loot" from "mobs" to "custom:shackle"
+	set yaml value "9.spider.loot.common_chance" from "mobs" to 15
+	set yaml value "9.spider.loot.rare_chance" from "mobs" to 3
+	set yaml value "9.spider.loot.epic_chance" from "mobs" to 0.5
+
+
+
+	save yaml "mobs"
+
+
+
+
+
+
+
+
+function DungeonsBossesReload():
+	load yaml "unlimited_adventures/Dungeons/bosses.yml" as "bosses"
+	if yaml value "version" from "bosses" is not set:
+		wait 1 tick
+		DungeonsBossesCreateFile()
+
+	set {_bosses::*} to "miner_wrath" and "dracula" and "pharaoh"
+	loop {_bosses::*}:
+		set {_boss} to loop-value
+
+		if yaml value "%{_boss}%.type" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::type} to yaml value "%{_boss}%.type" from "bosses"
+		if yaml value "%{_boss}%.name" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::name} to yaml value "%{_boss}%.name" from "bosses"
+		if yaml value "%{_boss}%.health" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::name} to yaml value "%{_boss}%.name" from "bosses"
+		if yaml value "%{_boss}%.ability_cooldown" from "bosses" is set:
+			set {_value} to yaml value "%{_boss}%.ability_cooldown" from "bosses"
+			set {dungeons::config::boss::%{_boss}%::ability_cooldown} to "%{_value}% seconds" parsed as timespan
+		if yaml value "%{_boss}%.respawn_delay" from "bosses" is set:
+			set {_value} to yaml value "%{_boss}%.respawn_delay" from "bosses"
+			set {dungeons::config::boss::%{_boss}%::respawn_delay} to "%{_value}% seconds" parsed as timespan
+		if yaml value "%{_boss}%.despawn_delay" from "bosses" is set:
+			set {_value} to yaml value "%{_boss}%.despawn_delay" from "bosses"
+			set {dungeons::config::boss::%{_boss}%::despawn_delay} to "%{_value}% seconds" parsed as timespan
+		if yaml list "%{_boss}%.weapon" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::weapon::*} to yaml list "%{_boss}%.weapon" from "bosses"
+		if yaml list "%{_boss}%.helmet" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::helmet::*} to yaml list "%{_boss}%.helmet" from "bosses"
+		if yaml list "%{_boss}%.chestplate" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::chestplate::*} to yaml list "%{_boss}%.chestplate" from "bosses"
+		if yaml list "%{_boss}%.leggings" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::leggings::*} to yaml list "%{_boss}%.leggings" from "bosses"
+		if yaml list "%{_boss}%.boots" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::boots::*} to yaml list "%{_boss}%.boots" from "bosses"
+		if yaml list "%{_boss}%.loot.common_loot" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::common_loot::*} to yaml list "%{_boss}%.loot.common_loot" from "bosses"
+		if yaml list "%{_boss}%.loot.rare_loot" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::rare_loot::*} to yaml list "%{_boss}%.loot.rare_loot" from "bosses"
+		if yaml list "%{_boss}%.loot.epic_loot" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::epic_loot::*} to yaml list "%{_boss}%.loot.epic_loot" from "bosses"
+		if yaml value "%{_boss}%.loot.common_amount" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::common_amount} to yaml value "%{_boss}%.loot.common_amount" from "bosses"
+		if yaml value "%{_boss}%.loot.rare_amount" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::rare_amount} to yaml value "%{_boss}%.loot.rare_amount" from "bosses"
+		if yaml value "%{_boss}%.loot.epic_chance" from "bosses" is set:
+			set {dungeons::config::boss::%{_boss}%::epic_chance} to yaml value "%{_boss}%.loot.epic_chance" from "bosses"
+
+
+	save yaml "bosses"
+
+
+
+
+function DungeonsBossesCreateFile():
+	load yaml "unlimited_adventures/Dungeons/bosses.yml" as "bosses"
+
+	set yaml value "version" from "bosses" to 1
+	set the comments of yaml node "version" from "bosses" to "Please DO NOT change version number!"
+
+	set yaml value "miner_wrath.name" from "bosses" to "Miner's Wrath"
+	set yaml value "miner_wrath.respawn_delay" from "bosses" to 300
+	set yaml value "miner_wrath.despawn_delay" from "bosses" to 2700
+	set yaml list "miner_wrath.loot.common_loot" from "bosses" to "38 of iron ingot" and "24 of gold ingot" and "27 of bread" and "diamond helmet of protection 2" and "diamond chestplate of protection 2" and "diamond leggings of protection 2" and "diamond boots of protection 2" and "custom:skeleton_skull" and "custom:miner_helmet" and "custom:miner_helmet_lamp"
+	set yaml list "miner_wrath.loot.rare_loot" from "bosses" to "5 of diamond" and "11 of emerald" and "19 of amethyst shard" and "diamond pickaxe of efficiency 4"
+	set yaml list "miner_wrath.loot.epic_loot" from "bosses" to "custom:cursed_pickaxe"
+	set yaml value "miner_wrath.loot.common_amount" from "bosses" to 6
+	set yaml value "miner_wrath.loot.rare_amount" from "bosses" to 2
+	set yaml value "miner_wrath.loot.epic_chance" from "bosses" to 25
+
+
+
+	set yaml value "dracula.name" from "bosses" to "Lord Dracula"
+	set yaml value "dracula.respawn_delay" from "bosses" to 300
+	set yaml value "dracula.despawn_delay" from "bosses" to 2700
+	set yaml list "dracula.loot.common_loot" from "bosses" to "5 of gold block" and "5 of golden apple" and "diamond helmet of protection 4" and "diamond chestplate of protection 3" and "diamond leggings of protection 3" and "diamond boots of protection 4" and "custom:skeleton_skull" and "custom:blood_vial" and "custom:philosopher_stone"
+	set yaml list "dracula.loot.rare_loot" from "bosses" to "10 of diamond" and "27 of emerald" and "custom:cloak_of_wrath" and "custom:vampire_signet"
+	set yaml list "dracula.loot.epic_loot" from "bosses" to "custom:dracula_sword"
+	set yaml value "dracula.loot.common_amount" from "bosses" to 5
+	set yaml value "dracula.loot.rare_amount" from "bosses" to 2
+	set yaml value "dracula.loot.epic_chance" from "bosses" to 20
+
+
+
+	set yaml value "pharaoh.name" from "bosses" to "Pharaoh"
+	set yaml value "pharaoh.respawn_delay" from "bosses" to 300
+	set yaml value "pharaoh.despawn_delay" from "bosses" to 2700
+	set yaml list "pharaoh.loot.common_loot" from "bosses" to "1 of diamond block" and "8 of gold block" and "10 of golden apple" and "2 of netherite ingot" and "netherite helmet" and "netherite chestplate" and "netherite leggings" and "netherite boots" and "custom:ring_of_vitality" and "custom:ring_of_speed" and "custom:gold_tooth" and "custom:magic_bracelet"
+	set yaml list "pharaoh.loot.rare_loot" from "bosses" to "2 of netherite ingot" and "3 of diamond block" and "5 of emerald block" and "netherite axe of efficiency 5" and "custom:ankh_charm" and "enchanted golden apple"
+	set yaml list "pharaoh.loot.epic_loot" from "bosses" to "custom:ankh_scepter"
+	set yaml value "pharaoh.loot.common_amount" from "bosses" to 8
+	set yaml value "pharaoh.loot.rare_amount" from "bosses" to 3
+	set yaml value "pharaoh.loot.epic_chance" from "bosses" to 15
+
+
+
+	save yaml "bosses"
+
+
+
+
+
+
+
+function DungeonsMessagesCreateFile():
+	load yaml "unlimited_adventures/Dungeons/messages.yml" as "messages"
+
+	set yaml value "version" from "messages" to 1
+	set the comments of yaml node "version" from "messages" to "Please DO NOT change version number!"
+
+	set yaml value "dungeon_locked" from "messages" to "&7You haven't unlocked this Dungeon yet! Finish previous Dungeon to unlock."
+	set yaml value "no_key" from "messages" to "&7You don't have the key!"
+	set yaml value "not_unlocked" from "messages" to "&7This floor is not unlocked yet!"
+
+	set yaml value "floor_unlocked" from "messages" to "&aA passage to the next floor has been unlocked!"
+	set yaml value "dungeon_unlocked" from "messages" to "&aYou have unlocked the &6DUNGEON_NAME &aDungeon!"
+	set yaml value "new_floor_discovered_title" from "messages" to "&6New Floor Discovered!"
+	set yaml value "new_floor_discovered_text" from "messages" to "&aYou have discovered &eFLOOR_NAME&a!"
+
+	set yaml value "key_drop_title" from "messages" to "&aYou have found the Dungeon Key!"
+	set yaml value "key_drop_text" from "messages" to "&fFloor: &aFLOOR_NUMBER &fUnlocked!"
+
+	set yaml value "protection_booster_text" from "messages" to "Your items were saved by the active <##0078f8>&lProtection Booster!"
+	
+	set yaml value "boss_slain" from "messages" to "&6BOSS &cBOSS_NAME &6has been slain!"
+	set yaml value "boss_spawn" from "messages" to "&6BOSS &cBOSS_NAME &6has just spawned!"
+	
+	set yaml list "tutorial" from "messages" to "You can progress the dungeons by defeating enemies." and "Keep killing monsters."
+	
+
+
+	set yaml value "cant_teleport" from "messages" to "&cYou cannot teleport to &6PLAYER_NAME &csince he is in a Dungeon!"
+
+	save yaml "messages"
+
+
+
+function DungeonsMessagesReload():
+	load yaml "unlimited_adventures/Dungeons/messages.yml" as "messages"
+	if yaml value "version" from "messages" is not set:
+		wait 1 tick
+		DungeonsMessagesCreateFile()
+
+	clear {dungeons::messages::*}
+	loop yaml nodes from "messages":
+		if yaml node loop-value from "messages" has list:
+			set {dungeons::messages::%loop-value%::*} to yaml list loop-value from "messages"
+		else:
+			set {dungeons::messages::%loop-value%} to yaml value loop-value from "messages"
+
+	save yaml "messages"
+
+
+
+
+
+
+command /dungeons [<text>] [<text>] [<integer>] [<integer>]:
+	trigger:
+		if sender has permission "dungeons.admin":
+			set {_action} to arg-1
+			set {_type} to arg-2
+			set {_floor} to arg-3
+			set {_number} to arg-4
+
+
+			if {_action} is not set:
+				set {_action} to "help"
+
+
+			if {_action} is "help":
+				send " " to sender
+				send "&f[{@prefix}&f] &7Available commands:" to sender
+				send "&c• &7/dungeons &fsetmonsterspawn &e[type]" to sender
+				send "&c• &7/dungeons &fclearmonsterspawn &e[type]" to sender
+				send "&c• &7/dungeons &fsetbossspawn &e[type]" to sender
+				send "&c• &7/dungeons &fdespawnall &7- despawn all Dungeons mobs & bosses" to sender
+				send "&c• &7/dungeons &frespawnableblock &7- a block that will respawn" to sender
+				send "&c• &7/dungeons &f[setchest/removechest] &7- sets/removes a chest to respawn" to sender
+				send "&c• &7/dungeons &fsetlocation &e[name] &7- creates a location" to sender
+				send "&c• &7/dungeons &fdeletelocation &e[name] &7- deletes a location" to sender
+				send "&c• &7/dungeons &fsetportal &e[destination] &b[require_key=1/0] &7- creates a portal to a location." to sender
+				send "&c• &7/dungeons &fdeleteportal &e[destination] &7- deletes a portal" to sender
+				send "&c• &7/dungeons &funlock &e[destination] &7- unlocks the floor for you" to sender
+				send "&c• &7/dungeons &flist &e[spawns/blocks/chests/locations/portals] &7- displays a list of specific elements" to sender
+				send "&c• &7/dungeons &freload &7- reloads the Dungeons config" to sender
+				send "&c• &7/dungeons &fresetblocks &7- resets all respawnable blocks" to sender
+				send "&c• &7/dungeons &fresetkey &7- resets your unlocked floors data" to sender
+				stop
+
+
+			if {_action} is "teleport":
+				if {_type} is set:
+					if {_floor} is set:
+						set {_type} to {_type} parsed as player
+						DungeonsAdminTeleport({_type}, {_floor})
+
+			if {_action} is "playerteleport":
+				if {_type} is set:
+					if {_floor} is set:
+						set {_type} to {_type} parsed as player
+						DungeonsTeleportPlayer({_type}, {_floor})
+
+
+			if {_action} is "setmonsterspawn" or "sms":
+				if {@mob_list} doesn't contain {_type}:
+					send "&f[{@prefix}&f] &cWrong mob! &7Available: Zombie, Skeleton, Spider, Ghost, Creeper, Husk" to sender
+					stop
+
+				set {_floor} to GetPlayerFloor(player)
+				loop 100 times:
+					if {dungeons::loc::monster_spawn::%{_floor}%::%{_type}%::%loop-number%} is not set:
+						set {_number} to loop-number
+						exit loop
+
+
+				set {dungeons::loc::monster_spawn::%{_floor}%::%{_type}%::%{_number}%} to location of sender
+				if {dungeons::alive_monsters::%{_floor}%::%{_type}%} is not set:
+					set {dungeons::alive_monsters::%{_floor}%::%{_type}%} to 0
+
+				load yaml "unlimited_adventures/Dungeons/FloorData/monster_spawns.yml" as "monster_spawns"
+				set yaml value "%{_floor}%.%{_type}%.%{_number}%" from "monster_spawns" to "%x coordinate of player%, %y coordinate of player%, %z coordinate of player%"
+				save yaml "monster_spawns"
+					
+				send "&f[{@prefix}&f] &eMonster Spawn Set: &7Mob: &f%capitalize({_type})%&f, &7Floor: &f%{_floor}%&7, &7Number: &f%{_number}%" to sender
+
+			if {_action} is "clearmonsterspawn" or "clearmonsterspawns" or "deletemonsterspawn" or "deletemonsterspawns" or "cms":
+				if {_type} is set:
+					if {@mob_list} doesn't contain {_type}:
+						send "&f[{@prefix}&f] &cWrong mob! &7Available: Zombie, Skeleton, Spider, Creeper, Husk" to sender
+						stop
+
+					set {_floor} to GetPlayerFloor(player)
+
+					loop {dungeons::loc::monster_spawn::%{_floor}%::%{_type}%::*}:
+						if {_dist} > distance between loop-value and player:
+							set {_number} to loop-index
+							set {_dist} to distance between loop-value and player
+						if {_dist} is not set:
+							set {_number} to loop-index
+							set {_dist} to distance between loop-value and player
+
+					if {_number} is not set:
+						send "&f[{@prefix}&f] &cThere are no monster spawns in this floor!" to sender
+						stop
+
+					set {_loc} to {dungeons::loc::monster_spawn::%{_floor}%::%{_type}%::%{_number}%}
+					delete {dungeons::loc::monster_spawn::%{_floor}%::%{_type}%::%{_number}%}
+					delete {dungeons::alive_monsters::%{_floor}%::%{_type}%}
+
+					load yaml "unlimited_adventures/Dungeons/FloorData/monster_spawns.yml" as "monster_spawns"
+					delete yaml value "%{_floor}%.%{_type}%.%{_number}%" from "monster_spawns"
+					save yaml "monster_spawns"
+
+					send "&f[{@prefix}&f] &eMonster Spawn Deleted: &7Mob: &f%capitalize({_type})%&f, &7Floor: &f%{_floor}%&7, &7Number: &f%{_number}%" to sender
+					
+					play sound "minecraft:block.note_block.bit" with volume 5 and pitch 1 at {_loc} for sender
+					set {_p_loc} to location 1 meter above {_loc}
+					draw 5 block marker using barrier at {_p_loc} with offset vector(0, 0, 0) with extra 0 for sender
+					draw 10 poof at {_p_loc} with offset vector(0, 0, 0) with extra 0.5 for sender
+					wait 4 ticks
+					play sound "minecraft:block.note_block.bit" with volume 5 and pitch 0.8 at {_loc} for sender
+					wait 4 ticks
+					play sound "minecraft:block.note_block.bit" with volume 5 and pitch 0.6 at {_loc} for sender
+
+
+
+			if {_action} is "setbossspawn" or "sbs":
+				if {_type} is not "miner_wrath" or "dracula" or "pharaoh":
+					send "&f[{@prefix}&f] &cWrong boss! &7Available: miner_wrath, dracula, pharaoh" to sender
+					stop
+
+				set {_floor} to GetPlayerFloor(player)
+
+				set {dungeons::loc::boss_spawn::%{_floor}%::%{_type}%} to location of sender
+				set {dungeons::boss_death_date::%{_floor}%::%{_type}%} to now
+				subtract 10 hours from {dungeons::boss_death_date::%{_floor}%::%{_type}%}
+
+				load yaml "unlimited_adventures/Dungeons/FloorData/boss_spawns.yml" as "boss_spawns"
+				set yaml value "%{_floor}%.%{_type}%" from "boss_spawns" to "%x coordinate of player%, %y coordinate of player%, %z coordinate of player%"
+				save yaml "boss_spawns"
+
+
+				if {_type} is set:
+					set {_time} to {dungeons::config::boss::%{_type}%::respawn_delay}
+					send "&f[{@prefix}&f] &6&lBoss Spawn Set: &7Boss: &f&l%capitalize({_type})%&f, &7Floor: &f%{_floor}%&7" to sender
+					send "&f[{@prefix}&f] &7The Boss will respawn %{_time}% after each death!" to sender
+
+			if {_action} is "removebossspawn" or "deletebossspawn" or "rbs":
+				if {_type} is not "miner_wrath" or "dracula" or "pharaoh":
+					send "&f[{@prefix}&f] &cWrong boss! &7Available: miner_wrath, dracula, pharaoh" to sender
+					stop
+
+				set {_floor} to GetPlayerFloor(player)
+
+				if {dungeons::loc::boss_spawn::%{_floor}%::%{_type}%} is not set:
+					send "&f[{@prefix}&f] &f%{_type}% &cboss spawn doesn't exist!" to sender
+					stop
+
+
+				load yaml "unlimited_adventures/Dungeons/FloorData/boss_spawns.yml" as "boss_spawns"
+				delete yaml value "%{_floor}%.%{_type}%" from "boss_spawns"
+				save yaml "boss_spawns"
+
+				delete {dungeons::loc::boss_spawn::%{_floor}%::%{_type}%}
+				delete {dungeons::boss_death_date::%{_floor}%::%{_type}%}
+				send "&f[{@prefix}&f] &fDeleted spawn of Boss: &e%{_type}% &ffrom floor &e%{_floor}%" to sender
+
+			if {_action} is "despawnall" or "resetall":
+				DungeonsDespawnAllMonsters(sender)
+				send "&f[{@prefix}&f] &eDespawning all monsters & bosses" to sender
+
+			if {_action} is "fixspawning":
+				DungeonsFixSpawning(sender)
+
+			if {_action} is "respawnboss":
+				if {_floor} is set:
+					if {_type} is not "miner_wrath" or "dracula" or "pharaoh":
+						send "&f[{@prefix}&f] &cWrong boss! &7Available: miner_wrath, dracula, pharaoh" to sender
+						stop
+
+					DungeonsSpawnBoss({_type}, {_floor})
+
+
+			if {_action} is "respawnableblock" or "rb":
+				set name of sender's tool to "&6Respawnable Block"
+				send "&f[{@prefix}&f] &7Place blocks and they will respawn after mining!" to sender
+
+			if {_action} is "setchest" or "sc":
+				set {_chest} to target block
+				if {_chest} is not chest:
+					send "&f[{@prefix}&f] &cYou need to aim at a chest!" to sender
+					stop
+				set {_loc} to location of {_chest}
+
+				loop {dungeons::chests::locations::*}:
+					if x coordinate of {_loc} is x coordinate of loop-value:
+						if y coordinate of {_loc} is y coordinate of loop-value:
+							if z coordinate of {_loc} is z coordinate of loop-value:
+								send "&f[{@prefix}&f] &cThere is already a chest set on this location!" to sender
+								stop
+
+				set {_floor} to GetLocationFloor({_loc})
+				set {_dungeon_nr} to FindDungeon({_floor})
+				set {_floor_nr} to FindFloor({_floor})
+
+				load yaml "unlimited_adventures/Dungeons/FloorData/chests.yml" as "chests"
+
+				set {_x} to x coordinate of {_loc}
+				set {_y} to y coordinate of {_loc}
+				set {_z} to z coordinate of {_loc}
+				add "%{_x}%, %{_y}%, %{_z}%" to yaml list "%{_floor}%" from "chests"
+				add location({_x}, {_y}, {_z}, world "dungeons") to {dungeons::chests::locations::*}
+
+				save yaml "chests"
+
+				play sound "block.ender_chest.open" with volume 1 and pitch 1 to sender
+				play sound "entity.experience_orb.pickup" with volume 0.7 and pitch 1 to sender
+
+				send "&f[{@prefix}&f] &7This chest will now be refilled every %{dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_respawn_delay}%!" to sender
+
+			if {_action} is "deletechest" or "removechest":
+				set {_chest} to target block
+				if {_chest} is not chest:
+					send "&f[{@prefix}&f] &cYou need to aim at a chest!" to sender
+					stop
+				set {_loc} to location of {_chest}
+
+				loop {dungeons::chests::locations::*}:
+					if x coordinate of {_loc} is x coordinate of loop-value:
+						if y coordinate of {_loc} is y coordinate of loop-value:
+							if z coordinate of {_loc} is z coordinate of loop-value:
+								
+
+								set {_floor} to GetLocationFloor({_loc})
+
+								load yaml "unlimited_adventures/Dungeons/FloorData/chests.yml" as "chests"
+
+								set {_x} to x coordinate of {_loc}
+								set {_y} to y coordinate of {_loc}
+								set {_z} to z coordinate of {_loc}
+								remove "%{_x}%, %{_y}%, %{_z}%" from yaml list "%{_floor}%" from "chests"
+								remove location({_x}, {_y}, {_z}, world "dungeons") from {dungeons::chests::locations::*}
+
+								save yaml "chests"
+
+								play sound "block.ender_chest.open" with volume 1 and pitch 2 to sender
+								play sound "entity.experience_orb.pickup" with volume 0.7 and pitch 2 to sender
+
+								set block at {_loc} to air
+								draw 30 poof at {_loc} with offset vector(0, 0, 0) with extra 0.3
+
+								send "&f[{@prefix}&f] &7You have removed a chest!" to sender
+
+								stop
+
+
+			if {_action} is "setlocation":
+				if {_type} is set:
+					set {_loc} to location of sender				
+
+					set {_nr} to {_type} parsed as integer
+					load yaml "unlimited_adventures/Dungeons/FloorData/locations.yml" as "locations"
+					set yaml value "%{_nr}%" from "locations" to "%x coordinate of {_loc}%, %y coordinate of {_loc}%, %z coordinate of {_loc}%, %yaw of {_loc}%"
+					save yaml "locations"
+					set {dungeons::loc::%{_nr}%} to {_loc}
+
+
+					send "&f[{@prefix}&f] &eLocation: &f%{_nr}% &7has been created!" to sender
+
+
+
+			if {_action} is "deletelocation" or "removelocation":
+				if {_type} is set:
+					if {dungeons::loc::%{_type}%} is not set:
+						send "&f[{@prefix}&f] &cError! &7Location: &f%{_type}% &7doesn't exist!" to sender
+						stop
+
+					load yaml "unlimited_adventures/Dungeons/FloorData/locations.yml" as "locations"
+					delete yaml value "%{_type}%" from "locations"
+					save yaml "locations"
+					delete {dungeons::loc::%{_type}%}
+
+					send "&f[{@prefix}&f] &eLocation: &f%{_type}% &7has been deleted!" to sender
+
+
+			if {_action} is "setportal" or "createportal":
+				if {_type} is set:
+					set {_loc} to location of target block
+					set {_nr} to {_type}
+					if block at {_loc} is not black concrete:
+						send "&f[{@prefix}&f] &cYou have to be looking at Black Concrete!" to sender
+						stop
+
+					if {dungeons::portals::%{_nr}%::require_key} is set:
+						send "&f[{@prefix}&f] &cPortal &f%{_nr}% &calready exists!" to sender
+						send "&7Delete it with &f/dungeons deleteportal %{_nr}%" to sender
+						stop
+
+					load yaml "unlimited_adventures/Dungeons/FloorData/portals.yml" as "portals" 
+					
+					delete yaml node key "%{_nr}%" from "portals"
+					delete {dungeons::portals::%{_nr}%::loc::*}
+
+					if {_floor} is 1:
+						set yaml value "%{_nr}%.require_key" from "portals" to true
+						set {dungeons::portals::%{_nr}%::require_key} to true
+					else:
+						set yaml value "%{_nr}%.require_key" from "portals" to false
+						set {dungeons::portals::%{_nr}%::require_key} to false
+
+					loop all blocks in radius 5 of {_loc}:
+						if loop-block is black concrete:
+							add "%x coordinate of loop-block%, %y coordinate of loop-block%, %z coordinate of loop-block%" to yaml list "%{_nr}%.loc" from "portals"
+							add location of loop-block to {dungeons::portals::%{_nr}%::loc::*}
+
+					set yaml value "%{_nr}%.world" from "portals" to "%world of player%"
+					
+					save yaml "portals"	
+
+
+					send "&f[{@prefix}&f] &ePortal: &f%{_nr}% &7has been set!" to sender
+					if {_floor} is 1:
+						send "&7This portal will &frequire &7a key to use." to sender
+					else:
+						send "&7This portal &fwon't require &7a key to use." to sender
+
+
+			if {_action} is "removeportal" or "deleteportal":
+				if {_type} is set:
+
+					set {_nr} to {_type}
+
+					load yaml "unlimited_adventures/Dungeons/FloorData/portals.yml" as "portals" 
+					delete yaml value "%{_nr}%.require_key" from "portals"
+					delete yaml value "%{_nr}%.world" from "portals"
+					clear yaml list "%{_nr}%.loc" from "portals"
+					save yaml "portals"
+
+					if {dungeons::portals::%{_nr}%::require_key} is not set:
+						send "&f[{@prefix}&f] &cThere is no portal named &a%{_type}%" to sender
+						stop
+
+					delete {dungeons::portals::%{_nr}%::*}
+
+					send "&f[{@prefix}&f] &7You have deleted portal &a%{_type}%" to sender
+
+
+			if {_action} is "viewspawns":
+				
+				if metadata value "dungeons_preview_spawns" of sender is not true:
+					set metadata value "dungeons_preview_spawns" of sender to true
+					send "&f[{@prefix}&f] &aEnabling monster spawn visualization" to sender
+					stop
+				else:
+					set metadata value "dungeons_preview_spawns" of sender to false
+					send "&f[{@prefix}&f] &cDisabling monster spawn visualization" to sender
+					stop				
+
+			if {_action} is "list":
+				if {_type} is "spawns" or "blocks" or "chests" or "locations" or "portals":
+					if {_type} is "spawns" or "mobspawns" or "spawns" or "mobspawn":
+						send "&f[{@prefix}&f] &7List of monster spawns you have set:" to sender
+						loop {dungeons::loc::*}:
+							send "&c• &7Floor &f%loop-index% &7| Zombies: &f%size of {dungeons::loc::monster_spawn::zombie::%loop-index%::*}%&8(%{dungeons::max_monsters::zombie::%loop-index%}%)&7, Skeletons: &f%size of {dungeons::loc::monster_spawn::skeleton::%loop-index%::*}%&8(%{dungeons::max_monsters::skeleton::%loop-index%}%)&7, Spiders: &f%size of {dungeons::loc::monster_spawn::spider::%loop-index%::*}%&8(%{dungeons::max_monsters::spider::%loop-index%}%)" to sender
+
+						loop {dungeons::loc::boss_spawn::miner_wrath::*}:
+							send "&c• &7Floor &f%loop-index%&7: &c&lMiner's Wrath" to sender
+						loop {dungeons::loc::boss_spawn::dracula::*}:
+							send "&c• &7Floor &f%loop-index%&7: &c&lDracula" to sender
+
+
+					if {_type} is "blocks" or "block":
+						send "&f[{@prefix}&f] &7Respawnable blocks amount: &f%size of {dungeons::respawnable_block::type::*}%" to sender
+
+					if {_type} is "chests" or "chest":
+						send "&f[{@prefix}&f] &7Respawnable chests amount: &f%{dungeons::chests::amount}%" to sender
+
+					if {_type} is "locations" or "locs":
+						send "&f[{@prefix}&f] &7There are &f%size of {dungeons::loc::*}% &7locations set:" to sender
+						loop {dungeons::loc::*}:
+							send "&c• &f%loop-index%" to sender
+
+					if {_type} is "portals" or "portal":
+						send "&f[{@prefix}&f] &7There are &f%size of {dungeons::portals::*}% &7portals set:" to sender
+						loop {dungeons::portals::*}:
+							send "&c• &f%loop-value%" to sender
+
+				else:
+					send "&f[{@prefix}&f] &7Available elements: spawns, blocks, chests, locations, portals" to sender
+					stop
+
+			if {_action} is "resetchests":
+				delete {dungeons::chests::loc::*}
+				delete {dungeons::chests::contents::*}
+				send "&f[{@prefix}&f] &7You have resetted all chests!" to sender
+
+			if {_action} is "resetblocks":
+				delete {dungeons::respawnable_block::type::*}
+				delete {dungeons::respawnable_block::loc::*}
+
+				send "&f[{@prefix}&f] &7You have resetted all respawnable blocks!" to sender
+
+			if {_action} is "setkills":
+
+				set {_floor} to GetPlayerFloor(player)
+				set {_amount} to {_type} parsed as integer
+				set {dungeons::killed_monsters::%uuid of player%} to {_amount}
+				set {dungeons::killed_monsters::%{_floor}%} to {_amount}
+
+				send "&f[{@prefix}&f] &fYou have set your kill count to &e%{_amount}%" to sender
+
+			if {_action} is "unlock":
+				if {_type} is not set:
+					send "&f[{@prefix}&f] &cYou need to specify the player!"
+					stop
+				if {_floor} is not set:
+					send "&f[{@prefix}&f] &cYou need to specify the floor!"
+					stop
+				set {_player} to {_type} parsed as player
+
+				set {_dungeon_nr} to FindDungeon({_floor})
+				DungeonsUnlockDungeon({_player}, {_dungeon_nr})
+				send "&f[{@prefix}&f] &aYou have unlocked &eFloor %{_floor}% &afor &e%{_player}%" to sender
+
+			if {_action} is "resetkeys" or "resetkey" or "resetunlockedfloors" or "ruf":
+				loop 10 times:
+					delete {dungeons::dungeon_unlocked::%loop-number%::%uuid of sender%}
+				loop 50 times:
+					if {dungeons::unlocked_floor::%loop-number%::%uuid of sender%} is true:
+						delete {dungeons::unlocked_floor::%loop-number%::%uuid of sender%}
+				send "&f[{@prefix}&f] &7You have reset your unlocked floors data!" to sender
+
+			if {_action} is "purgealldata":
+				delete {dungeons::portals::*}
+				delete {dungeons::loc::*}
+
+				send "&f[{@prefix}&f] &7Portal and Locations data removed!" to sender
+
+
+			if {_action} is "reload":
+				DungeonsDataReload()
+				DungeonsFloorsReload()
+				DungeonsMobsReload()
+				DungeonsBossesReload()
+				DungeonsMessagesReload()
+				send "&f[{@prefix}&f] &aConfig reloaded!" to sender
+
+
+
+
+on tab complete of "/dungeons":
+	set tab completions for position 1 to "help" and "teleport" and "playerteleport" and "reload" and "unlock" and "list" and "setmonsterspawn" and "deletemonsterspawn" and "setbossspawn" and "deletebossspawn" and "despawnall" and "fixspawning" and "respawnableblock" and "setchest" and "deletechest" and "setlocation" and "deletelocation" and "setportal" and "deleteportal" and "resetkey" and "viewspawns"
+	if tab arg-1 = "setmonsterspawn" or "setmonsterspawnyaml":
+		set tab completions for position 2 to {@mob_list}
+
+	if tab arg-1 = "clearmonsterspawn":
+		set tab completions for position 2 to {@mob_list}
+
+	if tab arg-1 = "setbossspawn" or "setbossspawnyaml":
+		set tab completions for position 2 to "miner_wrath" and "dracula" and "pharaoh"
+
+	if tab arg-1 = "removebossspawn" or "deletebossspawn":
+		set tab completions for position 2 to "miner_wrath" and "dracula" and "pharaoh"
+
+	if tab arg-1 = "setlocation" or "setlocationyaml":
+		set tab completions for position 2 to 1
+
+	if tab arg-1 = "deletelocation":
+		loop {dungeons::loc::*}:
+			add loop-index to {_fill::*}
+		set tab completions for position 2 to {_fill::*}
+
+	if tab arg-1 = "deleteportal":
+		loop {dungeons::portals::*}:
+			add loop-index to {_fill::*}
+		set tab completions for position 2 to {_fill::*}
+
+	if tab arg-1 = "unlock":
+		loop {dungeons::loc::*}:
+			if {dungeons::key::%uuid of player%::%loop-value%} is not true:
+				add loop-index to {_fill::*}
+		set tab completions for position 2 to all players
+		set tab completions for position 3 to {_fill::*}
+
+	if tab arg-1 = "list":
+		set tab completions for position 2 to "spawns" and "blocks" and "chests" and "locations" and "portals"
+
+	if tab arg-1 = "teleport" or "playerteleport":
+		set tab completions for position 2 to all players
+		set tab completions for position 3 to 1
+
+
+
+function DungeonsCheckSpawnBoss():
+	set {_bosses::*} to "miner_wrath" and "dracula" and "pharaoh"
+	set {_floor_amount} to GetFloorAmount()
+	loop {_floor_amount} times:
+		set {_floor} to loop-number
+		loop {_bosses::*}:
+			set {_boss} to loop-value-2
+			if {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%} is set:
+				if size of GetPlayersInFloor({_floor}) is 0:
+					if {dungeons::killed_monsters::%{_floor}%} is not 0:
+						set {dungeons::killed_monsters::%{_floor}%} to 0
+
+				#	Jakby pojawiły się problemy z podwójnym spawnowaniem bossów, to raczej przez te 2 linijki kodu \/ (dotychczas to było obsługiwane przez mobsync po starcie serwera)
+#				if {dungeons::boss_death_date::%{_floor}%::%{_boss}%} is not set:
+#					set {dungeons::boss_death_date::%{_floor}%::%{_boss}%} to now
+				
+				if difference between {dungeons::boss_death_date::%{_floor}%::%{_boss}%} and now >= {dungeons::config::boss::%{_boss}%::respawn_delay}:
+					set {_dungeon_nr} to FindDungeon({_floor})
+					set {_dungeon_floor} to FindFloor({_floor})
+					set {_required_kills} to {dungeons::config::dungeon_%{_dungeon_nr}%::%{_dungeon_floor}%::monster_kills_required}
+					add {dungeons::config::dungeon_%{_dungeon_nr}%::%{_dungeon_floor}%::extra_kills_per_player}*size of GetPlayersInFloor({_floor}) to {_required_kills}
+					if {dungeons::killed_monsters::%{_floor}%} >= {_required_kills}:
+						DungeonsSpawnBoss("%{_boss}%", {_floor})
+
+
+function DungeonsCheckDespawnBoss():
+	set {_bosses::*} to "miner_wrath" and "dracula" and "pharaoh"
+	set {_floor_amount} to GetFloorAmount()
+	loop {_floor_amount} times:
+		set {_floor} to loop-number
+		loop {_bosses::*}:
+			set {_boss} to loop-value-2
+			if {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%} is set:
+#				send "%{_floor}% %{_boss}% %{dungeons::boss_alive::%{_floor}%::%{_boss}%}%" to all players
+				if {dungeons::boss_entity::%{_floor}%::%{_boss}%} is alive:
+#					send "diff: %difference between {dungeons::boss_spawn_date::%{_floor}%::%{_boss}%} and now%" to all players
+					if difference between {dungeons::boss_spawn_date::%{_floor}%::%{_boss}%} and now >= {dungeons::config::boss::%{_boss}%::despawn_delay}:
+#						send "&bDespawning boss! %{_boss}% &7(lifetime passed)" to all players
+						DungeonsKillBoss({_boss}, {_floor})
+				else:
+					if {dungeons::boss_alive::%{_floor}%::%{_boss}%} is true:
+						if size of GetPlayersInFloor({_floor}) is 0:
+							if difference between {dungeons::boss_spawn_date::%{_floor}%::%{_boss}%} and now < {dungeons::config::boss::%{_boss}%::despawn_delay}:
+#								send "&dSubtracting 10 hours" to console
+#								send "&dSubtracting 10 hours" to console
+#								send "&dSubtracting 10 hours" to console
+#								send "&dSubtracting 10 hours" to all players
+								subtract 10 hours from {dungeons::boss_spawn_date::%{_floor}%::%{_boss}%}
+#								send "%{dungeons::boss_spawn_date::%{_floor}%::%{_boss}%}%" to all players
+#								send "&bDespawning boss! %{_boss}% &7(no players in the room)" to all players
+#								DungeonsKillBoss({_boss}, {_floor})
+
+
+
+
+
+function DungeonsSpawnBoss(type: string, floor: integer):
+	DungeonsKillBoss({_type}, {_floor})
+
+	set {dungeons::killed_monsters::%{_floor}%} to 0
+	loop GetPlayersInFloor({_floor}):
+		set {dungeons::killed_monsters::%uuid of loop-value%} to 0
+
+	if {_type} is "miner_wrath":
+		delete {dungeons::boss_death_date::%{_floor}%::%{_type}%}
+
+		set {_loc} to {dungeons::loc::boss_spawn::%{_floor}%::%{_type}%}
+		execute console command "/mm mobs spawn miner_wrath 1 %world of {_loc}%,%x coordinate of {_loc}%,%y coordinate of {_loc}%,%z coordinate of {_loc}%"
+		wait 1 tick
+		loop all entities in radius 0.5 of {_loc}:
+			if loop-entity is a iron golem or a skeleton or a vindicator:
+				set {_entity} to loop-entity
+		set {_uuid} to uuid of {_entity}
+
+		set {dungeons::boss_alive::%{_floor}%::%{_type}%} to true
+		set {dungeons::boss_entity::%{_floor}%::%{_type}%} to {_entity}
+		set {dungeons::boss_uuid::%{_floor}%::%{_type}%} to {_uuid}
+		set {dungeons::boss_spawn_date::%{_floor}%::%{_type}%} to now
+		set {_entity}'s name to "&c&lMiner's Wrath"
+		set metadata value "floor" of {_entity} to {_floor}
+		set metadata value "ability_use_date" of {_entity} to now
+		apply potion of regeneration without any particles to {_entity} for 99 days
+
+
+		set {_msg} to {dungeons::messages::boss_spawn}
+		replace all "BOSS_NAME" with "Miner's Wrath" in {_msg}
+		send " " to GetPlayersInFloor({_floor})
+		send "&f[{@prefix}&f] %{_msg}%" to GetPlayersInFloor({_floor})
+		send " " to GetPlayersInFloor({_floor})
+		play sound "entity.ravager.death" with volume 1 and pitch 0.5 to GetPlayersInFloor({_floor})
+
+
+	if {_type} is "dracula":
+		delete {dungeons::boss_death_date::%{_floor}%::%{_type}%}
+
+		set {_loc} to {dungeons::loc::boss_spawn::%{_floor}%::%{_type}%}
+		execute console command "/mm mobs spawn dracula 1 %world of {_loc}%,%x coordinate of {_loc}%,%y coordinate of {_loc}%,%z coordinate of {_loc}%"
+		wait 1 tick
+		loop all entities in radius 0.5 of {_loc}:
+			if loop-entity is a iron golem or a skeleton or a vindicator:
+				set {_entity} to loop-entity
+		set {_uuid} to uuid of {_entity}
+
+		set {dungeons::boss_alive::%{_floor}%::%{_type}%} to true
+		set {dungeons::boss_entity::%{_floor}%::%{_type}%} to {_entity}
+		set {dungeons::boss_uuid::%{_floor}%::%{_type}%} to {_uuid}
+		set {dungeons::boss_spawn_date::%{_floor}%::%{_type}%} to now
+		set {_entity}'s name to "&c&lLord Dracula"
+		set metadata value "floor" of {_entity} to {_floor}
+		set metadata value "ability_use_date" of {_entity} to now
+		apply potion of regeneration without any particles to {_entity} for 99 days
+
+
+		set {_msg} to {dungeons::messages::boss_spawn}
+		replace all "BOSS_NAME" with "Lord Dracula" in {_msg}
+		send " " to GetPlayersInFloor({_floor})
+		send "&f[{@prefix}&f] %{_msg}%" to GetPlayersInFloor({_floor})
+		send " " to GetPlayersInFloor({_floor})
+		play sound "entity.ravager.death" with volume 1 and pitch 0.5 to GetPlayersInFloor({_floor})
+
+
+	if {_type} is "pharaoh":
+		delete {dungeons::boss_death_date::%{_floor}%::%{_type}%}
+
+		set {_loc} to {dungeons::loc::boss_spawn::%{_floor}%::%{_type}%}
+		execute console command "/mm mobs spawn pharaoh 1 %world of {_loc}%,%x coordinate of {_loc}%,%y coordinate of {_loc}%,%z coordinate of {_loc}%"
+		wait 1 tick
+		loop all entities in radius 0.5 of {_loc}:
+			if loop-entity is a iron golem or a skeleton or a vindicator:
+				set {_entity} to loop-entity
+		set {_uuid} to uuid of {_entity}
+
+		set {dungeons::boss_alive::%{_floor}%::%{_type}%} to true
+		set {dungeons::boss_entity::%{_floor}%::%{_type}%} to {_entity}
+		set {dungeons::boss_uuid::%{_floor}%::%{_type}%} to {_uuid}
+		set {dungeons::boss_spawn_date::%{_floor}%::%{_type}%} to now
+		set {_entity}'s name to "&c&lPharaoh"
+		set metadata value "floor" of {_entity} to {_floor}
+		set metadata value "ability_use_date" of {_entity} to now
+		apply potion of regeneration without any particles to {_entity} for 99 days
+
+
+		set {_msg} to {dungeons::messages::boss_spawn}
+		replace all "BOSS_NAME" with "Pharaoh" in {_msg}
+		send " " to GetPlayersInFloor({_floor})
+		send "&f[{@prefix}&f] %{_msg}%" to GetPlayersInFloor({_floor})
+		send " " to GetPlayersInFloor({_floor})
+		play sound "entity.ravager.death" with volume 1 and pitch 0.5 to GetPlayersInFloor({_floor})
+
+
+
+function DungeonsKillAllBosses():
+	set {_bosses::*} to "miner_wrath" and "dracula" and "pharaoh"
+	set {_floor_amount} to GetFloorAmount()
+	loop {_floor_amount} times:
+		set {_floor} to loop-number
+		loop {_bosses::*}:
+			set {_boss} to loop-value-2
+			if {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%} is set:
+				DungeonsKillBoss({_boss}, {_floor})
+#				send "attempting to kill boss" to all players
+
+
+
+
+function DungeonsKillBoss(boss: string, floor: integer):
+#	send "&6Killing boss &c%{_type}%" to all players
+	if {_boss} is set:
+		set {_name} to "&c&l%{dungeons::config::boss::%{_boss}%::name}%"
+
+	if chunk at {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%} is not loaded:
+		async load chunk at {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%}
+	loop all entities in world world "dungeons":
+		if loop-entity is an iron golem or a skeleton or a vindicator:
+			if name of loop-entity contains {_name}:
+				teleport loop-entity to location(0,-100,0)
+				set metadata "admin_kill" of loop-entity to true
+				wait 1 tick
+				delete loop-entity
+				exit loop
+	delete {dungeons::boss_entity::%{_floor}%::%{_boss}%}
+	delete {dungeons::boss_uuid::%{_floor}%::%{_boss}%}
+	set {dungeons::boss_alive::%{_floor}%::%{_boss}%} to false
+	delete {dungeons::boss_spawn_date::%{_floor}%::%{_boss}%}
+	set {dungeons::boss_death_date::%{_floor}%::%{_boss}%} to now
+	subtract 10 hours from {dungeons::boss_death_date::%{_floor}%::%{_boss}%}
+
+	
+
+
+
+
+
+function BossDeath(boss: string, floor: integer):
+	
+#	send "&CBOSS DEATH: &f%{_boss}% %{_floor}%" to all players
+	
+	set {_loc} to location of {dungeons::boss_entity::%{_floor}%::%{_boss}%}
+	set {dungeons::boss_alive::%{_floor}%::%{_boss}%} to false
+	delete {dungeons::boss_entity::%{_floor}%::%{_boss}%}
+	delete {dungeons::boss_uuid::%{_floor}%::%{_boss}%}
+	set {_drop_loc} to {_loc}
+
+	set {_common_amount} to {dungeons::config::boss::%{_boss}%::common_amount}
+	set {_rare_amount} to {dungeons::config::boss::%{_boss}%::rare_amount}
+	set {_epic_chance} to {dungeons::config::boss::%{_boss}%::epic_chance}
+
+	if difference between {booster::luck::date} and now < {booster::luck::duration}:
+		set {_common_amount} to {dungeons::config::boss::%{_boss}%::common_amount}*2
+		set {_rare_amount} to {dungeons::config::boss::%{_boss}%::rare_amount}*2
+		set {_epic_chance} to {dungeons::config::boss::%{_boss}%::epic_chance}*2
+		if {_epic_chance} > 100:
+			set {_epic_chance} to 100
+
+	if {server::test_server} is true:
+		set {_epic_chance} to 100
+
+	loop {_common_amount} times:
+		set {_item} to random element out of {dungeons::config::boss::%{_boss}%::common_loot::*}
+		drop GetItem({_item}) at {_drop_loc}
+	loop {_rare_amount} times:
+		set {_item} to random element out of {dungeons::config::boss::%{_boss}%::rare_loot::*}
+		drop GetItem({_item}) at {_drop_loc}
+	chance of {_epic_chance}%:
+		set {_item} to random element out of {dungeons::config::boss::%{_boss}%::epic_loot::*}
+		drop GetItem({_item}) at {_drop_loc}
+
+
+
+	set {_dungeon_nr} to FindDungeon({_floor})
+	set {_floor_nr} to FindFloor({_floor})
+	if {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::announce_boss_death_to_everyone} is true:
+		send " " to all players
+		set {_msg} to {dungeons::messages::boss_slain}
+		replace "BOSS_NAME" with "%{dungeons::config::boss::%{_boss}%::name}%" in {_msg}
+		send "&f[{@prefix}&f] %{_msg}%" to all players
+		send " " to all players
+	else:
+		send " " to GetPlayersInDungeon({_floor})
+		set {_msg} to {dungeons::messages::boss_slain}
+		replace "BOSS_NAME" with "%{dungeons::config::boss::%{_boss}%::name}%" in {_msg}
+		send "&f[{@prefix}&f] %{_msg}%" to GetPlayersInDungeon({_floor})
+		send " " to GetPlayersInDungeon({_floor})
+
+
+	set {_dungeon_nr} to FindDungeon({_floor})+1
+	set {_players::*} to GetPlayersInDungeon({_floor})
+	if {dungeons::config::dungeon_%{_dungeon_nr}%::name} is set:
+		loop {_players::*}:
+			DungeonsUnlockDungeon(loop-value, {_dungeon_nr})
+
+
+function DungeonsUnlockDungeon(player: player, dungeon_nr: integer):
+	if {dungeons::dungeon_unlocked::%{_dungeon_nr}%::%uuid of {_player}%} is not true:
+		set {dungeons::dungeon_unlocked::%{_dungeon_nr}%::%uuid of {_player}%} to true
+		wait 4 seconds
+		send " " to {_player}
+		set {_msg} to {dungeons::messages::dungeon_unlocked}
+		replace all "DUNGEON_NAME" with "%{dungeons::config::dungeon_%{_dungeon_nr}%::name}%" in {_msg}
+		send "&f[{@prefix}&f] %{_msg}%" to {_player}
+		send " " to {_player}
+		if {_dungeon_nr} is 2:
+			play sound "custom.dungeons.unlock.dracula_manor" with volume 0.35 and pitch 1 to {_player}
+		if {_dungeon_nr} is 3:
+			play sound "custom.dungeons.unlock.desert_ruins" with volume 0.5 and pitch 1 to {_player}
+	
+
+
+
+
+
+
+function GetFloorAmount() :: integer:
+	loop 15 times:
+		loop 3 times:
+			if {dungeons::config::dungeon_%loop-number-1%::%loop-number-2%::floor} is set:
+				add 1 to {_floor}
+	return {_floor}
+
+function GetLocationFloor(loc: location) :: integer:
+	set {_floor_amount} to GetFloorAmount()
+	loop {_floor_amount} times:
+		if "%region at {_loc}%" contains "dungeon_%loop-number% in":
+			return loop-number
+
+function GetPlayerFloor(player: player) :: integer:
+	set {_floor_amount} to GetFloorAmount()
+	loop {_floor_amount} times:
+		if "%region at {_player}%" contains "dungeon_%loop-number% in":
+			return loop-number
+
+function FindDungeon(floor: integer) :: integer:
+	loop 10 times:
+		loop 3 times:
+			if {_floor} is {dungeons::config::dungeon_%loop-number-1%::%loop-number-2%::floor}:
+				return loop-number-1
+
+function FindFloor(floor: integer) :: integer:
+	loop 10 times:
+		loop 3 times:
+			if {_floor} is {dungeons::config::dungeon_%loop-number-1%::%loop-number-2%::floor}:
+				return loop-number-2
+
+function GetDungeonName(floor: integer) :: string:
+	return {dungeons::config::dungeon_%{_floor}%::name}
+
+function GetFloorName(dungeon: integer, floor: integer) :: string:
+	return {dungeons::config::dungeon_%{_dungeon}%::%{_floor}%::name}
+
+function GetPlayersInDungeon(floor: integer) :: objects:
+	loop {-players::*}:
+		if metadata value "dungeon_floor" of loop-value is {_floor}:
+			add loop-value to {_list::*}
+	return {_list::*}
+
+function GetPlayersInFloor(floor: integer) :: objects:
+	loop {-players::*}:
+		if metadata value "dungeon_floor" of loop-value is {_floor}:
+			add loop-value to {_list::*}
+	return {_list::*}
+
+function IsDungeonUnlocked(player: player, floor_nr: integer) :: boolean:
+	if {_floor_nr} is 1:
+		return true
+	set {_dungeon_nr} to FindDungeon({_floor_nr})
+	if {dungeons::dungeon_unlocked::%{_dungeon_nr}%::%uuid of {_player}%} is true:
+		return true
+
+function IsFloorUnlocked(player: player) :: boolean:
+	set {_dungeon_nr} to FindDungeon(metadata value "dungeon_floor" of {_player})
+	set {_dungeon_floor} to FindFloor(metadata value "dungeon_floor" of {_player})
+	if {dungeons::killed_monsters::%uuid of {_player}%} >= {dungeons::config::dungeon_%{_dungeon_nr}%::%{_dungeon_floor}%::monster_kills_required}:
+		return true
+
+
+function LeaveDungeon(player: player):
+	set {_p_floor} to metadata value "dungeon_floor" of {_player}
+	delete metadata value "dungeon_floor" of {_player}
+	if {dungeons::killed_monsters::%{_p_floor}%} is not 0:
+		subtract round({dungeons::killed_monsters::%uuid of {_player}%}/2) from {dungeons::killed_monsters::%{_p_floor}%}
+		if {dungeons::killed_monsters::%{_p_floor}%} < 0:
+			set {dungeons::killed_monsters::%{_p_floor}%} to 0
+	if {dungeons::killed_monsters::%uuid of {_player}%} is not 0:
+		set {dungeons::killed_monsters::%uuid of {_player}%} to 0
+
+
+function GetAmountOfPortals() :: integer:
+	loop 50 times:
+		if {dungeons::portals::%loop-number%::require_key} is set:
+			set {_amount} to loop-number
+	return {_amount}
+
+function CanEnterDungeon(player: player, floor: integer) :: boolean:
+	set {_boolean} to false
+	if IsDungeonUnlocked({_player}, {_floor}) is true:
+		if {dungeons::portals::%{_floor}%::require_key} is true:
+			set {_require_key} to true
+		if {dungeons::portals::%{_floor}%::loc::*} is not set:
+			set {_require_key} to true
+		if {_require_key} is true:
+			set {_dungeon_nr} to FindDungeon({_floor})
+			if {_player} has {item::%{dungeons::config::dungeon_%{_dungeon_nr}%::key}%}:
+				set {_boolean} to true
+		else:
+			set {_boolean} to true
+	return {_boolean}
+
+function DungeonsTeleportPlayer(player: player, floor: integer):
+	set {_a} to {v83hj5}
+	set {_c::*} to {_a} split at ""
+	if "%{_c::19}%%{_c::20}%" parsed as integer is not between ({varrr} * 3)-4 and ({varrr} * 3)+4:
+		if "%{_c::19}%%{_c::20}%" parsed as integer is not 23 or 24 or 0 or 1:
+			stop
+	if CanEnterDungeon({_player}, {_floor}) is true:
+		set {_dungeon_nr} to FindDungeon({_floor})
+		remove {item::%{dungeons::config::dungeon_%{_dungeon_nr}%::key}%} from {_player}
+		DungeonsTeleport({_player}, {_floor})
+
+
+on click on black concrete:
+	loop 50 times:
+		set {_floor_nr} to loop-number
+		if {dungeons::portals::%{_floor_nr}%::loc::*} contains location of event-block:
+			if {dungeons::portals::%{_floor_nr}%::require_key} is true:
+				set {_dungeon_nr} to FindDungeon({_floor_nr})
+
+
+				if {dungeons::config::dungeon_%{_dungeon_nr}%::1::floor} is {_floor_nr}:
+					set {_first_floor} to true
+					if IsDungeonUnlocked(player, {_floor_nr}) is true:
+						if player has {item::%{dungeons::config::dungeon_%{_dungeon_nr}%::key}%}:
+							remove {item::%{dungeons::config::dungeon_%{_dungeon_nr}%::key}%} from player
+							set {_teleport} to true
+					else:
+						set {_dungeon_locked} to true
+				else:
+					if IsFloorUnlocked(player) is true:
+						set {_teleport} to true
+
+
+				if {_teleport} is not true:
+					if metadata value "dungeon_no_key_cooldown" of player is not set:
+						set {_time} to now
+						subtract 1 hour from {_time}
+						set metadata value "dungeon_no_key_cooldown" of player to {_time}
+					if difference between metadata value "dungeon_no_key_cooldown" of player and now > 1 second:
+						set metadata value "dungeon_no_key_cooldown" of player to now
+						play sound "block.fence_gate.close" with volume 0.8 and pitch 0.5 to player
+						if {_dungeon_locked} is true:
+							send "&f[{@prefix}&f] %{dungeons::messages::dungeon_locked}%" to player
+						else:
+							if {_first_floor} is true:
+								send "&f[{@prefix}&f] %{dungeons::messages::no_key}%" to player
+							else:
+								send "&f[{@prefix}&f] %{dungeons::messages::not_unlocked}%" to player
+					stop
+
+
+			DungeonsTeleport(player, {_floor_nr})
+			exit loop
+
+
+
+function DungeonsTeleport(player: player, floor: integer):
+	if metadata value "in_combat" of {_player} is true:
+		stop
+	apply blindness without any particles to {_player} for 2 seconds
+	apply resistance of tier 3 without any particles to {_player} for 4 seconds
+	set metadata value "tp_date" of {_player} to now
+	set metadata value "tp_cooldown" of {_player} to 2 seconds
+	KillBacktool({_player})
+	wait 1 tick
+	teleport {_player} to {dungeons::loc::%{_floor}%}
+	set metadata value "dungeon_floor" of {_player} to {_floor}
+	wait 0.3 second
+	if {dungeons::killed_monsters::%uuid of {_player}%} is not 0:
+		set {dungeons::killed_monsters::%uuid of {_player}%} to 0
+	if {dungeons::unlocked_floor::%{_floor}%::%uuid of {_player}%} is true:
+		play sound "entity.enderman.teleport" with volume 1 and pitch 0.5 to {_player}
+		send title " " with subtitle GetFloorName(FindDungeon({_floor}),FindFloor({_floor})) to {_player} for 2 seconds
+	else:
+		if {dungeons::loc::boss_spawn::%{_floor}%::*} is set:
+			play sound "entity.elder_guardian.curse" with volume 1 and pitch 0.5 to {_player}
+		else:
+			play sound "entity.evoker.cast_spell" with volume 1 and pitch 0.5 to {_player}
+		set {dungeons::unlocked_floor::%{_floor}%::%uuid of {_player}%} to true
+		send title "Discovered:" with subtitle "&6%GetFloorName(FindDungeon({_floor}),FindFloor({_floor}))%" to {_player} for 2 seconds
+		send "" to {_player}
+		set {_msg} to {dungeons::messages::new_floor_discovered_text}
+		replace all "FLOOR_NAME" with GetFloorName(FindDungeon({_floor}),FindFloor({_floor})) in {_msg}
+		send "&f[{@prefix}&f] %{_msg}%" to {_player}
+		send "" to {_player}
+	wait 1 second
+	DungeonsPlayerSyncMonsters({_player}, {_floor})
+	wait 3 second
+	if FindFloor({_floor}) is 1:
+		set {_msg::*} to {dungeons::messages::tutorial::*}
+		send " " to {_player}
+		send "%{_msg::1}%" to {_player}
+		send "%{_msg::2}%" to {_player}
+		send " " to {_player}
+
+
+
+function DungeonsAdminTeleport(player: player, floor: integer):
+	if metadata value "in_combat" of {_player} is true:
+		stop
+	apply blindness without any particles to {_player} for 2 seconds
+	apply resistance of tier 3 without any particles to {_player} for 4 seconds
+	set metadata value "tp_date" of {_player} to now
+	set metadata value "tp_cooldown" of {_player} to 2 seconds
+	KillBacktool({_player})
+	teleport {_player} to {dungeons::loc::%{_floor}%}
+	set metadata value "dungeon_floor" of {_player} to {_floor}
+	if {dungeons::killed_monsters::%uuid of {_player}%} is not 0:
+		set {dungeons::killed_monsters::%uuid of {_player}%} to 0
+	wait 0.3 second
+	play sound "entity.enderman.teleport" with volume 1 and pitch 0.5 to {_player}
+	send title " " with subtitle GetFloorName(FindDungeon({_floor}),FindFloor({_floor})) to {_player} for 2 seconds
+	wait 1 second
+	DungeonsPlayerSyncMonsters({_player}, {_floor})
+
+
+
+
+on right click on chest:
+	
+	set {_loc} to location of event-block
+	set {_floor} to GetLocationFloor({_loc})
+	set {_dungeon_nr} to FindDungeon({_floor})
+	set {_floor_nr} to FindFloor({_floor})
+
+
+	loop {dungeons::chests::locations::*}:
+		
+
+		if x coordinate of {_loc} is x coordinate of loop-value:
+			if y coordinate of {_loc} is y coordinate of loop-value:
+				if z coordinate of {_loc} is z coordinate of loop-value:
+
+					if {dungeons::chests::%{_loc}%::respawn_time} is not set:
+						set {dungeons::chests::%{_loc}%::respawn_time} to now
+						subtract 2 hours from {dungeons::chests::%{_loc}%::respawn_time}
+					if difference between {dungeons::chests::%{_loc}%::respawn_time} and now <= {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_respawn_delay}:
+						stop
+					
+
+					set {dungeons::chests::%{_loc}%::respawn_time} to now
+
+					set {_inventory} to event-block's inventory
+					remove all items from {_inventory}
+
+					set {_common_loot::*} to {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_common_loot::*}
+					set {_common_amount} to {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_common_amount}
+
+					set {_rare_loot::*} to {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_rare_loot::*}
+					set {_rare_amount} to {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::loot::chest_rare_amount}
+
+					if difference between {booster::luck::date} and now < {booster::luck::duration}:
+						set {_common_amount} to {_common_amount}*2
+						set {_rare_amount} to {_rare_amount}*2
+
+					loop {_common_amount} times:
+						add random element out of {_common_loot::*} to {_items::*}
+					loop {_rare_amount} times:
+						add random element out of {_rare_loot::*} to {_items::*}
+					
+
+					wait 7 ticks
+#					draw 30 totem of undying at location 0.5 meter above {_loc} with offset vector(0, 0, 0) with extra 0.5
+
+					loop {_items::*}:
+						set {_item} to loop-value-2
+						add GetItem({_item}) to {_inventory}
+
+						play sound "item.armor.equip_iron" with volume 0.8 and pitch 2 at {_loc}
+						wait 2 tick
+					
+
+
+function DungeonsGetKey(player: player, dungeon: string):
+	send " " to {_player}
+	send "&f[{@prefix}&f] %{dungeons::messages::key_drop_title}%" to {_player}
+	set {_msg} to "%{dungeons::messages::key_drop_text}%"
+	replace all "FLOOR_NUMBER" with "%{_floor}%" in {_msg}
+	send "&f[{@prefix}&f] %{_msg}%" to {_player}
+	send " " to {_player}
+
+	play sound "minecraft:item.armor.equip_chain" with volume 1 and pitch 1 to {_player}
+	play sound "minecraft:item.armor.equip_gold" with volume 1 and pitch 1 to {_player}
+	wait 0.5 second
+	play sound "minecraft:entity.player.levelup" with volume 0.7 and pitch 1 to {_player}
+
+
+
+
+function DungeonsCheckRespawnBlocks():
+	set {_block} to block at location(0, 0, 0, world "dungeons")
+	loop 1000 times:
+		if metadata value "loc_%loop-number%" of {_block} is set:
+			set {_loc} to metadata value "loc_%loop-number%" of {_block}
+			set {_floor} to GetLocationFloor({_loc})
+			set {_dungeon_nr} to FindDungeon({_floor})
+			set {_floor_nr} to FindFloor({_floor})
+			set {_diff} to difference between metadata value "date_%loop-number%" of {_block} and now
+#			send "%{_diff}%   :   %{dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::block_respawn_delay}%" to all players
+			if difference between metadata value "date_%loop-number%" of {_block} and now >= {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::block_respawn_delay}:
+				set block at location of metadata value "loc_%loop-number%" of {_block} to metadata value "block_%loop-number%" of {_block}
+				delete metadata value "date_%loop-number%" of {_block}
+				delete metadata value "loc_%loop-number%" of {_block}
+				delete metadata value "block_%loop-number%" of {_block}
+
+
+on command "stop":
+	set {_block} to block at location(0, 0, 0, world "dungeons")
+	loop 1000 times:
+		if metadata value "loc_%loop-number%" of {_block} is set:
+			set block at location of metadata value "loc_%loop-number%" of {_block} to metadata value "block_%loop-number%" of {_block}
+
+
+
+
+
+
+
+
+function DungeonsCheckSpawnMonsters():
+	set {_floor_amount} to GetFloorAmount()
+	loop {_floor_amount} times:
+		set {_floor} to loop-number
+		DungeonsSpawnMonsters({_floor})
+
+
+
+function DungeonsSpawnMonsters(floor: integer):
+	set {_dungeon_nr} to FindDungeon({_floor})
+	set {_floor_nr} to FindFloor({_floor})
+	set {_mobs::*} to {@mob_list}
+	loop {_mobs::*}:
+		set {_mob} to loop-value
+#		if {_floor} is 4:
+#			send "%{_mob}% %{dungeons::alive_monsters::%{_floor}%::%{_mob}%}%" to all players
+		if {dungeons::loc::monster_spawn::%{_floor}%::%{_mob}%::*} is set:
+			if {dungeons::alive_monsters::%{_floor}%::%{_mob}%} < {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::%{_mob}%_spawn_limit}:
+				DungeonsSpawnMonster({_floor}, {_mob})
+
+
+
+
+
+
+function DungeonsSpawnMonster(floor: integer, mob: string):
+
+	set {_loc} to random element out of {dungeons::loc::monster_spawn::%{_floor}%::%{_mob}%::*}
+
+
+	if {dungeons::monster_spawn::%{_floor}%::last_spawn::%{_mob}%} is not set:
+		set {dungeons::monster_spawn::%{_floor}%::last_spawn::%{_mob}%} to now
+		subtract 1 hour from {dungeons::monster_spawn::%{_floor}%::last_spawn::%{_mob}%}
+
+	set {_dungeon_nr} to FindDungeon({_floor})
+
+
+
+	#	Dynamic Respawn Delay (depends on the amount of players in a Dungeon)
+
+	set {_player_count} to size of GetPlayersInFloor({_floor})
+	subtract 1 from {_player_count}
+	if {_player_count} < 5:
+		set {_subtract_time} to {_player_count}*0.1
+	else:
+		set {_subtract_time} to {_player_count}*0.085
+	if {_subtract_time} > 0.6:
+		set {_subtract_time} to 0.6
+
+	set {_spawn_delay} to "%{dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor}%::%{_mob}%_respawn_delay}%"
+	replace all " second" with "" in {_spawn_delay}
+	replace all "s" with "" in {_spawn_delay}
+	set {_spawn_delay} to {_spawn_delay} parsed as integer
+	subtract {_spawn_delay}*{_subtract_time} from {_spawn_delay}
+	set {_spawn_delay} to "%{_spawn_delay}% seconds" parsed as timespan
+
+	if difference between {dungeons::monster_spawn::%{_floor}%::last_spawn::%{_mob}%} and now < {_spawn_delay}:
+		stop
+
+	if {_mob} is set:
+
+		set {_type} to {dungeons::config::mob::%{_floor}%::%{_mob}%::type} parsed as entity type
+		set {dungeons::monster_spawn::%{_floor}%::last_spawn::%{_mob}%} to now
+		spawn {_type} at location of {_loc}
+		set {_monster} to last spawned monster
+		set name of {_monster} to {dungeons::config::mob::%{_floor}%::%{_mob}%::name}
+		set max health of {_monster} to {dungeons::config::mob::%{_floor}%::%{_mob}%::health}
+		heal {_monster}
+		if {dungeons::config::mob::%{_floor}%::%{_mob}%::invisibility} is true:
+			apply potion of invisibility without any particles to {_monster} for 10 days
+		
+		set {_monster}'s tool to GetItem(random element out of {dungeons::config::mob::%{_floor}%::%{_mob}%::weapon::*})
+		set {_monster}'s helmet to GetItem(random element out of {dungeons::config::mob::%{_floor}%::%{_mob}%::helmet::*})
+		set {_monster}'s chestplate to GetItem(random element out of {dungeons::config::mob::%{_floor}%::%{_mob}%::chestplate::*})
+		set {_monster}'s leggings to GetItem(random element out of {dungeons::config::mob::%{_floor}%::%{_mob}%::leggings::*})
+		set {_monster}'s boots to GetItem(random element out of {dungeons::config::mob::%{_floor}%::%{_mob}%::boots::*})
+
+
+	set metadata value "floor" of {_monster} to {_floor}
+	set {_nbt} to custom nbt of {_monster}
+	set string tag "mob_type" of {_nbt} to "custom_mob"
+	add 1 to {dungeons::alive_monsters::%{_floor}%::%{_mob}%}
+
+
+
+function DungeonsLoseInventory(player: player) :: boolean:
+	if "%region at {_player}%" contains "dungeon":
+		set {_p_floor} to metadata value "dungeon_floor" of {_player}
+		set {_dungeon_nr} to FindDungeon({_p_floor})
+		set {_floor_nr} to FindFloor({_p_floor})
+		if {dungeons::config::dungeon_%{_dungeon_nr}%::%{_floor_nr}%::keep_inventory} is true:
+			return false
+	return true
+
+on death:
+	set {_victim} to "%victim%"
+	replace all " " with "_" in {_victim}
+
+	if metadata value "custom_mob" of victim is "despawn":
+		clear drops
+		stop
+
+	
+	if victim is a player:
+		#	Removing Adventure Apparel on death
+		KillBacktool(victim)
+
+		#	Protection Booster & Dungeons inventory keep
+		if ProtectionBoosterActive() is true:
+			keep the inventory and experiences
+			clear drops
+			set metadata value "protection_booster_respawn" of victim to true
+		else:
+			if DungeonsLoseInventory(victim) is false:
+				keep the inventory and experiences
+				clear drops
+
+
+
+	#	Dungeons
+	if victim is a zombie or a husk or a spider or a skeleton or a creeper or an iron golem or a vindicator:
+		if attacker is player:
+			set {_p_floor} to metadata value "dungeon_floor" of attacker
+			DungeonsMobKill(attacker, {_p_floor})
+		if {_p_floor} is set:
+			clear drops
+		set {_floor} to metadata value "floor" of victim
+#		send "%{_floor}%" to all players
+		if name of victim contains "&c&lMiner's Wrath":
+			set {_boss} to "miner_wrath"
+		if name of victim contains "&c&lLord Dracula":
+			set {_boss} to "dracula"
+		if name of victim contains "&c&lPharaoh":
+			set {_boss} to "pharaoh"
+		if {_boss} is set:
+			clear drops
+			set {dungeons::boss_death_date::%{_floor}%::%{_boss}%} to now
+			if metadata value "admin_kill" of victim is true:
+				stop
+			BossDeath({_boss}, {_floor})
+			stop
+
+		if {_floor} is set:
+			if victim is a zombie or skeleton or spider or husk or creeper:
+				if name of victim is set:
+					set {_mob} to uncolored name of victim
+				else:
+					set {_mob} to "%victim%"
+				clear drops
+				reduce {dungeons::alive_monsters::%{_floor}%::%{_mob}%} by 1
+				MobDeath(victim, location of victim)
+
+
+
+	#	Mob Forge Drops
+	MobForgeDrops(victim)
+
+
+	#	Pinata
+	if victim is a sheep:
+		if victim's name contains "&d&lPINATA":
+			clear drops
+			PinataDeath(location of victim)
+
+	#	Random Encounters
+
+	if metadata value "custom_mob" of victim is set:
+		if metadata value "custom_mob" of victim is not "despawn":
+			clear drops
+			RandomEncountersMobDeath(victim, metadata value "custom_mob" of victim)
+
+	set {_nbt} to custom nbt of victim
+	if string tag "mob_type" of {_nbt} is "custom_mob":
+		clear drops
+
+
+	if metadata value "nosferatu_spawn" of victim is true:
+		set {_nosferatu} to metadata value "nosferatu_entity" of victim
+		set metadata value "nosferatu_spawned_zombies" of {_nosferatu} to metadata value "nosferatu_spawned_zombies" of {_nosferatu} - 1
+	if metadata value "skeleton_cheiftain_spawn" of victim is true:
+		set {_skeleton_cheiftain} to metadata value "skeleton_chieftain_entity" of victim
+		set metadata value "skeleton_cheiftain_spawned_skeletons" of {_skeleton_cheiftain} to metadata value "skeleton_chieftain_spawned_skeletons" of {_skeleton_cheiftain} - 1
+
+	#	Balloon
+	if metadata value "balloon" of victim is true:
+		clear drops
+		BalloonDrop(victim)
+
+
+
+function DungeonsMobKill(player: player, floor: integer):
+	if {dungeons::loc::boss_spawn::%{_floor}%::*} is set:
+		add 1 to {dungeons::killed_monsters::%{_floor}%}
+	add 1 to {dungeons::killed_monsters::%uuid of {_player}%}
+	set {_dungeon_nr} to FindDungeon(metadata value "dungeon_floor" of {_player})
+	set {_dungeon_floor} to FindFloor(metadata value "dungeon_floor" of {_player})
+
+	set {_killed} to {dungeons::killed_monsters::%uuid of {_player}%}
+	set {_kills_required} to {dungeons::config::dungeon_%{_dungeon_nr}%::%{_dungeon_floor}%::monster_kills_required} + (size of GetPlayersInDungeon({_floor})*{dungeons::config::dungeon_%{_dungeon_nr}%::%{_dungeon_floor}%::extra_kills_per_player})
+
+	if {dungeons::loc::boss_spawn::%{_floor}%::*} is not set:
+		if {_killed} = {_kills_required}:
+			wait 2 seconds
+			send " " to {_player}
+			send "&f[{@prefix}&f] &a%{dungeons::messages::floor_unlocked}%" to {_player}
+			play sound "block.ender_chest.open" with volume 1.2 and pitch 0.5 to {_player}
+
+
+function MobDeath(enemy: entity, loc: location):
+	set {_mob} to "%{_enemy}%"
+	set {_floor} to metadata value "floor" of {_enemy}
+
+
+	set {_rarities::*} to "common" and "rare" and "epic"
+	loop {_rarities::*}:
+		set {_rarity} to loop-value
+		if {dungeons::config::mob::%{_floor}%::%{_mob}%::%{_rarity}%_loot::*} is set:
+			
+			set {_chance} to {dungeons::config::mob::%{_floor}%::%{_mob}%::%{_rarity}%_chance}
+			if difference between {booster::luck::date} and now < {booster::luck::duration}:
+				set {_chance} to {_chance}*2
+			if {_chance} > 100:
+				set {_chance} to 100
+
+			chance of {_chance}%:
+				set {_item} to random element out of {dungeons::config::mob::%{_floor}%::%{_mob}%::%{_rarity}%_loot::*}
+				drop GetItem({_item}) at {_loc}
+
+
+
+
+command /bossability [<text>] [<text>]:
+	permission: admin.boss
+	trigger:
+		set {_boss} to arg-1
+		set {_ability} to arg-2
+		set {_floor_amount} to GetFloorAmount()
+		loop {_floor_amount} times:
+			set {_floor} to loop-number
+			if {dungeons::boss_entity::%{_floor}%::%{_boss}%} is set:
+				set {_entity} to {dungeons::boss_entity::%{_floor}%::%{_boss}%}
+		if {_entity} is set:
+			DungeonsStartBossAbility({_entity}, {_ability})
+
+
+
+
+
+function DungeonsStartBossAbility(entity: entity, ability: string):
+	set {_floor} to metadata value "floor" of {_entity}
+	if name of {_entity} contains "&c&lMiner's Wrath":
+		set {_boss} to "miner_wrath"
+
+		#	Kick Attack
+		if {_ability} is "kick":
+			wait 13 ticks
+			if {dungeons::boss_entity::%{_floor}%::%{_boss}%} is not alive:
+				stop
+			SpawnParticles("crit", location 2 meter in front of {_entity}, 100)
+			play sound "entity.zombie.attack_wooden_door" with volume 1 and pitch 0.5 at {_entity}
+			set {_loc} to location 1 meter in front of {_entity}
+			loop {-players::*}:
+				set {_player} to loop-value
+				if distance between {_player} and {_loc} < 3:
+					set {_v} to vector from {_entity} to loop-value
+					push {_player} {_v} with speed 1.5
+					push {_player} upwards with speed 0.4
+					damage {_player} by 4.5
+#					send "&bkick" to all players
+
+		#	Pickaxe Smash
+		if {_ability} is "pickaxe_smash":
+			wait 35 ticks
+			if {dungeons::boss_entity::%{_floor}%::%{_boss}%} is not alive:
+				stop
+			set {_loc} to location 2 meters in front of {_entity}
+			draw 300 crit at {_loc} with offset vector(2, 0.3, 2) with extra 0.1
+			play sound "entity.zombie.attack_wooden_door" with volume 2 and pitch 0.5 at {_loc}
+			play sound "entity.zombie.break_wooden_door" with volume 0.5 and pitch 0.5 at {_loc}
+			loop {-players::*}:
+				set {_player} to loop-value
+				if distance between {_player} and {_loc} < 5:
+					set {_v} to vector from {_loc} to loop-value
+					if pitch of {_v} < -15:
+						set pitch of {_v} to -15
+					push {_player} {_v} with speed 1
+					push {_player} upwards with speed 0.8
+					damage {_player} by 6
+				else:
+					if distance between {_player} and {_loc} < 9:
+						set {_v} to vector from {_loc} to loop-value
+						if pitch of {_v} < -15:
+							set pitch of {_v} to -15
+						push {_player} {_v} with speed 0.6
+						push {_player} upwards with speed 0.5
+						damage {_player} by 4
+
+	if name of {_entity} contains "&c&lLord Dracula":
+		set {_boss} to "dracula"
+
+		#	Dash
+		if {_ability} is "dash":
+			wait 20 ticks
+			if {dungeons::boss_entity::%{_floor}%::%{_boss}%} is not alive:
+				stop
+			
+			wait 3 ticks
+			loop 8 times:
+				if {dungeons::boss_entity::%{_floor}%::%{_boss}%} is not alive:
+					stop
+				push {_entity} upwards with speed 0.1
+				push {_entity} forward with speed 0.8
+				loop all entities in radius 3 of {_entity}:
+					if loop-entity is not {_entity}:
+						if loop-entity is a living entity:
+							set {_v} to vector from {_entity} to loop-entity
+							push loop-entity {_v} with speed 0.9
+							push loop-entity upwards with speed 0.4
+							damage loop-entity by 2.5
+				wait 3 ticks
+
+
+		#	Bat Swarm
+		if {_ability} is "bat_swarm":
+			wait 20 ticks
+			if {dungeons::boss_entity::%{_floor}%::%{_boss}%} is not alive:
+				stop
+			SpawnParticles("crit", location of {_entity}, 100)
+			loop 30 times:
+				set {_spawn_loc} to location 1 meter above {_entity}
+				set {_loc} to RandomPos({_spawn_loc}, -1, 2, -1, 1, 0, 1)
+				spawn a bat at {_loc}
+				set metadata value "bat_swarm" of last spawned bat to true
+				set metadata value "spawn_date" of last spawned bat to now
+				add last spawned bat to {_bats::*}
+			loop 100 times:
+				loop {_bats::*}:
+					set {_bat} to loop-value-2
+#					set {_v} to vector from {_bat} to location 1 meter above {_entity}
+					set {_loc} to location 1 meter above {_entity}
+					set {_v} to vector from {_bat} to RandomPos({_loc}, -0.3, 1, -0.3, 0.3, 0, 0.3)
+					push {_bat} {_v} with speed 0.2
+				wait 0.1 second
+			loop all bats:
+				if metadata value "bat_swarm" of loop-bat is true:
+					if difference between metadata value "spawn_date" of loop-bat and now >= 9 seconds:
+						delete loop-bat
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function DungeonsCheckSpawnPreview():
+	loop {-players::*}:
+		DungeonsCheckSpawnPreviewPlayer(loop-value)
+
+function DungeonsCheckSpawnPreviewPlayer(player: player):
+	loop 5 times:
+		if metadata value "dungeons_preview_spawns" of {_player} is true:
+			set {_floor} to metadata value "dungeon_floor" of {_player}
+			loop {dungeons::loc::monster_spawn::%{_floor}%::zombie::*}:
+				draw 6 item using rotten flesh at location 1 meter above loop-value-2 with offset vector(0.3, 0.5, 0.3) with extra 0 for {_player}
+				draw 3 cloud at location 1 meter above loop-value-2 with offset vector(0.3, 0.5, 0.3) with extra 0 for {_player}
+			loop {dungeons::loc::monster_spawn::%{_floor}%::skeleton::*}:
+				draw 6 item using bone at location 1 meter above loop-value-2 with offset vector(0.3, 0.5, 0.3) with extra 0 for {_player}
+				draw 3 poof at location 1 meter above loop-value-2 with offset vector(0.3, 0.5, 0.3) with extra 0 for {_player}
+			loop {dungeons::loc::monster_spawn::%{_floor}%::spider::*}:
+				draw 6 item using string at location 1 meter above loop-value-2 with offset vector(0.3, 0.5, 0.3) with extra 0 for {_player}
+				draw 3 cloud at location 1 meter above loop-value-2 with offset vector(0.3, 0.5, 0.3) with extra 0 for {_player}
+			loop {dungeons::loc::monster_spawn::%{_floor}%::ghost::*}:
+				draw 3 cloud at location 1 meter above loop-value-2 with offset vector(0.3, 0.5, 0.3) with extra 0 for {_player}
+			loop {dungeons::loc::monster_spawn::%{_floor}%::husk::*}:
+				draw 6 item using rotten flesh at location 1 meter above loop-value-2 with offset vector(0.3, 0.5, 0.3) with extra 0 for {_player}
+				draw 3 cloud at location 1 meter above loop-value-2 with offset vector(0.3, 0.5, 0.3) with extra 0 for {_player}
+			send action bar "&fDisplaying monster spawns..." to {_player}
+		wait 1 second
+
+
+
+#		if {dungeons::alive_monsters::%{_floor}%::%{_type}%} is not set:
+#			set {dungeons::alive_monsters::%{_floor}%::%{_type}%} to 0

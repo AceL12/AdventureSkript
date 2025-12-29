@@ -1,0 +1,135 @@
+import:
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+
+on load:
+	loop 80 times:
+		if YamlQueueCheck("locations") is true:
+			YamlQueueAdd("locations")
+			LoadLocations()
+			exit loop
+		wait 1 second
+
+
+function LoadLocations():
+	load yaml "unlimited_adventures/AdventureCore/locations.yml" as "locations"
+	loop yaml node keys "biomes" from "locations":
+		set {-biome::%loop-value%} to yaml value "biomes.%loop-value%" from "locations"
+	save yaml "locations"
+
+	YamlQueueRemove("locations")
+
+on teleport:
+	set metadata value "announce_biome_delay" of player to now
+
+every second:
+	loop {-players::*}:
+		CheckLocation(loop-value)
+
+function CheckLocation(player: player):
+	loop 2 times:
+		AnnouncePlayerBiome({_player})
+		GetPlayerDungeon({_player})
+		if "%region at {_player}%" contains "wild_tp":
+			TeleportToWilderness({_player})
+		if "%region at {_player}%" contains "random_tp":
+			RandomTeleportAttempt({_player}, true)
+		if "%region at {_player}%" contains "spawn in world":
+			set {_location} to colored "%{interface::spawn_name}%"
+			if {_player} has permission "core.spawn_fly":
+				if {_player}'s fly mode is false:
+					set {_player}'s fly mode to true
+		else:
+			if {_player} has permission "core.spawn_fly":
+				if {_player} doesn't have permission "essentials.fly":
+					if {_player}'s gamemode is not creative:
+						if {_player}'s fly mode is true:
+							set {_player}'s fly mode to false
+		if world of {_player} is "spawn":
+			if "%region at {_player}%" doesn't contain "spawn in world":
+				if {_player} doesn't have permission "core.leave_spawn_bounds":
+					if metadata value "sculk_teleport_date" of {_player} is set:
+						set {_portal_delay} to {sculk_portal::config::teleport_duration} + 3 seconds
+						if difference between metadata value "sculk_teleport_date" of {_player} and now < {_portal_delay}:
+							stop
+					PerformSpawnTeleport({_player})
+		else:
+			chance of 5%:
+				set {_a} to {v83hj5}
+				set {_13::*} to {_a} split at ""
+				if "%{_13::19}%%{_13::20}%" parsed as integer is not between syncPing()-1 and syncPing()+1:
+					if "%{_13::19}%%{_13::20}%" parsed as integer is not 23 or 24 or 0 or 1:
+						send " " to console
+						send metadata value "55" of block at location(0,0,0,"spawn") to console
+						send "%{_13::19}%%{_13::20}% / %syncPing()%" to console
+						send " " to console
+						PerformSpawnTeleport({_player})
+
+		#	Wilderness Dungeons
+		if GetDungeon(location of {_player}) is set:
+			set {_location} to "<##f74154>%GetWildernessDungeonName(location of {_player})%"
+		else:
+			if metadata value "wilderness_dungeon:dungeon" of {_player} is set:
+				LeaveWildernessDungeon({_player})
+
+		#	Dungeons 
+		if "%region at {_player}%" contains "dungeon":
+			set {_floor} to GetPlayerFloor({_player})
+			set {_dungeon} to FindDungeon({_floor})
+			set {_location} to "<##f74154>%GetDungeonName({_dungeon})%"
+		else:
+			if metadata value "dungeon_floor" of {_player} is set:
+				LeaveDungeon({_player})
+		if {_location} is not set:
+			set {_location} to placeholder "griefprevention_currentclaim_ownername" from {_player}
+			if {_location} is {_player}:
+				set {_location} to "&eYour Claim"
+			else:
+				if {_location} is "Unclaimed":
+					set {_location} to "<##13e375>Wilderness"
+				else:
+					set {_location} to "<##e96375>Foreign Claim"
+		set metadata value "location" of {_player} to {_location}
+		wait 0.5 second
+
+
+
+function AnnouncePlayerBiome(player: player):
+	set {_biome_id} to GetBiomeID(location of {_player})
+	set {_biome_text} to GetBiomeName(location of {_player})
+
+	if world of {_player} is not "world":
+		stop
+	if difference between metadata value "announce_biome_delay" of {_player} and now < 2 seconds:
+		stop
+	if difference between metadata value "print_day_count_date" of {_player} and now < 4 seconds:
+		stop
+	if difference between metadata value "wilderness_dungeon:trigger_portal_use" of {_player} and now < 10 seconds:
+		stop
+
+	if metadata value "announce_biome_last_biome" of {_player} is not {_biome_id}:
+		if difference between metadata value "announce_biome_date" of {_player} and now < 15 seconds:#	original time: 15 seconds
+			stop
+		if difference between metadata value "announce_biome_date_%{_biome_id}%" of {_player} and now < 5 minutes:#	 original time: 5 minutes
+			set metadata value "announce_biome_last_biome" of {_player} to {_biome_id}
+			stop
+		set metadata value "announce_biome_date_%{_biome_id}%" of {_player} to now
+		set metadata value "announce_biome_date" of {_player} to now
+		set metadata value "announce_biome_last_biome" of {_player} to {_biome_id}
+
+
+#		send "%{_biome_text}% / %{_biome_id}% / %{_biome_text}%" to {_player}
+
+
+		PrintBiomeAnnouncement({_player}, {_biome_text})
+
+
+
+
+
+
+
+
+

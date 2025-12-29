@@ -1,0 +1,240 @@
+command /admintool [<text>]:
+	permission: admin
+	aliases: adminstuff, administratortool, atool, etool
+	trigger:
+		if arg 1 is set:
+			if arg 1 is "butcher" or "butch" or "kill" or "killer":
+				if name of player's tool contains "&cadmin&fTool":
+					set name of player's tool to "&aSuper Butcher &f| &cadmin&fTool"
+		else:
+			give stick named "&cadmin&fTool" to player
+			send "&9Charles» &7Here is your &dsexy &7admin's stick :D" to player
+
+on right click holding stick:
+	if name of player's tool contains "&cadmin&fTool":
+		cancel event
+		if player has permission "admin":
+			if name of player's tool contains "&bFreeezer":
+				set name of player's tool to "&aDe-&bFreezer &f| &cadmin&fTool"
+				stop
+			if name of player's tool contains "&aSuper Butcher":
+				set name of player's tool to "&bFreeezer &f| &cadmin&fTool"
+				stop
+			if name of player's tool contains "&aDe-&bFreezer":
+				set name of player's tool to "&aSuper Butcher &f| &cadmin&fTool"
+				stop
+			else:
+				set name of player's tool to "&aSuper Butcher &f| &cadmin&fTool"
+				stop
+
+
+on left click holding stick:
+	if name of player's tool contains "&cadmin&fTool":
+		cancel event
+		if player has permission "admin":
+			if name of player's tool contains "&aSuper Butcher":
+				if player is sneaking:
+					loop all entities in radius 6 of target block:
+						if loop-entity is not a player:
+							kill loop-entity
+							add 1 to {_entities}
+				else:
+					loop all entities in radius 2 of target block:
+						if loop-entity is not a player:
+							kill loop-entity
+							add 1 to {_entities}
+				if {_entities} is 1:
+					send "&9Charles» &7I've killed &f%{_entities}% &7entity for you!" to player
+				if {_entities} > 1:
+					send "&9Charles» &7I've killed &f%{_entities}% &7entities for you!" to player
+			if name of player's tool contains "&bFreeezer":
+				loop all entities in radius 5 of target block:
+					remove slowness from loop-entity
+					apply potion of slowness of tier 50 without any particles to the loop-entity for 999 days
+					add 1 to {_entities}
+				if {_entities} is 1:
+					send "&9Charles» &7I've frozen &f%{_entities}% &7entity for you!" to player
+				if {_entities} > 1:
+					send "&9Charles» &7I've frozen &f%{_entities}% &7entities for you!" to player
+			if name of player's tool contains "&aDe-&bFreezer":
+				loop all entities in radius 5 of target block:
+					remove slowness from loop-entity
+					add 1 to {_entities}
+				if {_entities} is 1:
+					send "&9Charles» &7I've thawed &f%{_entities}% &7entity for you!" to player
+				if {_entities} > 1:
+					send "&9Charles» &7I've thawed &f%{_entities}% &7entities for you!" to player
+
+
+command /giveitem [<text>] [<player>] [<integer>]:
+	aliases: givecustomitem
+	permission: core.giveitem
+	trigger:
+		if player-arg is set:
+			set {_player} to player-arg
+		else:
+			set {_player} to sender
+		if arg 3 is set:
+			set {_amount} to arg-3
+		else:
+			set {_amount} to 1
+
+		if arg 1 contains "workshop_schematic:":
+			set {_schematic} to arg-1
+			replace all "workshop_schematic:" with "" in {_schematic}
+			set {_item} to GenerateSchematic({_schematic})
+		if arg 1 contains "cooking_recipe:":
+			set {_recipe} to arg-1
+			replace all "cooking_recipe:" with "" in {_recipe}
+			set {_item} to GenerateCookingRecipe({_recipe})
+		if {_item} is not set:
+			if arg 1 contains "backpack":
+				set {_item} to GenerateBackpack(arg-1)
+			if arg 1 is "catching_net":
+				set {_item} to GenerateCatchingNet()
+		if {_item} is not set:
+			set {_item} to {item::%arg-1%}
+		
+		give {_amount} of {_item} to {_player}
+
+command /giveiaitem [<text>]:
+	permission: admin
+	trigger:
+		give 1 of GetItem(arg-1) to player
+
+
+on tab complete of "/giveitem":# and "/givecustomitem":
+	set tab completions for position 1 to {-forge::items_list::*} and "workshop_schematic:" and "cooking_recipe:"
+	if tab arg 1 contains "workshop_schematic:":
+		loop {forge::recipes_list::*}:
+			add "workshop_schematic:%loop-value%" to {_list::*}
+		set tab completions for position 1 to {_list::*}
+	if tab arg 1 contains "cooking_recipe:":
+		loop {-forge::items_list::*}:
+			if {forge::item::%loop-value%::cooking_pot} is true:
+				add "cooking_recipe:%loop-value%" to {_list::*}
+		set tab completions for position 1 to {_list::*}
+
+
+
+
+
+command /ping [<player>]:
+	permission: core.ping
+	trigger:
+		if player-arg is set:
+			set {_player} to player-arg
+		else:
+			set {_player} to player
+
+		set {_ping} to ping of {_player}
+		if {_ping} > 300:
+			set {_ping} to "&4%{_ping}%"
+		if {_ping} is between 151 and 300:
+			set {_ping} to "&c%{_ping}%"
+		if {_ping} is between 51 and 150:
+			set {_ping} to "&e%{_ping}%"
+		if {_ping} is between 0 and 50:
+			set {_ping} to "&a%{_ping}%"
+		
+		if player-arg is set:
+			send "&f %{_player}% current ping: %{_ping}%" to player
+		else:
+			send "&f Your current ping: %{_ping}%" to player
+			
+
+command /sun:
+	aliases: sunny
+	permission: core.sun
+	trigger:
+		send "&6☀ <#ffd23d>Calling in the sunshine..." to player
+		set weather of world of player to clear
+command /rain:
+	aliases: rainy, raining
+	permission: core.rain
+	trigger:
+		send "&9🌧 <#437ccc>Summoning the rain..." to player
+		set weather of world of player to rainy
+command /lightning:
+	aliases: storm, thunder
+	permission: core.lightning
+	trigger:
+		send "<#a87ade>&l⚡ <#9d6ed4>Unleasing the storm..." to player
+		set weather of world of player to rainy
+command /day:
+	trigger:
+		if {server::test_server} is not true:
+			if player doesn't have permission "core.day":
+				stop
+		send "&f <#5fc96a>Fast-forwarding to morning..." to player
+		FastForwardTime("day", player)
+command /night:
+	trigger:
+		if {server::test_server} is not true:
+			if player doesn't have permission "core.day":
+				stop
+		send "&f <#9d6ed4>Fast-forwarding to evening..." to player
+		FastForwardTime("night", player)
+
+function FastForwardTime(time: string, player: player):
+	loop 100 times:
+		if {_time} is "day":
+			set {_pitch} to 0.5+ 1.5*(loop-number/40)
+		else:
+			set {_pitch} to 2 - 1.5*(loop-number/50)
+		if mod(loop-number,2) is 0:
+			play sound "entity.item.pickup" with volume 0.1 and pitch {_pitch} to {_player}
+
+		if {_time} is "day":
+			if time in world of {_player} is not between 6:00 and 6:30:
+				add 15 seconds to time in world of {_player}
+				wait 1 tick
+			else:
+				set time in world of {_player} to 6:00
+				exit loop
+		if {_time} is "night":
+			if time in world of {_player} is not between 19:00 and 19:30:
+				add 15 seconds to time in world of {_player}
+				wait 1 tick
+			else:
+				set time in world of {_player} to 19:00
+				exit loop
+
+command /nightvision:
+	permission: core.nightvision
+	trigger:
+		if "%active potion effects of player%" contains "night vision":
+			play sound "minecraft:block.note_block.bass" with volume 0.5 and pitch 0.8 to player
+			send action bar "&9&lNight Vision" to player
+			wait 3 ticks
+			play sound "minecraft:block.note_block.bass" with volume 0.5 and pitch 0.5 to player
+			remove night vision from player
+			send action bar "&7Night Vision" to player
+			set metadata value "admin:night_vision" of player to false
+			stop
+		play sound "minecraft:block.note_block.bass" with volume 0.5 and pitch 0.5 to player
+		send action bar "&7Night Vision" to player
+		wait 3 ticks
+		play sound "minecraft:block.note_block.bass" with volume 0.5 and pitch 0.8 to player
+		apply potion of night vision without any particles to player for 99 days
+		send action bar "&9&lNight Vision" to player
+		set metadata value "admin:night_vision" of player to true
+
+
+command /invisibleitemframe:
+	permission: admin
+	trigger:
+		if target entity is item frame:
+			add nbt from "{Invisible:1b}" to nbt compound of target entity of player
+
+command /ominousvault:
+	permission: admin
+	trigger:
+		if target block is vault:
+			set target block to vault[ominous=true]
+
+command /gettags:
+	permission: admin
+	trigger:
+		send "&a%tool of player%" to player
+		send minecraft keys of tags of player's tool to player

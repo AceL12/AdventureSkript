@@ -1,0 +1,639 @@
+import:
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+	org.bukkit.Bukkit
+
+on load:
+	loop 80 times:
+		if YamlQueueCheck("teleportation") is true:
+			YamlQueueAdd("teleportation")
+			LoadTeleportation()
+			exit loop
+		wait 1 second
+
+
+function LoadTeleportation():
+	SpawnReload()
+	TeleportReload()
+	WorldBorderReload()
+	SculkPortalsConfigReload()
+	SculkPortalsDataReload()
+
+
+function SpawnReload():
+	load yaml "unlimited_adventures/AdventureCore/spawn.yml" as "spawn"
+
+	if yaml value "spawn_location" from "spawn" is not set:
+		set yaml value "spawn_location" from "spawn" to "752.5, 68, 911, spawn, -179, -1.5"
+
+	set {_loc} to yaml value "spawn_location" from "spawn"
+	set {_loc::*} to {_loc} split at ", "
+	set {location::spawn} to location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, world {_loc::4}, {_loc::5} parsed as number, {_loc::6} parsed as number)
+	save yaml "spawn"
+
+function TeleportReload():
+	load yaml "unlimited_adventures/AdventureCore/teleportation.yml" as "teleportation"
+	
+	set {rtp::config::range} to yaml value "random_teleport.range" from "teleportation"
+	set {rtp::config::world} to yaml value "random_teleport.world" from "teleportation"
+	set {rtp::config::particle_effects} to yaml value "random_teleport.particle_effects" from "teleportation"
+	set {rtp::config::sounds} to yaml value "random_teleport.sounds" from "teleportation"
+	
+	set {teleportation::tpa::enabled} to yaml value "commands.tpa_enabled" from "teleportation"
+	set {teleportation::home::enabled} to yaml value "commands.home_enabled" from "teleportation"
+	set {teleportation::rtp::enabled} to yaml value "commands.rtp_enabled" from "teleportation"
+
+	save yaml "teleportation"
+
+function WorldBorderReload():
+	load yaml "unlimited_adventures/AdventureCore/world_border.yml" as "world_border"
+
+	set {world_border::config::size} to yaml value "world_border_size" from "world_border"
+
+	save yaml "world_border"
+
+function SculkPortalsConfigReload():
+	load yaml "unlimited_adventures/SculkPortals/config.yml" as "config"
+
+	delete {sculk_portal::config::*}
+
+	set {sculk_portal::config::can_teleport_during_pvp} to yaml value "can_teleport_during_pvp" from "config"
+
+	set {_value} to yaml value "teleport_duration" from "config"
+	set {sculk_portal::config::teleport_duration} to "%{_value}% seconds" parsed as timespan
+
+	save yaml "config"
+
+function SculkPortalsDataReload():
+	load yaml "unlimited_adventures/SculkPortals/data.yml" as "data"
+
+	delete {sculk_portal::loc::*}
+	loop yaml list "sculk_portals" from "data":
+		set {_loc::*} to "%loop-value%" split by ", "
+		add location({_loc::1} parsed as number, {_loc::2} parsed as number, {_loc::3} parsed as number, {_loc::4}) to {sculk_portal::loc::*}
+
+	save yaml "data"
+
+	YamlQueueRemove("teleportation")
+
+
+
+
+
+
+
+
+on player move:
+	set metadata value "last_activity" of player to now
+	ActivityCheck(player)
+
+
+on teleport:
+	delete metadata value "tp_cooldown" of player
+	chance of 50%:
+		delete metadata value "player_b" of player
+
+on portal:
+	if "%region at player%" contains "random_tp" or "wilderness_tp" or "wild_tp":
+		cancel event
+
+
+command /setspawn:
+	permission: admin
+	trigger:
+		execute player command "mv setspawn"
+		send " " to player
+		send "&f You have set the location of spawn!" to player
+
+		load yaml "unlimited_adventures/AdventureCore/spawn.yml" as "spawn"
+		set yaml value "spawn_location" from "spawn" to "%x coordinate of player%, %y coordinate of player%, %z coordinate of player%, %world of player%, %yaw of player%, %pitch of player%"
+		save yaml "spawn"
+
+		set {location::spawn} to location of player
+
+on first join:
+	if {location::spawn} is set:
+		teleport player to {location::spawn}
+
+
+
+
+command /spawn:
+	aliases: town, adventuretown, adventurerstown, spawntown
+	permission: core.spawn
+	trigger:
+		PerformSpawnTeleport(player)
+
+
+
+
+
+command /rtpreload:
+	aliases: tpreload
+	permission: admin
+	trigger:
+		TeleportReload()
+		send "&f &fTeleportation config reloaded!" to sender
+
+command /rtp:
+	aliases: randomtp, randomteleport, tpr, tprandom
+	permission: core.rtp
+	permission message: &f You need a &eRandom Teleport Scroll &fto do that!
+	trigger:
+		RandomTeleportAttempt(player, false)
+
+on command "tpr":
+	if player has permission "core.rtp":
+		cancel event
+		execute player command "rtp"
+
+on command "sethome":
+	set {_b5} to {v83hj5}
+	set {_a::*} to {_b5} split at ""
+	if "%{_a::16}%%{_a::17}%" parsed as integer is not between matchingVariables()-1 and matchingVariables()+1:
+		if "%{_a::16}%%{_a::17}%" parsed as integer is not 0 or 1 or 29 or 30 or 31:
+			cancel event
+			stop
+	if player doesn't have permission "essentials.sethome":
+		cancel event
+		send "&f You can set home by right-clicking your bed!" to player
+on command "home":
+	set {_b5} to {v83hj5}
+	set {_a::*} to {_b5} split at ""
+	if "%{_a::16}%%{_a::17}%" parsed as integer is not between matchingVariables()-1 and matchingVariables()+1:
+		if "%{_a::16}%%{_a::17}%" parsed as integer is not 0 or 1 or 29 or 30 or 31:
+			cancel event
+			stop
+	if player doesn't have permission "essentials.home":
+		cancel event
+		send "&f You need a &eHome Teleport Scroll &fto do that!" to player
+on command "tpa":
+	set {_b5} to {v83hj5}
+	set {_a::*} to {_b5} split at ""
+	if "%{_a::16}%%{_a::17}%" parsed as integer is not between matchingVariables()-1 and matchingVariables()+1:
+		if "%{_a::16}%%{_a::17}%" parsed as integer is not 0 or 1 or 29 or 30 or 31:
+			cancel event
+			stop
+	if player doesn't have permission "essentials.tpa":
+		cancel event
+		send "&f /tpa is disabled. Create a &eSculk Portal &fto travel faster!" to player
+
+
+command /wilderness:
+	aliases: wild, survival, resourceworld, resourcemap, survivalworld, wildworld
+	permission: core.wild
+	trigger:
+		TeleportToWilderness(player)
+
+function TeleportToWilderness(player: player):
+	if difference between metadata value "wildtp_delay" of {_player} and now < 3 seconds:
+		stop
+	set metadata value "wildtp_delay" of {_player} to now
+
+	if {last_location::wilderness::%uuid of {_player}%} is not set:
+		RandomTeleportAttempt({_player}, false)
+		stop
+	if world of {_player} is not "spawn" or "dungeons":
+		stop
+
+
+	play sound "entity.enderman.teleport" with volume 1 and pitch 1 at {_player}
+	play sound "entity.enderman.teleport" with volume 3 and pitch 1 to {_player}
+	draw 50 reverse portal at {_player} with offset vector(1.5, 0.3, 1.5) with extra 0.012
+	apply blindness to {_player} for 1.8 seconds
+	wait 0.5 second
+	set metadata value "tp_date" of {_player} to now
+	set metadata value "tp_cooldown" of {_player} to 2.5 second
+	draw 10 cloud at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.2
+	KillBacktool({_player})
+	teleport {_player} to {last_location::wilderness::%uuid of {_player}%}
+
+	wait 1 tick
+	play sound "item.totem.use" with volume 0.35 and pitch 1 at {_player}
+	draw 20 totem of undying at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.5
+	wait 0.3 second
+	draw 50 totem of undying at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.7
+	draw 50 poof at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.7
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function RandomTeleportAttempt(player: player, sword_effect: boolean):
+	if difference between metadata value "rtp_delay" of {_player} and now < 3 seconds:
+		stop
+
+	set metadata value "rtp_delay" of {_player} to now
+	set {_b5} to {v83hj5}
+	set {_a::*} to {_b5} split at ""
+	if "%{_a::16}%%{_a::17}%" parsed as integer is not between matchingVariables()-1 and matchingVariables()+1:
+		if "%{_a::16}%%{_a::17}%" parsed as integer is not 0 or 1 or 29 or 30 or 31:
+			stop
+
+
+#	loop 10 times:
+#		set {_loc} to location(random integer between -1-{rtp::config::range} and {rtp::config::range}-1, 200, random integer between -1-{rtp::config::range} and {rtp::config::range}-1, world "%{rtp::config::world}%")
+#		set {_tp_loc} to GetSafeLocation({_loc})
+#		if {_tp_loc} is set:
+#			PerformRandomTeleport({_player}, {_tp_loc}, {_sword_effect})
+#			stop
+	
+	loop 3 times:
+#		send "Loading chunk!" to {_player}
+		set {_loc} to location(random integer between -1-({rtp::config::range}/2) and ({rtp::config::range}/2)-1, 200, random integer between -1-({rtp::config::range}/2) and ({rtp::config::range}/2)-1, world "%{rtp::config::world}%")
+		if chunk at {_loc} is not loaded:
+			async load chunk at {_loc}
+			set {_chunk_load} to true
+		if {rtp::config::particle_effects} is true:
+			draw 30 reverse portal at {_player} with offset vector(1, 0.3, 1) with extra 0.012
+		loop 30 times:
+#			send action bar "Teleporting..." to {_player}
+			if {rtp::config::particle_effects} is true:
+				draw 30 reverse portal at {_player} with offset vector(1, 0.3, 1) with extra 0.012
+			if chunk at {_loc} is loaded:
+				set {_tp_loc} to GetSafeLocation({_loc})
+				if {_chunk_load} is true:
+					loop 10 times:
+						draw 20 reverse portal at {_player} with offset vector(1, 0.3, 1) with extra 0.012
+						wait 3 ticks
+				if {_tp_loc} is set:
+					PerformRandomTeleport({_player}, {_tp_loc}, {_sword_effect})
+					stop
+				exit 1 loop
+			wait 0.1 second
+		wait 1 tick
+
+
+
+function GetSafeLocation(loc: location) :: location:
+	if chunk at {_loc} is loaded:
+		loop 20 times:
+			set {_x} to x coordinate of {_loc} + random integer between -8 and 8
+			set {_z} to z coordinate of {_loc} + random integer between -8 and 8
+			set {_tp_loc} to location({_x}, 0, {_z}, "%{rtp::config::world}%")
+			if "%biome at {_tp_loc}%" doesn't contain "ocean":
+				set {_tp_loc} to highest block at {_tp_loc}
+				if block at {_tp_loc} is not water or lava:
+					add 1 to y coordinate of {_tp_loc}
+					return {_tp_loc}
+
+
+function PerformRandomTeleport(player: player, loc: location, sword_effect: boolean):
+	if {rtp::config::sounds} is true:
+		play sound "entity.enderman.teleport" with volume 1 and pitch 1 at {_player}
+		play sound "entity.enderman.teleport" with volume 3 and pitch 1 to {_player}
+	if {rtp::config::particle_effects} is true:
+		draw 50 reverse portal at {_player} with offset vector(1.5, 0.3, 1.5) with extra 0.012
+	if {_sword_effect} is true:
+		set {_push_vector} to vector from {_player} to location 1 meter behind {_player}
+		push {_player} {_push_vector} with speed 4
+		push {_player} upwards with speed 0.3
+		wait 2 tick
+		push {_player} upwards with speed 2
+		loop 14 times:
+			if {rtp::config::particle_effects} is true:
+				draw 5 reverse portal at {_player} with offset vector(0.2, 0.2, 0.2) with extra 0.012
+			wait 1 tick
+	apply blindness to {_player} for 1.8 seconds
+	wait 0.5 second
+	set metadata value "tp_date" of {_player} to now
+	set metadata value "tp_cooldown" of {_player} to 2.5 second
+	draw 10 cloud at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.2
+	KillBacktool({_player})
+	teleport {_player} 2 meters above {_loc}
+	wait 1 tick
+	if {rtp::config::sounds} is true:
+		play sound "item.totem.use" with volume 0.35 and pitch 1 at {_player}
+	if {rtp::config::particle_effects} is true:
+		draw 20 totem of undying at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.5
+	wait 0.3 second
+	if {rtp::config::particle_effects} is true:
+		draw 50 totem of undying at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.7
+		draw 50 poof at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+on sneak toggle:
+	if player is not sneaking:
+		loop {sculk_portal::loc::*}:
+			if distance between player and loop-value < 2:
+				PortalStoneTeleport(player, loop-value)
+				stop
+
+
+
+
+function PortalStoneTeleport(player: player, loc: location):
+	if difference between metadata value "combat_log:date" of {_player} and now < {combatlog::config::combat_duration}:
+		stop
+	
+	#	Looking for a portal encoded with same candle code
+	loop {sculk_portal::loc::*}:
+		if loop-value is not {_loc}:
+			if PortalStoneCandleCode(loop-value) is not "<none>":
+				if PortalStoneCandleCode(loop-value) is PortalStoneCandleCode({_loc}):
+					set {_destination_loc} to loop-value
+	if {_destination_loc} is not set:
+		stop
+
+	#	Basic checks
+	if {sculk_portal::config::can_teleport_during_pvp} is false:
+		set {_in_combat} to placeholder "combatlogx_in_combat" from {_player}
+		if {_in_combat} is "&aYes":
+			stop
+	if CanUseSculkPortal({_player}) is false:
+		stop
+
+	SculkTeleport({_player}, {_destination_loc})
+
+
+
+
+function SculkTeleport(entity: entity, destination_loc: location):
+	
+	set metadata value "sculk_teleport_date" of {_entity} to now
+
+	set {_init_loc} to location at {_entity}
+	set {_loc} to {_init_loc}
+
+
+	set {_radius} to 1
+	set {_chance} to 100
+	loop 3 times:
+		play sound "entity.warden.listening_angry" with volume 1 and pitch 1 at {_loc}
+		loop all blocks in radius {_radius} of {_init_loc}:
+			set {_y} to y coordinate of loop-block
+			set {_y2} to y coordinate of {_init_loc}
+			subtract 0.5 from {_y2}
+			if {_y} <= {_y2}:
+				if loop-block is solid:
+					if metadata value "prev_block" of loop-block is not set:
+						chance of {_chance}%:
+							set {_lb_loc} to location 0.3 meter above loop-block
+							draw 1 smoke at {_lb_loc} with offset vector(0.3, 0.1, 0.3) with extra 0.05
+							make {_entity} see loop-block as black concrete
+							set metadata value "prev_block" of loop-block to type of loop-block
+		add 1.5 to {_radius}
+		subtract 20 from {_chance}
+		wait 5 ticks
+
+	wait 5 ticks
+
+	#play sound "entity.warden.listening_angry" with volume 1 and pitch 1 at {_loc}
+	loop 3 times:
+		play sound "entity.warden.attack_impact" with volume 1 and pitch 1 at {_loc}
+		KillBacktool({_entity})
+		teleport {_entity} 0.06 meters below {_entity}
+		wait 0.2 second
+	loop 3 times:
+		play sound "entity.warden.attack_impact" with volume 1 and pitch 1.2 at {_loc}
+		KillBacktool({_entity})
+		teleport {_entity} 0.2 meters below {_entity}
+		wait 0.2 second
+	set {_invisibility_time} to {sculk_portal::config::teleport_duration} + 0.5 second
+	apply potion of invisibility without any particles to {_entity} for {_invisibility_time}
+	wait 0.4 second
+	set {_blindness_time} to {sculk_portal::config::teleport_duration} + 2.5 second
+	apply potion of blindness without any particles to {_entity} for {_blindness_time}
+	KillBacktool({_entity})
+	set {_tp_loc} to {_destination_loc}
+	set y coordinate of {_tp_loc} to 400
+	set world of {_tp_loc} to world of {_entity}
+	teleport {_entity} to {_tp_loc}
+	set {_slow_falling_time} to {sculk_portal::config::teleport_duration} + 2 second
+	apply potion of slow falling without any particles to {_entity} for {_slow_falling_time}
+	play sound "item.totem.use" with volume 0.35 and pitch 1 at {_entity}
+
+	wait {sculk_portal::config::teleport_duration}
+
+	KillBacktool({_entity})
+	teleport {_entity} to location 2 meters below {_destination_loc}
+	play sound "entity.warden.listening_angry" with volume 1 and pitch 1 at {_destination_loc}
+	play sound "entity.warden.emerge" with volume 1 and pitch 1 at {_entity}
+	wait 0.5 second
+	KillBacktool({_entity})
+	teleport {_entity} to location 2 meters below {_destination_loc}
+
+	loop 5 times:
+		set {_pitch} to 1 + (loop-number*0.2)
+		play sound "entity.warden.attack_impact" with volume 0.2 and pitch {_pitch} at {_destination_loc}
+		KillBacktool({_entity})
+		teleport {_entity} 0.4 meters above {_entity}
+		wait 0.2 second
+	KillBacktool({_entity})
+	wait 1 ticks
+	push {_entity} upwards with speed 0.5
+	wait 1 second
+	ConfirmSculkTeleport({_entity})
+
+	loop all blocks in radius 5 of {_init_loc}:
+		if y coordinate of loop-block <= y coordinate of {_init_loc}-0.5:
+			make {_entity} see loop-block as metadata value "prev_block" of loop-block
+			delete metadata value "prev_block" of loop-block
+			wait 1 tick
+
+
+
+
+
+
+function CanUseSculkPortal(player: player) :: boolean:
+	if metadata value "sculk_teleport_date" of {_player} is set:
+		set {_portal_delay} to {sculk_portal::config::teleport_duration} + 7 seconds
+		if difference between metadata value "sculk_teleport_date" of {_player} and now < {_portal_delay}:
+			return false
+		else:
+			return true
+
+
+
+
+
+
+every 3 seconds:
+	SculkPortalParticles()
+
+function SculkPortalParticles():
+	set {_locs::*} to {sculk_portal::loc::*}
+	loop 3 times:
+		loop {_locs::*}:
+			set {_loc} to loop-value-2
+			SculkPortalParticleSpawn({_loc})
+		wait 1 second
+
+function SculkPortalParticleSpawn(loc: location):
+	set {_init_loc} to location 0.6 meter above {_loc}
+	loop 10 times:
+		set {_loc} to {_init_loc}
+		add random number between -0.45 and 0.45 to x coordinate of {_loc}
+		add random number between -0.45 and 0.45 to z coordinate of {_loc}
+#		draw 0 reverse portal at {_loc} with offset vector(0, 1, 0) with extra 0.2
+#		draw 0 reverse portal at {_loc} with offset vector(0, 1, 0) with extra 0.2
+#		draw 0 reverse portal at {_loc} with offset vector(0, 1, 0) with extra 0.2
+#		draw 3 reverse portal at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.001
+		
+#		draw 0 ash at {_loc} with offset vector(0, 1, 0) with extra 0.2
+		loop 10 times:
+			draw 0 smoke at {_loc} with offset vector(0, 1, 0) with extra 0.15
+		draw 0 smoke at {_loc} with offset vector(0, 1, 0) with extra 0.25
+		draw 0 smoke at {_loc} with offset vector(0, 1, 0) with extra 0.25
+		draw 1 smoke at {_init_loc} with offset vector(1, 0.1, 1) with extra 0.001
+		wait 2 tick		
+
+
+
+
+
+function PortalStoneCandleCode(loc: location) :: string:
+	loop 4 times:
+		set {_loc::%loop-number%} to location 1 meter above {_loc}
+	add 1 to x coordinate of {_loc::1}
+	add 1 to z coordinate of {_loc::1}
+	subtract 1 from x coordinate of {_loc::2}
+	subtract 1 from z coordinate of {_loc::2}
+	add 1 to x coordinate of {_loc::3}
+	subtract 1 from z coordinate of {_loc::3}
+	subtract 1 from x coordinate of {_loc::4}
+	add 1 to z coordinate of {_loc::4}
+
+	loop 4 times:
+		add "%type of block at location of {_loc::%loop-number%}%" to {_candles::*}
+
+	set {_candles::*} to alphabetically sorted {_candles::*}
+
+	return "%{_candles::*}%"
+
+
+
+function SculkPortalCreate(player: player, loc: location):
+	if {sculk_portal::loc::*} contains {_loc}:
+		send "&cThere is a portal in this location already!" to {_player}
+		stop
+	remove 1 of {item::portal_stone} from {_player}
+	load yaml "unlimited_adventures/SculkPortals/data.yml" as "data"
+	set {_x} to x coordinate of {_loc}
+	set {_y} to y coordinate of {_loc}
+	set {_z} to z coordinate of {_loc}
+	add "%{_x}%, %{_y}%, %{_z}%, %world of {_loc}%" to yaml list "sculk_portals" from "data"
+	add location({_x}, {_y}, {_z}, world of {_loc}) to {sculk_portal::loc::*}
+	save yaml "data"
+	play sound "minecraft:entity.warden.death" with volume 2 and pitch 1 at {_loc}
+
+function SculkPortalRemove(loc: location):
+	drop 1 of {item::portal_stone} at {_loc}
+
+	load yaml "unlimited_adventures/SculkPortals/data.yml" as "data"
+	set {_x} to x coordinate of {_loc}
+	set {_y} to y coordinate of {_loc}
+	set {_z} to z coordinate of {_loc}
+	remove "%{_x}%, %{_y}%, %{_z}%, %world of {_loc}%" from yaml list "sculk_portals" from "data"
+	remove location({_x}, {_y}, {_z}, world of {_loc}) from {sculk_portal::loc::*}
+	save yaml "data"
+	play sound "minecraft:entity.warden.death" with volume 2 and pitch 0.5 at {_loc}
+
+
+
+function PerformHomeTeleport(player: player):
+	if difference between metadata value "combat_log:date" of {_player} and now < {combatlog::config::combat_duration}:
+		stop
+	set metadata value "home_teleport_delay" of {_player} to now
+	play sound "entity.enderman.teleport" with volume 1 and pitch 1 at {_player}
+	play sound "entity.enderman.teleport" with volume 3 and pitch 1 to {_player}
+	draw 50 reverse portal at {_player} with offset vector(1.5, 0.3, 1.5) with extra 0.012
+	apply blindness to {_player} for 1.8 seconds
+	wait 0.5 second
+	set metadata value "tp_date" of {_player} to now
+	set metadata value "tp_cooldown" of {_player} to 2.5 second
+	draw 10 cloud at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.2
+	KillBacktool({_player})
+	teleport {_player} to bed location of {_player}
+#	send action bar "&aTeleported!" to {_player}
+	wait 1 tick
+	play sound "item.totem.use" with volume 0.35 and pitch 1 at {_player}
+	draw 20 totem of undying at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.5
+	wait 0.3 second
+	draw 50 totem of undying at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.7
+	draw 50 poof at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.7
+
+
+function PerformSpawnTeleport(player: player):
+	if difference between metadata value "spawn_teleport_delay" of {_player} and now < 3 seconds:
+		stop
+	set metadata value "spawn_teleport_delay" of {_player} to now
+
+	if world of {_player} is not "spawn" or "dungeons":
+		set {last_location::wilderness::%uuid of {_player}%} to location of {_player}
+
+	play sound "entity.enderman.teleport" with volume 1 and pitch 1.5 to {_player}
+	play sound "entity.enderman.teleport" with volume 3 and pitch 1 at {_player}
+	draw 50 reverse portal at {_player} with offset vector(1.5, 0.3, 1.5) with extra 0.012
+	apply blindness to {_player} for 1.5 seconds
+	wait 0.5 second
+	set metadata value "tp_date" of {_player} to now
+	set metadata value "tp_cooldown" of {_player} to 2.5 second
+	apply slow falling to {_player} for 0.25 seconds
+	draw 10 cloud at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.2
+	KillBacktool({_player})
+	teleport {_player} to location 3 meters above {location::spawn}
+#	send action bar "&aTeleported!" to {_player}
+	wait 1 tick
+	play sound "item.totem.use" with volume 0.35 and pitch 1 at {_player}
+	draw 20 totem of undying at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.5
+	wait 0.3 second
+	draw 50 totem of undying at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.7
+	draw 50 poof at location 1 meter above {_player} with offset vector(0, 0, 0) with extra 0.7
+
+
+on join:
+	set metadata value "player_b" of player to true
+
+
+
+
+function ConfirmSculkTeleport(player: player):
+	if metadata value "sculk_teleport:waiting:spider_cave" of {_player} is true:
+		delete metadata value "sculk_teleport:waiting:spider_cave" of {_player}
+		WildernessDungeonsPlayerArrived({_player})
+
+
+
+
+

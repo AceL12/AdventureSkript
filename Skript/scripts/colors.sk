@@ -1,0 +1,96 @@
+on load:
+	wait 3 second
+	ColorsReload()
+
+
+
+
+
+function ColorsCreateConfig():
+
+	
+	load yaml "unlimited_adventures/AdventureCore/colors_config.yml" as "config"
+	
+	set yaml value "version" from "config" to 2
+	set the comments of yaml node "version" from "config" to "Please DO NOT change version number!"
+	
+	set yaml value "color.menu_primary" from "config" to "#31ed96"
+	set yaml value "color.menu_secondary" from "config" to "#7dff49"
+	set yaml value "color.menu_blue" from "config" to "#5979ff"
+	set yaml value "color.menu_title" from "config" to "#009e73"
+	set yaml value "color.menu_title_blue" from "config" to "#5979ff"
+	set yaml value "color.menu_unlocked" from "config" to "&2"
+	set yaml value "color.menu_purchase" from "config" to "&a"
+	set yaml value "color.menu_cancel" from "config" to "&c"
+	set yaml value "color.primary_color" from "config" to "#31ed96"
+	set yaml value "color.accent_color" from "config" to "#7dff49"
+	set yaml value "color.server_name" from "config" to "#6dd444"
+	set yaml value "color.server_name_1" from "config" to "#b1f073"
+	set yaml value "color.server_name_2" from "config" to "#f0ffd1"
+	set yaml value "color.server_name_accent" from "config" to "#ace673"
+	set yaml value "color.adventure_pass_xp" from "config" to "#26c95f"
+	set yaml value "color.adventure_pass_name" from "config" to "#ffe608"
+	set yaml value "color.adventure_pass_premium" from "config" to "#ebd142"
+	set yaml value "color.menu_item_unlocked" from "config" to "#2bad52"
+	set yaml value "color.menu_item_selected" from "config" to "#ffe817"
+	set yaml value "color.gems" from "config" to "#e84848"
+	set yaml value "color.gold" from "config" to "#e0e841"
+	set yaml value "color.player" from "config" to "#a6acc4"
+	set yaml value "color.ultra" from "config" to "#41c967"
+	set yaml value "color.hero" from "config" to "#50ecf3"
+	set yaml value "color.legend" from "config" to "#fed53b"
+	set yaml value "color.helper" from "config" to "#4f8fdd"
+	set yaml value "color.moderator" from "config" to "#55df41"
+	set yaml value "color.admin" from "config" to "#e13434"
+	set yaml value "color.owner" from "config" to "#f21d47"
+	set yaml value "color.luck_booster" from "config" to "#2ddd4a"
+	set yaml value "color.protection_booster" from "config" to "#0078f8"
+	set yaml value "color.adventure_pass_booster" from "config" to "#fca044"
+	save yaml "config"
+
+
+function ColorsReload():
+	load yaml "unlimited_adventures/AdventureCore/colors_config.yml" as "config"
+	if yaml value "version" from "config" is not set:
+		wait 1 tick
+		ColorsCreateConfig()
+		wait 4 ticks
+	if yaml value "version" from "config" is 1:
+		wait 1 tick
+		ColorsUpdateConfig()
+		wait 4 tick
+	if yaml value "version" from "config" is 2:
+		wait 1 tick
+		ColorsUpdateConfig()
+		wait 4 tick
+	
+	delete {colors::*}
+	loop yaml node keys "color" from "config":
+		set {colors::%loop-value%} to yaml value "color.%loop-value%" from "config"
+
+	save yaml "config"
+
+
+
+function ColorsUpdateConfig():
+
+	
+	load yaml "unlimited_adventures/AdventureCore/colors_config.yml" as "config"
+	
+	set yaml value "version" from "config" to 3
+	set the comments of yaml node "version" from "config" to "Please DO NOT change version number!"
+
+	loop yaml node keys "color" from "config":
+		replace all "##" with "#" in yaml value "color.%loop-value%" from "config"
+	
+#		set yaml value "color.menu_primary" from "config" to yaml value "menu_primary" from "config"
+	
+	save yaml "config"
+
+
+
+command /colorsreload:
+	permission: admin
+	trigger:
+		ColorsReload()
+		send "&f &fSetup colors have been reloaded!" to sender

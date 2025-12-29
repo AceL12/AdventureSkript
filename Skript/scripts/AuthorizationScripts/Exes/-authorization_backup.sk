@@ -1,0 +1,35 @@
+on load:
+
+function AuthorizeLicenses():
+	set {server::salt} to AuthCommand.handleAuthCode({server::license_code})
+	set {_salt} to {server::salt}
+
+
+function SaveLicensesCode(code: string):
+	set {server::license_code} to {_code}
+
+function InputLicensesCodeOnChat(player: player):
+	set metadata value "stop_chat" of {_player} to now
+	set metadata value "insert_license_code" of {_player} to now
+	close inventory of {_player}
+	send " " to {_player}
+	send "Please input your license code on chat:" to {_player}
+	send action bar "Input your license code" to {_player}
+
+
+on chat:
+	if difference between metadata value "insert_licenses_code" of player and now < 15 second:
+		delete metadata value "insert_licenses_code" of player
+		cancel event
+		SaveLicensesCode(message)
+		set {_result} to AuthorizeLicenses()
+		if {_result} is true:
+			send " " to player
+			send "&aAuthorization successful!" to player
+			send " " to player
+			play sound "custom.ui.authorization_successful" with volume 0.3 and pitch 1 to player
+		if {_result} is false:
+			send " " to player
+			send "&cAuthorization fail! Wrong license key!" to player
+			send " " to player
+			play sound "custom.ui.authorization_fail" with volume 0.4 and pitch 1 to player

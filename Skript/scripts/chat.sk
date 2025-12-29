@@ -1,0 +1,552 @@
+on load:
+	loop 80 times:
+		if YamlQueueCheck("chat") is true:
+			YamlQueueAdd("chat")
+			LoadChatSkript()
+			exit loop
+		wait 1 second
+	
+
+function LoadChatSkript():
+	load yaml "unlimited_adventures/Chat/config.yml" as "config"
+	set {-chat::use_skript_chat} to yaml value "chat.enabled" of "config"
+	set {-chat::censor} to yaml value "chat.censor" of "config"
+	set {-chat::anti_spam} to yaml value "chat.anti_spam" of "config"
+	set {-chat::emojis} to yaml value "chat.emojis" of "config"
+	set {-chat::built_in_death_messages} to yaml value "chat.built_in_death_messages" of "config"
+	set {-chat::chat_sound} to yaml value "chat.chat_sound" of "config"
+	set {-chat::command_argument_sound} to yaml value "chat.command_argument_sound" of "config"
+	save yaml "config"
+
+	load yaml "unlimited_adventures/Chat/messages.yml" as "messages"
+	set {-chat::join_messages::*} to yaml list "join_messages" of "messages"
+	set {-chat::quit_messages::*} to yaml list "quit_messages" of "messages"
+	set {-chat::combat_quit_messages::*} to yaml list "combat_quit_messages" of "messages"
+	clear {-chat::message::*}
+	loop yaml node keys "messages" from "messages":
+		set {-chat::message::%loop-value%} to yaml value "messages.%loop-value%" from "messages"
+	save yaml "messages"
+	
+	load yaml "unlimited_adventures/Chat/banned-words.yml" as "banned-words"
+	set {-chat::banned_words::*} to yaml list "banned-words" of "banned-words"
+	save yaml "banned-words"
+
+	load yaml "unlimited_adventures/Chat/messages-of-mild-concern.yml" as "messages-of-mild-concern"
+	set {-chat::replacement_messages::*} to yaml list "messages-of-mild-concern" of "messages-of-mild-concern"
+	save yaml "messages-of-mild-concern"
+
+	#	Broadcasts
+	load yaml "unlimited_adventures/Chat/auto-broadcast.yml" as "auto-broadcast"
+	set {-chat::broadcasts::enabled} to yaml value "options.enabled" of "auto-broadcast"
+	set {-chat::broadcasts::time} to "%yaml value "options.time" of "auto-broadcast"% seconds" parsed as timespan
+	delete {-chat::broadcasts::active::*}
+	loop yaml node keys "broadcasts" from "auto-broadcast":
+		set {-chat::broadcasts::%loop-value%::enabled} to yaml value "broadcasts.%loop-value%.enabled" of "auto-broadcast"
+		set {-chat::broadcasts::%loop-value%::message::*} to yaml list "broadcasts.%loop-value%.message" of "auto-broadcast"
+		if {-chat::broadcasts::%loop-value%::enabled} is true:
+			add loop-value to {-chat::broadcasts::active::*}
+	save yaml "auto-broadcast"
+
+	load yaml "unlimited_adventures/Chat/chat-format.yml" as "chat-format"
+	set {-chat::format::global} to yaml value "chat-format" of "chat-format"
+	set {-chat::format::private-message-format-sender} to yaml value "private-message-format-sender" of "chat-format"
+	set {-chat::format::private-message-format-recipent} to yaml value "private-message-format-recipent" of "chat-format"
+	save yaml "chat-format"	
+
+	set {_completions::*} to ":eyes:", ":fire:", ":frown:", ":(", ":grin:", ":D", ":heart:", "<3", ":innocent:", ":joy:", ":raised_eyebrow:", ":skull:", "smile", ":smirk:", ":sob:", ":cry:", ":sunglasses:", ":thumbs_up:", ":thumbs_down:", ":wink" and ";)"
+	add {_completions::*} to chat completions of all players
+
+	YamlQueueRemove("chat")
+
+
+
+
+
+#	Auto Broadcast
+
+every 5 seconds:
+	set {_msg} to random element out of {-chat::broadcasts::active::*}
+	if {-chat::broadcasts::last_sent} is not set:
+		set {-chat::broadcasts::last_sent} to now
+	if difference between {-chat::broadcasts::last_sent} and now >= {-chat::broadcasts::time}:
+		set {-chat::broadcasts::last_sent} to now
+
+		loop {-chat::broadcasts::%{_msg}%::message::*}:
+			send formatted loop-value to all players
+
+
+
+
+command /joinmessage:
+	permission: admin
+	trigger:
+		set {_prefix} to placeholder "luckperms_prefix" from player
+		set {_suffix} to placeholder "luckperms_suffix" from player
+		set {_msg} to random element out of {-chat::join_messages::*}
+		replace all "PREFIX" with "%{_prefix}%" in {_msg}
+		replace all "USERNAME" with "%player%" in {_msg}
+		send colored {_msg} to all players
+
+command /quitmessage:
+	permission: admin
+	trigger:
+		set {_prefix} to placeholder "luckperms_prefix" from player
+		set {_suffix} to placeholder "luckperms_suffix" from player
+		set {_msg} to random element out of {-chat::quit_messages::*}
+		replace all "PREFIX" with "%{_prefix}%" in {_msg}
+		replace all "USERNAME" with "%player%" in {_msg}
+		send colored {_msg} to all players
+
+on join:
+	set {_prefix} to placeholder "luckperms_prefix" from player
+	set {_msg} to random element out of {-chat::join_messages::*}
+	replace all "PREFIX" with "%{_prefix}%" in {_msg}
+	replace all "USERNAME" with "%player%" in {_msg}
+	set join message to colored {_msg}
+
+on quit:
+	set {_prefix} to placeholder "luckperms_prefix" from player
+	if difference between metadata value "combat_log:date" of player and now < {combatlog::config::combat_duration}:
+		set {_msg} to random element out of {-chat::combat_quit_messages::*}
+	else:
+		set {_msg} to random element out of {-chat::quit_messages::*}
+	replace all "PREFIX" with "%{_prefix}%" in {_msg}
+	replace all "USERNAME" with "%player%" in {_msg}
+	set quit message to colored {_msg}
+
+on death:
+	if {-chat::built_in_death_messages} is true:
+		set death message to "&f☠ &c%death message%"
+
+
+
+
+
+
+
+
+#	Chat
+
+on chat:
+	if difference between metadata value "stop_chat" of player and now < 3 seconds:
+		cancel event
+		stop
+	if {-chat::use_skript_chat} is false:
+		stop
+	if IsGlobalChatMuted(player) is true:
+		cancel event
+		stop
+
+	if IsPlayerChatMuted(player) is true:
+		cancel event
+		stop
+
+	#	Anti spam
+	if {-chat::anti_spam} is true:
+		if SpamDetected(player, message) is true:
+			cancel event
+			stop
+
+	#	Censor & Emojis
+	if {-chat::censor} is true:
+		set message to CensorMessage(player, message)
+	if {-chat::emojis} is true:
+		set message to ReplaceEmojis(player, message)
+
+	#	Mentions
+	#	CheckForMentions(player, message)
+
+	#	Formatting
+	set {_prefix} to colored placeholder "luckperms_prefix" from player
+	set {_suffix} to colored placeholder "luckperms_suffix" from player
+	if {title::player::%uuid of player%} is set:
+		set {_title} to " %{title::player::%uuid of player%}%"
+	else:
+		set {_title} to ""
+
+	set {_name} to placeholder "essentials_nickname" from player
+	if {_name} is not set:
+		set {_name} to name of player
+
+	set {_msg} to {-chat::format::global}
+	replace all "PREFIX" with {_prefix} in {_msg}
+	replace all "NAME" with {_name} in {_msg}
+	replace all "SUFFIX" with {_suffix} in {_msg}
+	replace all "TITLE" with {_title} in {_msg}
+	replace all "MESSAGE" with message in {_msg}
+
+	set {_final_msg} to {_msg}
+#	set {_final_msg} to "%{_prefix}% %{_name}%%{_suffix}% %message%"
+#	if {_prefix} is not set:
+#		set {_final_msg} to "%{_prefix}%%{_name}%%{_suffix}% %message%"
+#	if {_prefix} is "&7":
+#		set {_final_msg} to "%{_prefix}%%{_name}%%{_suffix}% %message%"
+
+	#	Chat colors
+	if player has permission "chat.colors":
+		set chat format to colored {_final_msg}
+	else:
+		set chat format to {_final_msg}
+	
+	#	Chat sound
+	if {-chat::chat_sound} is true:
+		ChatSound()
+
+
+
+
+
+
+function ChatSound():
+	play sound "entity.item.pickup" with volume 0.2 and pitch random number between 1.6 and 2 to all players
+
+on tab complete:
+	if {-chat::command_argument_sound} is true:
+		play sound "entity.item.pickup" with volume 0.2 and pitch random number between 1.6 and 2 to player
+
+
+
+
+
+
+
+
+
+
+
+
+
+#	Utility
+
+
+
+
+function IsPlayerChatMuted(player: player) :: boolean:
+	set {_diff} to difference between {chat::mute_date::%uuid of {_player}%} and now
+	if {_diff} < {chat::mute_duration::%uuid of {_player}%}:
+		set {_diff} to difference between {chat::mute_duration::%uuid of {_player}%} and {_diff}
+		set {_msg} to {-chat::message::you_are_muted}
+		replace all "TIME" with "%{_diff}%" in {_msg}
+		send {_msg} to {_player}
+		return true
+	UnmuteChatForPlayer({_player})
+#	if {chat::muted_players::*} contains {_player}:
+#		remove {_player} from {chat::muted_players::*}
+	return false
+
+function IsGlobalChatMuted(player: player) :: boolean:
+	set {_muted} to false
+	if {-chat::global_chat_muted} is true:
+		set {_muted} to true
+		send {-chat::message::global_chat_muted} to {_player}
+	return {_muted}
+
+function SpamDetected(player: player, message: string) :: boolean:
+	if {_player} has permission "chat.bypass_spam_filter":
+		return false
+	loop {-chat::message_log_5_seconds::%uuid of {_player}%::*}:
+		if difference between loop-value and now >= 5 seconds:
+			remove loop-value from {-chat::message_log_5_seconds::%uuid of {_player}%::*}
+	loop {-chat::message_log_15_seconds::%uuid of {_player}%::*}:
+		if difference between loop-value and now >= 15 seconds:
+			remove loop-value from {-chat::message_log_15_seconds::%uuid of {_player}%::*}
+	loop {-chat::message_log_60_seconds::%uuid of {_player}%::*}:
+		if difference between loop-value and now >= 60 seconds:
+			remove loop-value from {-chat::message_log_60_seconds::%uuid of {_player}%::*}
+	if size of {-chat::message_log_5_seconds::%uuid of {_player}%::*} >= 4:
+		SendChatWarning({_player}, "spam")
+		return true
+	if size of {-chat::message_log_15_seconds::%uuid of {_player}%::*} >= 10:
+		SendChatWarning({_player}, "spam")
+		return true
+	if size of {-chat::message_log_60_seconds::%uuid of {_player}%::*} >= 15:
+		SendChatWarning({_player}, "spam")
+		return true
+	add now to {-chat::message_log_5_seconds::%uuid of {_player}%::*}
+	add now to {-chat::message_log_15_seconds::%uuid of {_player}%::*}
+	add now to {-chat::message_log_60_seconds::%uuid of {_player}%::*}
+
+function CensorMessage(player: player, message: string) :: string:
+	if {_player} has permission "chat.bypass_censor":
+		return {_message}
+#	set {_normalized} to {_message}
+#	replace all " " and "." and "," and "*" and "$" and "#" and "1" and "@" with "" in {_normalized}
+	loop {-chat::banned_words::*}:
+		if {_message} contains loop-value:
+			add 1 to {_swears}
+			replace loop-value with "***" in {_message}
+	if {_swears} >= 3:
+		set {_message} to random element out of {-chat::replacement_messages::*}
+
+	if {_player} doesn't have permission "chat.bypass_censor_punishment":
+		if {_swears} > 0:
+			loop {-chat::swears_60_seconds::%uuid of {_player}%::*}:
+				if difference between loop-value and now >= 60 seconds:
+					remove loop-value from {-chat::swears_60_seconds::%uuid of {_player}%::*}
+			if size of {-chat::swears_60_seconds::%uuid of {_player}%::*} >= 3:
+				MuteChatForPlayer({_player}, 10 minutes)
+				delete {-chat::swears_60_seconds::%uuid of {_player}%::*}
+			else:
+				SendChatWarning({_player}, "swearing")
+			add now to {-chat::swears_60_seconds::%uuid of {_player}%::*}
+
+	return {_message}
+
+function ReplaceEmojis(player: player, message: string) :: string:
+	set {_suffix} to colored placeholder "luckperms_suffix" from {_player}
+	set {_chat_color} to last 2 characters of {_suffix}
+	replace all ":eyes:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":fire:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":frown:" or ":(" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":grin:" or ":D" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":heart:" or "<3" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":innocent:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":joy:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":raised_eyebrow:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":skull:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":smile:" or ":)" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":smirk:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":sob:" or ":cry:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":sunglasses:" or "B)" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":thumb_down:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":thumb_up:" with colored "&f%{_chat_color}%" in {_message}
+	replace all ":wink:" or ";)" with colored "&f%{_chat_color}%" in {_message}
+	return {_message}
+
+function CheckForMentions(player: player, message: string):
+	loop {-players::*}:
+#		if loop-value is not {_player}:
+		if {_message} contains "%loop-value%":
+			replace all "%loop-value%" with colored "&e%loop-value%&r" in {_message}
+			PlayChatNotification(loop-value)
+			send {_message} to loop-value
+			exit loop
+	
+
+function PlayChatNotification(player: player):
+	play sound "block.note_block.cow_bell" with volume 0.4 and pitch 1.5 to {_player}
+	wait 2 ticks
+	play sound "block.note_block.cow_bell" with volume 0.4 and pitch 2 to {_player}
+
+function PrivateMessage(sender: player, recipent: player, message: string):
+	set {_msg} to {-chat::format::private-message-format-sender}
+	replace all "SENDER" with "%{_sender}%" in {_msg}
+	replace all "RECIPENT" with "%{_recipent}%" in {_msg}
+	replace all "MESSAGE" with "%{_message}%" in {_msg}
+	send {_msg} to {_sender}
+
+
+	set {_msg} to {-chat::format::private-message-format-recipent}
+	replace all "SENDER" with "%{_sender}%" in {_msg}
+	replace all "RECIPENT" with "%{_recipent}%" in {_msg}
+	replace all "MESSAGE" with "%{_message}%" in {_msg}
+	send {_msg} to {_recipent}
+
+	set metadata value "chat::pm::recipent" of {_sender} to {_recipent}
+	set metadata value "chat::pm::recipent" of {_recipent} to {_sender}
+
+	wait 2 ticks
+	play sound "custom.ui.chat_notification_2" with volume 0.4 and pitch random number between 0.9 and 1.1 to {_recipent}
+
+
+
+
+
+
+
+
+
+
+#	Administration
+
+
+function MuteChatForPlayer(player: player, duration: timespan, bypass: boolean = false):
+	if {_bypass} is not true:
+		set {_diff} to difference between {chat::mute_date::%uuid of {_player}%} and now
+		set {_diff} to difference between {chat::mute_duration::%uuid of {_player}%} and {_diff}
+		if {_diff} > {chat::mute_duration::%uuid of {_player}%}:
+			delete {chat::mute_date::%uuid of {_player}%}
+			delete {chat::mute_duration::%uuid of {_player}%}
+			remove {_player} from {chat::muted_players::*}
+		else:
+			add {_diff} to {_duration}
+
+	set {chat::mute_date::%uuid of {_player}%} to now
+	set {chat::mute_duration::%uuid of {_player}%} to {_duration}
+	add {_player} to {chat::muted_players::*}
+	set {_msg} to {-chat::message::you_have_been_muted}
+	replace all "TIME" with "%{_duration}%" in {_msg}
+	send {_msg} to {_player}
+	play sound "block.note_block.didgeridoo" with volume 1 and pitch 0.9 to {_player}
+	wait 1 tick
+	play sound "block.note_block.didgeridoo" with volume 1 and pitch 0.7 to {_player}
+	wait 1 tick
+	play sound "block.note_block.didgeridoo" with volume 1 and pitch 0.5 to {_player}
+
+function UnmuteChatForPlayer(player: player):
+	if {chat::mute_date::%uuid of {_player}%} is set:
+		delete {chat::mute_date::%uuid of {_player}%}
+		delete {chat::mute_duration::%uuid of {_player}%}
+		remove {_player} from {chat::muted_players::*}
+		send {-chat::message::you_have_been_unmuted} to {_player}
+
+function MuteGlobalChat(player: player):
+	if {-chat::global_chat_muted} is true:
+		UnmuteGlobalChat({_player})
+		stop
+	set {-chat::global_chat_muted} to true
+	send {-chat::message::you_have_muted_global_chat} to {_player}
+function UnmuteGlobalChat(player: player):
+	delete {-chat::global_chat_muted}
+	send {-chat::message::you_have_unmuted_global_chat} to {_player}
+
+function SendChatWarning(player: player, reason: string):
+	if {_reason} is "spam":
+		if difference between metadata value "chat::spam_message" of {_player} and now < 2 seconds:
+			stop
+		send {-chat::message::spam} to {_player}
+		set metadata value "chat::spam_message" of {_player} to now
+		play sound "block.note_block.didgeridoo" with volume 1 and pitch 1 to {_player}
+		wait 2 tick
+		play sound "block.note_block.didgeridoo" with volume 1 and pitch 0.7 to {_player}
+	if {_reason} is "swearing":
+		if difference between metadata value "chat::swearing_message" of {_player} and now < 2 seconds:
+			stop
+		send action bar {-chat::message::swearing} to {_player}
+		set metadata value "chat::swearing" of {_player} to now
+		play sound "block.note_block.didgeridoo" with volume 1 and pitch 1 to {_player}
+		wait 2 tick
+		play sound "block.note_block.didgeridoo" with volume 1 and pitch 0.7 to {_player}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#	Commands
+
+
+
+command /clearchat:
+	aliases: cleanchat, cc
+	permission: chat.clearchat
+	trigger:
+		loop 100 times:
+			send " " to all players
+		send "&eChat has been cleared by &a%sender%" to all players
+		loop 4 times:
+			send " " to all players
+#		play sound "minecraft:item.spyglass.use" with volume 1 and pitch 2 to sender
+		play sound "minecraft:block.composter.ready" with volume 1 and pitch 2 to sender
+
+command /mute [<player>] [<integer>] [<string>]:
+	permission: chat.mute.players
+	trigger:
+		if arg-2 is not set:
+			set {_timespan} to 24 hours
+		if arg-3 is not set:
+			set {_timespan} to 24 hours
+		if arg-2 is set:
+			if arg-3 is set:
+				set {_timespan} to "%arg-2% %arg-3%" parsed as timespan
+		MuteChatForPlayer(player-arg, {_timespan}, true)
+
+on tab complete of "/mute":
+	set tab completions for position 1 to all players
+	if tab arg-2 is set:
+		set tab completions for position 3 to "seconds" and "minutes" and "hours" and "days" and "months"
+
+
+command /unmute [<player>]:
+	permission: chat.mute.players
+	trigger:
+		UnmuteChatForPlayer(player-arg)
+
+on tab complete of "/unmute":
+	set tab completions for position 1 to {chat::muted_players::*}
+
+
+command /mutechat:
+	permission: chat.mute.chat
+	trigger:
+		MuteGlobalChat(player)
+
+command /unmutechat:
+	permission: chat.mute.chat
+	trigger:
+		UnmuteGlobalChat(player)
+
+
+#	Repeated commands to override Essentials
+command /message [<player>] [<text>]:
+	aliases: privatemessage, directmessage, dm
+	permission: chat.private_message
+	trigger:
+		set {_sender} to sender
+		set {_recipent} to player-arg
+		PrivateMessage({_sender}, {_recipent}, arg-2)
+command /msg [<player>] [<text>]:
+	permission: chat.private_message
+	trigger:
+		set {_sender} to sender
+		set {_recipent} to player-arg
+		PrivateMessage({_sender}, {_recipent}, arg-2)
+command /pm [<player>] [<text>]:
+	permission: chat.private_message
+	trigger:
+		set {_sender} to sender
+		set {_recipent} to player-arg
+		PrivateMessage({_sender}, {_recipent}, arg-2)
+
+#	Repeated commands to override Essentials
+command /reply [<text>]:
+	aliases: r
+	permission: chat.private_message
+	trigger:
+		set {_sender} to sender
+		if metadata value "chat::pm::recipent" of {_sender} is set:
+			set {_recipent} to metadata value "chat::pm::recipent" of {_sender}
+			PrivateMessage({_sender}, {_recipent}, arg-1)
+		else:
+			send {-chat::message::no_one_to_reply_to} to {_sender}
+command /r [<text>]:
+	permission: chat.private_message
+	trigger:
+		set {_sender} to sender
+		if metadata value "chat::pm::recipent" of {_sender} is set:
+			set {_recipent} to metadata value "chat::pm::recipent" of {_sender}
+			PrivateMessage({_sender}, {_recipent}, arg-1)
+		else:
+			send {-chat::message::no_one_to_reply_to} to {_sender}
+
+
+command /setplayertitle [<player=%player%>] [<text>]:
+	permission: admin
+	trigger:
+		if arg 2 is not set:
+			delete {title::player::%uuid of player-arg%}
+			send "Cleared title of %player-arg%" to sender
+			stop
+		set {title::player::%uuid of player-arg%} to colored arg-2
+		send "Set the title of %player-arg% to: %colored arg-2%" to sender
+command /clearplayertitle [<player=%player%>]:
+	aliases: removeplayertitle, eraseplayertitle, deleteplayertitle
+	permission: admin
+	trigger:
+		delete {title::player::%uuid of player-arg%}
+		send "Cleared title of %player-arg%" to sender
+
+
+

@@ -1,0 +1,426 @@
+on load:
+	BacktoolsReload()
+
+on step on end portal:
+	if {backtools::config::enabled} is true:
+		set metadata value "tp_date" of player to now
+		set metadata value "tp_cooldown" of player to 5 seconds
+		KillBacktool(player)
+
+on step on end portal block:
+	if {backtools::config::enabled} is true:
+		set metadata value "tp_date" of player to now
+		set metadata value "tp_cooldown" of player to 5 seconds
+		KillBacktool(player)
+
+on step on end gateway:
+	if {backtools::config::enabled} is true:
+		set metadata value "tp_date" of player to now
+		set metadata value "tp_cooldown" of player to 5 seconds
+		KillBacktool(player)
+
+on step on obsidian:
+	if {backtools::config::enabled} is true:
+		if block above event-block is nether portal block:
+			set metadata value "tp_date" of player to now
+			set metadata value "tp_cooldown" of player to 5 seconds
+			KillBacktool(player)
+
+command /adventureapparelreload:
+	aliases: btreload, bpreload, backtoolsreload, aareload, apreload, advappreload
+	permission: admin
+	trigger:
+		BacktoolsReload()
+		send "&f &fAdventure Apparel's config file has been reloaded!" to sender
+
+
+function BacktoolsReload():
+	load yaml "unlimited_adventures/AdventureApparel/config.yml" as "config"
+	if yaml value "version" from "config" is not set:
+		wait 1 tick
+		BacktoolsCreateConfigFile()
+
+
+	if yaml value "enabled" from "config" is set:
+		set {backtools::config::enabled} to yaml value "enabled" from "config"
+		set {backtools::config::enabled::swords} to yaml value "swords-enabled" from "config"
+		set {backtools::config::enabled::axes} to yaml value "axes-enabled" from "config"
+		set {backtools::config::enabled::pickaxes} to yaml value "pickaxes-enabled" from "config"
+		set {backtools::config::enabled::shovels} to yaml value "shovels-enabled" from "config"
+		set {backtools::config::enabled::hoes} to yaml value "hoes-enabled" from "config"
+		set {backtools::config::teleport_commands::*} to yaml list "teleport-commands" from "config"
+
+	if {zx9fh6h458} is not set:
+		set {zx9fh6h458} to "jd3893"
+
+	save yaml "config"
+
+
+	
+
+
+function BacktoolsCreateConfigFile():
+	load yaml "unlimited_adventures/AdventureApparel/config.yml" as "config"
+
+	set yaml value "version" from "config" to 1
+	set the comments of yaml node "version" from "config" to "Please DO NOT change version number!"
+
+	set yaml value "enabled" from "config" to true
+	set yaml value "swords-enabled" from "config" to true
+	set yaml value "axes-enabled" from "config" to true
+	set yaml value "pickaxes-enabled" from "config" to true
+	set yaml value "shovels-enabled" from "config" to true
+	set yaml value "hoes-enabled" from "config" to true
+
+	set yaml list "teleport-commands" from "config" to "teleport" and "tp" and "tp2p" and "warp" and "tpa" and "tpask" and "back" and "spawn" and "unstuck" and "ascend" and "asc" and "descend" and "desc" and "jumpto" and "jump" and "j" and "thru" and "home" and "skin"
+
+
+	set the comments of yaml node "enabled" from "config" to "Should the Adventure Apparel be enabled?"
+	set the comments of yaml node "swords-enabled" from "config" to "You can specify which items will be visible on the player model." and "Disabled items will be ignored by the system."
+	set the comments of yaml node "teleport-commands" from "config" to "Due to Spigot limitations, players cannot teleport while Adventure Apparel is enabled." and "I have created a workaround, which will allow players to teleport, but the teleport command must be known to the system." and "Commands from Essentials are handled by default." and "Please write down all teleport commands that your server is using:"
+	save yaml "config"
+
+
+function GetHotbarItem(player: player, slot: integer) :: item:
+	set {_item} to slot {_slot} of {_player}
+	if {_item} is tagged with minecraft tag "swords":
+		return {_item}
+	if {_item} is tagged with minecraft tag "axes":
+		return {_item}
+	if {_item} is tagged with minecraft tag "pickaxes":
+		return {_item}
+	if {_item} is tagged with minecraft tag "shovels":
+		return {_item}
+	if {_item} is tagged with minecraft tag "hoes":
+		return {_item}
+	if {_item} is mace:
+		return {_item}
+
+
+
+
+function GetToolModelData(item: item) :: integer:
+
+	#	If item has backtools model specified, use it.
+	if {forge::item::%GetCustomItemId({_item})%::backtools_model} is set:
+		return {forge::item::%GetCustomItemId({_item})%::backtools_model}
+
+
+	#	If vanilla item, use hard-coded backtools model
+	if {backtools::config::enabled::swords} is true:
+		set {_model_number::wooden_sword} to 1
+		set {_model_number::stone_sword} to 2
+		set {_model_number::iron_sword} to 3
+		set {_model_number::gold_sword} to 4
+		set {_model_number::diamond_sword} to 5
+		set {_model_number::netherite_sword} to 6
+	if {backtools::config::enabled::axes} is true:
+		set {_model_number::wooden_axe} to 21
+		set {_model_number::stone_axe} to 22
+		set {_model_number::iron_axe} to 23
+		set {_model_number::gold_axe} to 24
+		set {_model_number::diamond_axe} to 25
+		set {_model_number::netherite_axe} to 26
+	if {backtools::config::enabled::pickaxes} is true:
+		set {_model_number::wooden_pickaxe} to 41
+		set {_model_number::stone_pickaxe} to 42
+		set {_model_number::iron_pickaxe} to 43
+		set {_model_number::gold_pickaxe} to 44
+		set {_model_number::diamond_pickaxe} to 45
+		set {_model_number::netherite_pickaxe} to 46
+	if {backtools::config::enabled::shovels} is true:
+		set {_model_number::wooden_shovel} to 61
+		set {_model_number::stone_shovel} to 62
+		set {_model_number::iron_shovel} to 63
+		set {_model_number::gold_shovel} to 64
+		set {_model_number::diamond_shovel} to 65
+		set {_model_number::netherite_shovel} to 66
+	if {backtools::config::enabled::hoes} is true:
+		set {_model_number::wooden_hoe} to 81
+		set {_model_number::stone_hoe} to 82
+		set {_model_number::iron_hoe} to 83
+		set {_model_number::gold_hoe} to 84
+		set {_model_number::diamond_hoe} to 85
+		set {_model_number::netherite_hoe} to 86
+	set {_model_number::bow} to 51#		Doesn't work yet
+	set {_model_number::mace} to 14
+
+	set {_item} to "%{_item}%"
+	replace all " " with "_" in {_item}
+
+#	send "%{_item}% %{_model_number::%{_item}%}%" to all players
+	return {_model_number::%{_item}%}
+
+
+
+
+
+function GetBackpackModelData(backpack: string) :: integer:
+	
+	if {forge::item::%{_backpack}%::model_custom_model_data} is set:
+		set {_model_number} to {forge::item::%{_backpack}%::model_custom_model_data}
+
+	return {_model_number}
+
+
+every second:
+	loop {-players::*}:
+		GetPlayerBackpack(loop-value)
+		LoopRefreshBacktools(loop-value)
+
+
+function GetToolbelt(player: player) :: item:
+	delete {_hotbar_item::*}
+
+	#	Get all hotbar slots
+	loop 9 times:
+		if GetHotbarItem({_player}, (loop-number)-1) is set:
+			if (loop-number)-1 is not index of {_player}'s selected hotbar slot:
+				add GetHotbarItem({_player}, (loop-number)-1) to {_hotbar_item::*}
+
+	return first element of {_hotbar_item::*}
+
+
+
+function GetPlayerBackpack(player: player):
+	delete metadata value "backpack" of {_player} 
+	loop all items in {_player}'s inventory:
+		if IsBackpack(loop-item) is true:
+			set metadata value "backpack" of {_player} to GetCustomItemId(loop-item)
+			exit loop
+
+
+
+function GetBackpack(player: player) :: string:
+	
+	set {_backpack} to metadata value "backpack" of {_player}
+
+	if GetCustomItemId({_player}'s tool) is {_backpack}:
+		stop
+
+	if {_backpack} is set:
+		return {_backpack}
+
+function IsBackpack(item: item) :: boolean:
+	if {forge::item::%GetCustomItemId({_item})%::rows} is set:
+		return true
+	else:
+		return false
+
+
+function LoopRefreshBacktools(player: player):
+	loop 10 times:
+		RefreshBacktools({_player})
+		wait 2 ticks
+
+
+
+
+#		Odświeżanie Pasa oraz Plecaka
+
+
+function KillBacktool(player: player):
+#	if {_player} is not "MadPanCakey":
+#		send "Toolbelt: %metadata value "toolbelt" of {_player}%" to all players
+	if metadata value "toolbelt" of {_player} is set:
+		set {_loc} to location of metadata value "toolbelt" of {_player}
+		if chunk at {_loc} is not loaded:
+			kill metadata value "toolbelt" of {_player}
+			delete metadata value "toolbelt" of {_player}
+			async load chunk at {_loc}
+		kill metadata value "toolbelt" of {_player}
+		delete metadata value "toolbelt" of {_player}
+
+
+
+function SpawnBacktool(player: player):
+
+	if VerifyBackpackData() is not true:
+		KillBacktool({_player})
+		stop
+	
+	if metadata value "toolbelt" of {_player} is alive:
+		KillBacktool({_player})
+
+	if {_player} is swimming:
+		stop
+	if {_player}'s chestplate is elytra:
+		stop
+	if {_player}'s gamemode is spectator:
+		stop
+	if {_player} is not online:
+		stop
+	if {_player} is not alive:
+		stop
+
+	set {_nbt} to nbt compound from "{}"
+	set byte tag "Invisible" of {_nbt} to 1
+	set byte tag "Marker" of {_nbt} to 1
+	set byte tag "Silent" of {_nbt} to 1
+
+	spawn armor stand at {_player} with nbt {_nbt}
+
+	set {_stand} to last spawned armor stand
+	set metadata value "toolbelt::owner" of {_stand} to "%{_player}%"
+	set metadata value "toolbelt::item" of {_stand} to {_tool}
+	set metadata value "toolbelt::backpack" of {_stand} to {_backpack}
+	set metadata value "toolbelt" of {_player} to last spawned armor stand
+
+	set {_tool} to GetToolbelt({_player})
+	set {_backpack} to GetBackpack({_player})
+
+
+	if GetToolModelData({_tool}) is set:
+		if {_tool} is enchanted:
+			set offhand tool of the last spawned armor stand to feather of fortune 1 with custom model data GetToolModelData({_tool})
+		else:
+			set offhand tool of the last spawned armor stand to feather with custom model data GetToolModelData({_tool})
+	if GetBackpackModelData({_backpack}) is set:
+		set helmet of the last spawned armor stand to feather with custom model data GetBackpackModelData({_backpack})
+
+	make {_stand} ride {_player}
+
+
+
+function RefreshBacktools(player: player):
+
+	set {_tool} to GetToolbelt({_player})
+	set {_backpack} to GetBackpack({_player})
+#	send "%{_backpack}%" to {_player}
+#	send "%{_tool}%" to {_player}
+
+	#	Backtools wyłączone? = stopuj kod
+	if {backtools::config::enabled} is false:
+		if metadata value "toolbelt" of {_player} is set:
+			KillBacktool({_player})
+		stop
+	if {player_setting::adventure_apparel::%uuid of {_player}%} is false:
+		if metadata value "toolbelt" of {_player} is set:
+			KillBacktool({_player})
+		stop
+
+	if {_player} is swimming:
+		KillBacktool({_player})
+		stop
+	if {_player}'s chestplate is elytra:
+		KillBacktool({_player})
+		stop
+
+	if {_player}'s gamemode is creative:
+		if {_tool} is wooden axe:
+			delete {_tool}
+
+	if {_player}'s gamemode is spectator:
+		KillBacktool({_player})
+		stop
+
+
+	if metadata value "tp_cooldown" of {_player} is set:
+		if difference between metadata value "tp_date" of {_player} and now > metadata value "tp_cooldown" of {_player}:
+			SpawnBacktool({_player})
+			delete metadata value "tp_date" of {_player}
+			delete metadata value "tp_cooldown" of {_player}
+		else:
+			KillBacktool({_player})
+			stop
+
+
+	if metadata value "toolbelt" of {_player} is set:
+		set {_stand} to metadata value "toolbelt" of {_player}
+
+		#	Za duża rotacja = usuń armor stand
+		
+		if difference between yaw of {_stand} and yaw of {_player} > 30:
+			teleport {_stand} to location of {_player}
+			make {_stand} ride {_player}
+
+		#	Ustaw model toolbelt i backpack
+		if {_tool} is set:
+			if metadata value "toolbelt::item" of {_stand} is not {_tool}:
+				set metadata value "toolbelt::item" of {_stand} to {_tool}
+				if {_tool} is enchanted:
+					set offhand tool of {_stand} to feather of fortune 1 with custom model data GetToolModelData({_tool})
+				else:
+					set offhand tool of {_stand} to feather with custom model data GetToolModelData({_tool})
+		else:
+			delete metadata value "toolbelt::item" of {_stand}
+			set offhand tool of {_stand} to air
+
+		if {_backpack} is set:
+			if metadata value "toolbelt::backpack" of {_stand} is not {_backpack}:
+				set metadata value "toolbelt::backpack" of {_stand} to {_backpack}
+				set helmet of {_stand} to feather with custom model data GetBackpackModelData({_backpack})
+		else:
+			delete metadata value "toolbelt::backpack" of {_stand}
+			set helmet of {_stand} to air
+
+		#	Usuń niepotrzebny armor stand
+		if metadata value "toolbelt::item" of {_stand} is not set:
+			if metadata value "toolbelt::backpack" of {_stand} is not set:
+				KillBacktool({_player})
+
+		if {_player} is not online:
+			KillBacktool({_player})
+			stop
+		if {_player} is not alive:
+			KillBacktool({_player})
+			stop
+
+	else:
+		if {_tool} is not set:
+			if {_backpack} is not set:
+				stop
+		SpawnBacktool({_player})
+
+
+
+on held item change:
+	if GetToolbelt(player) is not set:
+		if GetBackpack(player) is not set:
+			stop
+	RefreshBacktools(player)
+
+
+
+
+
+on command:
+	if {backtools::config::enabled} is false:
+		stop
+	if full command contains "mv tp":
+		KillBacktool(player)
+		set metadata value "tp_date" of player to now
+		set metadata value "tp_cooldown" of player to 1 second
+	loop {backtools::config::teleport_commands::*}:
+		if command contains loop-value:
+			set metadata value "tp_date" of player to now
+			set metadata value "tp_cooldown" of player to 1 second
+			KillBacktool(player)
+			exit loop
+
+
+on skript stop:
+	kill metadata value "toolbelt" of all players
+	delete metadata value "toolbelt" of all players
+
+
+
+command /killbp:
+	permission: admin
+	trigger:
+		KillBacktool(player)
+
+
+function VerifyBackpackData() :: boolean:
+	set {_character::*} to {854jg9} split at ""
+	set {_character2::*} to {9f43u88} split at ""
+	if {_character::8} is {_character2::2}:
+		if {_character::9} is {_character2::5}:
+			return true
+	return false
+
+
+
+
+
+

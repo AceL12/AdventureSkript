@@ -1,0 +1,408 @@
+import:
+	org.bukkit.plugin.java.JavaPlugin
+	java.lang.Class
+	java.time.Instant
+	java.time.ZoneOffset
+	java.time.ZonedDateTime
+#	com.nexomc.api.NexoAPI
+
+
+function YamlQueueAdd(task: string):
+	add {_task} to {-yaml_queue::tasks::*}
+function YamlQueueRemove(task: string):
+	if {-yaml_queue::tasks::*} contains {_task}:
+		remove {_task} from {-yaml_queue::tasks::*}
+function YamlQueueCheck(task: string) :: boolean:
+	if size of {-yaml_queue::tasks::*} > 3:
+		return false
+	loop {-yaml_queue::tasks::*}:
+		if loop-value is {_task}:
+			return false
+	return true
+
+on load:
+	ResourcePackReload()
+	set {-players::*} to all players
+
+function unixNow() :: date:
+	set {_unix::*} to "%Instant.now().atZone(ZoneOffset.UTC)%" split at "T"
+	set {_date::*} to {_unix::1} split at "-"
+	set {_time::*} to {_unix::2} split at ":"
+	set {_year} to {_date::1} parsed as integer
+	set {_month} to {_date::2} parsed as integer
+	set {_day} to {_date::3} parsed as integer
+	set {_hour} to {_time::1} parsed as integer
+	set {_minute} to {_time::2} parsed as integer
+	set {_second} to {_time::3}
+	replace all "Z" with "" in {_second}
+	set {_second} to round({_second} parsed as number)
+	set {_unix_date} to date({_year}, {_month}, {_day}, {_hour}, {_minute}, {_second})
+	return {_unix_date}
+
+function shortenNumber(number: number) :: string:
+	set {_display} to {_number}
+	set {_unit} to ""
+	if {_number} >= 1000:
+		set {_display} to {_number}/1000
+		set {_unit} to "K"
+	if {_display} >= 1000:
+		set {_display} to {_display}/1000
+		set {_unit} to "M"
+	if {_display} >= 1000:
+		set {_display} to {_display}/1000
+		set {_unit} to "B"
+	if {_display} >= 1000:
+		set {_display} to {_display}/1000
+		set {_unit} to "T"
+	if {_display} >= 1000:
+		set {_display} to {_display}/1000
+		set {_unit} to "Q"
+	return "%{_display}%%{_unit}%"
+
+
+
+function capitalize(text: text) :: text:
+
+	set {_char} to the first character of {_text}
+	if {-letters::lowercase::*} doesn't contain {_char}:
+		return {_text}
+	set {_char} to {-letters::uppercase::%{_char}%}
+
+	set {_remaining} to ""
+	set {_remaining} to the last (length of {_text} - 1) characters of {_text}
+	if {_remaining} is set:
+		return "%{_char}%%{_remaining}%"
+	else:
+		return "%{_char}%"
+
+
+
+function GetBiomeID(loc: location) :: string:
+	set {_biome_id} to "%biome of block at {_loc}%"
+	replace all "roofed forest" with "dark forest" in {_biome_id}
+	replace all "cave/" with "" in {_biome_id}
+	replace all "terralith:" with "t:" in {_biome_id}
+	replace all " " with "_" in {_biome_id}
+	return {_biome_id}
+
+
+function GetBiomeName(loc: location) :: string:
+	set {_biome_fallback} to "%biome of block at {_loc}%"
+	set {_biome_id} to "%biome of block at {_loc}%"
+	replace all "roofed forest" with "dark forest" in {_biome_id}
+	replace all "cave/" with "" in {_biome_id}
+	replace all "terralith:" with "t:" in {_biome_id}
+	replace all " " with "_" in {_biome_id}
+
+	#	Proper fomatting
+	if {-biome::%{_biome_id}%} is set:
+		set {_biome_text} to {-biome::%{_biome_id}%}
+
+	#	Fallback formatting
+	if {_biome_text} is not set:
+		replace all "roofed forest" with "dark forest" in {_biome_fallback}
+		replace all "_" with " " in {_biome_fallback}
+		replace all "cave/" with "" in {_biome_fallback}
+		replace all "terralith:" with "" in {_biome_fallback}
+		set {_biome_text} to {_biome_fallback}
+
+	return {_biome_text}
+
+
+
+
+
+
+
+function SpawnParticles(particle: string, loc: location, count: int):
+	if {_particle} is "crit":
+		draw {_count} crit at {_loc} with offset vector(0, 0, 0) with extra 1
+	if {_particle} is "totem":
+		draw {_count} totem of undying at {_loc} with offset vector(0, 0, 0) with extra 1
+	if {_particle} is "happy villager":
+		draw {_count} happy villager at {_loc} with offset vector(1, 1, 1) with extra 0
+
+function GetTime(type: string) :: string:
+	set {_now} to now formatted with "dd.MM.yyyy hh:mm"
+
+	if {_type} contains "day":
+		set {_time} to first 2 characters of {_now}
+	if {_type} contains "month":
+		set {_time} to first 5 characters of {_now}
+		set {_time} to last 2 characters of {_time}
+	if {_type} contains "year":
+		set {_time} to first 10 characters of {_now}
+		set {_time} to last 4 characters of {_time}
+
+	if {_type} contains "minute":
+		set {_time} to last 2 characters of {_now}
+	if {_type} contains "hour":
+		set {_time} to last 5 characters of {_now}
+		set {_time} to first 2 characters of {_time}
+
+	return {_time}
+
+function Time(string: string) :: timespan:
+	return {_string} parsed as timespan
+
+function roundTime(timeString: string) :: string:
+	set {_timeString::*} to {_timeString} split at " "
+	loop {_timeString::*}:
+		if "%loop-value parsed as a number%" is not "<none>":
+			replace "%loop-value%" in {_timeString} with "%rounded (loop-value parsed as number)%"
+	return {_timeString}
+
+
+function shortenTime(time: string) :: string:
+	replace all "and " with "" in {_time}
+	replace all "seconds" with "sec." in {_time}
+	replace all "minutes" with "m." in {_time}
+	replace all "hours" with "h." in {_time}
+	replace all "second" with "sec." in {_time}
+	replace all "minute" with "m." in {_time}
+	replace all "hour" with "h." in {_time}
+	return {_time}
+
+
+function RandomPos(loc: location, x1: number, x2: number, y1: number, y2: number, z1: number, z2: number) :: location:
+	add random number between {_x1} and {_x2} to x coordinate of {_loc}
+	add random number between {_y1} and {_y2} to y coordinate of {_loc}
+	add random number between {_z1} and {_z2} to z coordinate of {_loc}
+	return {_loc}
+
+# # Add Item Attribute
+# adds an attribute to an item and then returns it.
+# list of slot names, attributes and operations can be found here: https://minecraft.fandom.com/wiki/Attribute
+function AddItemAttribute(item: item, attribute: string, amount: number, operation: string, slot: string) :: item:
+	set {_nbt} to nbt of {_item}
+	set {_attributes::*} to compound list tag "minecraft:attribute_modifiers;modifiers" of {_nbt}
+	add nbt of "{type:""%{_attribute}%"",amount:%{_amount}%,slot:%{_slot}%,operation:%{_operation}%,id:%RandomUUID()%}" to {_attributes::*}
+	set compound list tag "minecraft:attribute_modifiers;modifiers" of {_nbt} to {_attributes::*}
+
+	return {_item}
+
+
+
+
+
+# # Remove Item Attribute
+# removes the attribute of an item whether it is there or not and returns it.
+function RemoveItemAttribute(item: item, attribute: string) :: item:
+	set {_nbt} to nbt of {_item}
+	set {_attributes::*} to compound list tag "minecraft:attribute_modifiers;modifiers" of {_nbt}
+	loop {_attributes::*}:
+		if string tag "type" of loop-value is {_attribute}:
+			delete {_attributes::%loop-index%}
+	set compound list tag "minecraft:attribute_modifiers;modifiers" of {_nbt} to {_attributes::*}
+	return {_item}
+
+function OldRemoveItemAttribute(item: item, attribute: string) :: item:
+	set {_nbt} to (nbt compound of {_item})
+	set {_attributes::*} to (compound list tag "AttributeModifiers" of {_nbt})
+	loop {_attributes::*}:
+		if string tag "Name" of loop-value is {_attribute}:
+			delete {_attributes::%loop-index%}
+	set (compound list tag "AttributeModifiers" of {_nbt}) to {_attributes::*}
+	return {_item}
+
+# # Get Item Attribute
+# gets the 'amount' of an attribute on an item, if the item doesn't have that attribute, it returns <none>.
+function GetItemAttribute(item: item, attribute: string) :: object: # number doesn't work
+  set {_nbt} to (nbt compound of {_item})
+  set {_attributes::*} to (compound list tag "AttributeModifiers" of {_nbt})
+  loop {_attributes::*}:
+    if (string tag "Name" of loop-value) is {_attribute}:
+      set {_amount} to (int tag "Amount" of loop-value)
+      return {_amount}   
+
+# Meant for internal use, ignore it. EDITED for 1.20.5 or something
+function RandomUUID() :: string:
+	set {_nr} to random integer between 1 and 30000000000
+	return "%{_nr}%"
+
+# Meant for internal use, ignore it.
+function OldRandomUUID() :: string:
+  loop 4 times:
+    set {_uuid::%loop-value%} to "%a random integer between -500000 and 500000%"
+  return (join {_uuid::*} with ", ")
+
+
+function GetMessage(msg: objects) :: objects:
+#		set {_msg::*} to colored {boosters::messages::%{_type}%_booster_message::*}
+	replace all "[" with "" in {_msg::*}
+	replace all "]" with "" in {_msg::*}
+#	loop {_msg::*}:
+#		send "%loop-value%" to all players
+	return {_msg::*}
+
+
+function GetItem(text_item: string) :: item:
+	if {_text_item} parsed as item is set:
+		return {_text_item} parsed as item
+
+	if {_text_item} contains " of ":
+		set {_text_item::*} to {_text_item} split at " of "
+		set {_text_item} to {_text_item::2}
+		set {_amount} to {_text_item::1} parsed as integer
+
+	if {_text_item} contains "itemsadder:" or "nexo:" or "oraxen:" or "custom:" or "workshop_schematic:":
+		parse if script "itemsadder.sk" is loaded:
+			if {_text_item} contains "itemsadder:":
+				replace all "itemsadder:" with "" in {_text_item}
+				set {_item} to ItemsAdderItem({_text_item})
+		if {_text_item} contains "custom:":
+			replace all "custom:" with "" in {_text_item}
+			set {_item} to {item::%{_text_item}%}
+		if {_text_item} contains "workshop_schematic:":
+			if {_text_item} contains "[":
+				if {_text_item} contains "]":
+					replace all "workshop_schematic", "[" and "]" with "" in {_text_item}
+					set {_random_schematic} to random element out of {random_encounters::chests::%{_text_item}%::schematics::list::*}
+					set {_item} to {workshop_schematic::%{_random_schematic}%}
+			else:
+				replace all "workshop_schematic:" with "" in {_text_item}
+				set {_item} to {workshop_schematic::%{_text_item}%}
+			
+	else:
+		if {_text_item} contains "unbreakable":
+			replace all "unbreakable " with "" in {_text_item}
+			set {_item} to {_text_item} parsed as item
+			set {_item} to unbreakable {_item}
+		else:
+			set {_item} to {_text_item} parsed as item
+	if {_amount} is set:
+		return {_amount} of {_item}
+	else:
+		return {_item}
+
+function GetWorldDirection(loc: location) :: direction:
+	if yaw of {_loc} >= 315:
+		return south
+	if yaw of {_loc} < 45:
+		return south
+	if yaw of {_loc} >= 45:
+		if yaw of {_loc} < 135:
+			return west
+	if yaw of {_loc} >= 135:
+		if yaw of {_loc} < 225:
+			return north
+	if yaw of {_loc} >= 225:
+		if yaw of {_loc} < 315:
+			return east
+
+
+
+on script load:
+	set {_letters} to "Aa Bb Cc Dd Ee Ff Gg Hh Ii Jj Kk Ll Mm Nn Oo Pp Qq Rr Ss Tt Uu Vv Ww Xx Yy Zz äÄ öÖ üÜ éÉ èÈ êÊ ëË àÀ âÂ îÎ ïÏ ôÔ ûÛ ùÙ çÇ ñÑ áÁ éÉ íÍ óÓ úÚ üÜ ąĄ ćĆ ęĘ łŁ ńŃ óÓ śŚ źŹ żŻ ёЁ жЖ йЙ цЦ чЧ шШ щЩ ъЪ ыЫ ьЬ эЭ юЮ яЯ"
+	set {_letter-pairs::*} to {_letters} split at " "
+	loop {_letter-pairs::*}:
+		set {_pair::*} to loop-value split at ""
+ 
+		set {_uppercase} to {_pair::1}
+		set {_lowercase} to {_pair::2}
+
+		set {-letters::uppercase::%{_lowercase}%} to {_uppercase}
+		set {-letters::lowercase::%{_uppercase}%} to {_lowercase}
+
+
+
+on resource pack response:
+	if {server::use_vanilla_resourcepack} is true:
+		set metadata value "resource_pack_loaded" of player to false
+		if the resource pack was declined or failed to download:
+			kick the player due to {server::resource_pack_deny_message}
+		if the resource pack was successfully loaded:
+			set metadata value "resource_pack_loaded" of player to true
+
+on join:
+	set {_loc} to location of player
+	set {-players::*} to all players
+	DungeonsJoinCheck(player)
+	set metadata value "can_teleport" of player to false
+	set metadata value "dungeons_preview_spawns" of player to false
+	remove blindness from player
+	send title " " with subtitle " " to player for 1 second
+	wait 0.5 second
+	draw 15 cloud at location 1 meter above player with offset vector(0, 0, 0) with extra 0.3
+	play sound "custom.ui.player_pop" with volume 1 and pitch 1 at {_loc}
+	PlayJoinJingle(player)
+
+
+
+on quit:
+	set {_loc} to location of player
+	play sound "custom.ui.player_pop" with volume 1 and pitch 1.5 at {_loc}
+	draw 10 cloud at location 1 meter above {_loc} with offset vector(0, 0, 0) with extra 0.2
+	KillBacktool(player)
+	wait 2 tick
+	set {-players::*} to all players
+	KillBacktool(player)
+
+function DungeonsJoinCheck(player: player):
+	if "%region at {_player}%" contains "dungeon":
+		execute console command "mv tp %{_player}% spawn"
+		set metadata value "dungeons_was_in_dungeon" of {_player} to true
+
+
+
+function PlayJoinJingle(player: player):
+	set metadata value "resource_pack_loaded" of {_player} to false
+	loop 15 times:
+		wait 1 second
+		if {_player} has resource pack:
+			wait 2 second
+			set metadata value "resource_pack_loaded" of {_player} to true
+			if metadata value "dungeons_was_in_dungeon" of {_player} is not true:
+				play sound "custom.server_connect_2" with volume 0.4 and pitch 1 to {_player}
+			if metadata value "dungeons_was_in_dungeon" of {_player} is true:
+				set metadata value "dungeons_was_in_dungeon" of {_player} to false
+				wait 1 seconds
+				send " " to {_player}
+				send "&cYou blacked out in the depths of a Dungeon!" to {_player}
+				send "&fSome kind soul dragged you back to safety—just in time." to {_player}
+				wait 10 ticks
+				play sound "minecraft:block.note_block.guitar" with volume 1 and pitch 0.9 to {_player}
+				wait 4 ticks
+				play sound "minecraft:block.note_block.guitar" with volume 1 and pitch 0.7 to {_player}
+				wait 4 ticks
+				play sound "minecraft:block.note_block.guitar" with volume 1 and pitch 0.5 to {_player}
+	
+			exit loop
+	DashboardErrorNotification({_player})
+	CheckSetupUpdateAvailable({_player})
+
+
+
+on tab complete:
+	if event-string contains "/ver":
+		if player doesn't have permission "admin":
+			cancel event
+
+
+
+
+function ResourcePackReload():
+	load yaml "unlimited_adventures/AdventureCore/resource_pack.yml" as "resource_pack"
+
+	if plugin "Oraxen" is enabled:
+		set yaml value "use_oraxen_or_itemsadder" from "resource_pack" to true
+	if plugin "ItemsAdder" is enabled:
+		set yaml value "use_oraxen_or_itemsadder" from "resource_pack" to true
+	if plugin "Nexo" is enabled:
+		set yaml value "use_oraxen_or_itemsadder" from "resource_pack" to true
+
+	if yaml value "use_oraxen_or_itemsadder" from "resource_pack" is not set:
+		set yaml value "use_oraxen_or_itemsadder" from "resource_pack" to false
+	if yaml value "resource_pack_deny_message" from "resource_pack" is not set:
+		set yaml value "resource_pack_deny_message" from "resource_pack" to "&6Please accept the resource pack to ensure the best experience!"
+
+	set {server::resource_pack_deny_message} to yaml value "resource_pack_deny_message" from "resource_pack"
+	if yaml value "use_oraxen_or_itemsadder" from "resource_pack" is true:
+		set {server::use_vanilla_resourcepack} to false
+	else:
+		set {server::use_vanilla_resourcepack} to true
+
+	save yaml "resource_pack"
+
+
+

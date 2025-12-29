@@ -1,0 +1,43 @@
+
+
+
+
+#command /resetprogress [<player=%player%>] [<text>]:
+#	permission: admin
+#	trigger:
+#		if arg 2 is "confirm":
+#			EntirelyResetServerProgress(player-arg)
+#		if arg 2 is not set:
+#			send "&cAre you sure? This will wipe the progress of this player!" to sender
+#			send "Please confirm: &a/resetprogress %player-arg% confirm" to sender
+
+#command /resetprogressforallplayers [<text>]:
+#	permission: admin
+#	trigger:
+#		if arg 1 is "confirm":
+#			EntirelyResetServerProgressForAllPlayers()
+#		if arg 1 is not set:
+#			send "&cAre you sure? This will wipe all progress &c&lFOR ALL PLAYERS!" to sender
+#			send "Please confirm: &a/resetprogressforallplayers confirm" to sender
+
+
+#function EntirelyResetServerProgress(player: player):
+#	send "a" to {_player}
+
+#function EntirelyResetServerProgressForAllPlayers(player: player):
+#	send "a" to {_player}
+
+
+
+#on join:
+#	if {server_progress::reset::date::%uuid of player%} is set:
+#	if {server_progress::reset::date::%uuid of player%} is set:
+#		if difference between {server_progress::reset::date::%uuid of player%} is set:
+#			delete {server_progress::reset::date::%uuid of player%}
+
+
+
+
+
+
+

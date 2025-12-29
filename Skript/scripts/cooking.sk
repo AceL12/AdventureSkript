@@ -1,0 +1,767 @@
+import:
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+	org.bukkit.Bukkit
+
+on load:
+	loop 80 times:
+		if {-config_loaded::custom_items} is true:
+			if YamlQueueCheck("cooking") is true:
+				YamlQueueAdd("cooking")
+				CookingReload()
+				exit loop
+		wait 1 second
+
+
+function CookingReload():
+	loop {cooking_recipes_list::*}:
+		delete {cooking_recipes::%loop-value%::*}
+		delete {cooking_recipe_amount::%loop-value%::*}
+	delete {cooking_recipes_list::*}
+	delete {cooking_recipes::*}
+	unload yaml directory "unlimited_adventures/CustomItems/cooking_recipes"
+	load all yaml from directory "unlimited_adventures/CustomItems/cooking_recipes"
+	loop all of the currently loaded yaml files:
+		if loop-value-1 contains "unlimited_adventures/CustomItems/cooking_recipes/":
+			set {_file} to loop-value-1
+			loop yaml node keys "" from {_file}:
+				set {_dish} to loop-value-2
+				set {cooking_recipes::%{_dish}%::*} to yaml list "%{_dish}%.ingredients" from {_file}
+				set {cooking_recipe_amount::%{_dish}%} to yaml value "%{_dish}%.amount" from {_file}
+				add {_dish} to {cooking_recipes_list::*}
+	save yaml "unlimited_adventures/CustomItems/cooking_recipes"
+
+	load yaml "unlimited_adventures/Menus/cooking_pot.yml" as "cooking_pot"
+	clear {-cooking_recipes::menu::*}
+	loop yaml node key "menu" from "cooking_pot":
+		set {-cooking_recipes::menu::%loop-value%} to yaml value "menu.%loop-value%" from "cooking_pot"
+	set {-cooking_recipes::menu::about_cooking::name} to colored yaml value "menu.about_cooking.name" from "cooking_pot"
+	set {-cooking_recipes::menu::about_cooking::lore::*} to colored yaml list "menu.about_cooking.lore" from "cooking_pot"
+	
+	save yaml "cooking_pot"
+
+	send "&f &aCooking loaded!" to all ops
+
+	YamlQueueRemove("custom_items")
+	
+
+
+function OpenCookingMenu(player: player, dish: string = "none"):
+
+	if {_player}'s current inventory is not (metadata value "cooking_pot_menu" of {_player}):
+		play sound "item.book.page_turn" with volume 1 and pitch 1 to {_player}
+	set metadata value "cooking_pot_menu" of {_player} to chest inventory with 6 rows named "&f"
+	
+	set {_cooking_pot} to metadata value "cooking_pot" of {_player}
+	set {_cooking_pot_nbt} to custom nbt of {_cooking_pot}
+
+	loop {-forge::items_list::*}:
+		if {cooking_recipes::%loop-value%::*} is set:
+			add loop-value to {_items::*}
+
+	set {_about} to stick with custom model data 100 named {-cooking_recipes::menu::about_cooking::name}
+	loop {-cooking_recipes::menu::about_cooking::lore::*}:
+		set line loop-iteration of lore of {_about} to loop-value
+	set slot 0 of metadata value "cooking_pot_menu" of {_player} to {_about}
+
+	set {_slot_nr} to 4
+	loop {_items::*}:
+		add 1 to {_nr}
+		if {_page} is not 1:
+			if {_nr} < 22*({_page}-1):
+				continue
+
+		add 1 to {_slot_nr}
+		set {_item_id} to loop-value
+		set {_item} to {item::%{_item_id}%}
+		set {_name} to name of {_item}
+
+		set boolean tag "select_dish" of custom nbt of {_item} to true
+
+		#	Hide item attributes to make the lore cleaner
+		set {_nbt} to nbt of {_item}
+		hide the additional tooltip of {_item}
+
+		#	Setting item lore
+		set {_lore_line} to 0
+		loop lore of {_item}:
+			add 1 to {_lore_line}
+
+		if IsCookingRecipeUnlocked({_player}, {_item_id}) is true:
+			set line {_lore_line}+2 of lore of {_item} to {-cooking_recipes::menu::ingredients}
+			set {_ingredient_lore} to 0
+			loop {cooking_recipes::%loop-value-1%::*}:
+				add 1 to {_ingredient_lore}
+
+				set {_ingredient} to loop-value-2
+				if {_ingredient} does not contain "custom":
+					set {_ingredient} to {_ingredient} parsed as item
+				if PlayerHasItem({_player}, loop-value-2) is true:
+					set line ({_lore_line}+2)+{_ingredient_lore} of lore of {_item} to "&2%uncoloured StyleIngredientString(loop-value-2)%"
+				else:
+					set line ({_lore_line}+2)+{_ingredient_lore} of lore of {_item} to "&7%uncoloured StyleIngredientString(loop-value-2)%"
+
+			if ForgeCanCraft({_player}, {_item_id}) is true:
+				if string tag "dish" of {_cooking_pot_nbt} is {_item_id}:
+					set line ({_lore_line}+2)+{_ingredient_lore}+2 of lore of {_item} to {-cooking_recipes::menu::selected_recipe}
+				else:
+					set line ({_lore_line}+2)+{_ingredient_lore}+2 of lore of {_item} to {-cooking_recipes::menu::select_recipe}
+		else:
+			set {_item} to paper named {_name} with lore {_lore}
+			set line 2 of lore of {_item} to {-cooking_recipes::menu::recipe_not_found}
+
+		#	Skip edge slots
+		loop 10 times:
+			if {_slot_nr} is between 0 and 4:
+				add 1 to {_slot_nr}
+			if {_slot_nr} is between 9 and 13:
+				add 1 to {_slot_nr}
+			if {_slot_nr} is between 18 and 22:
+				add 1 to {_slot_nr}
+			if {_slot_nr} is between 27 and 31:
+				add 1 to {_slot_nr}
+			if {_slot_nr} is between 36 and 38:
+				add 1 to {_slot_nr}
+			if {_slot_nr} is between 36 and 40:
+				add 1 to {_slot_nr}
+		set {_amount} to 1
+		if {cooking_recipe_amount::%{_item_id}%} is set:
+			if IsCookingRecipeUnlocked({_player}, {_item_id}) is true:
+				set {_amount} to {cooking_recipe_amount::%{_item_id}%}
+		set slot {_slot_nr} of metadata value "cooking_pot_menu" of {_player} to {_amount} of {_item}
+
+
+	if {_dish} is "none":
+		set {_dish} to string tag "dish" of {_cooking_pot_nbt}
+	if {_dish} is not "none":
+
+		if GetItem("custom:%{_dish}%") is set:
+			set {_product} to GetItem("custom:%{_dish}%")
+		else:
+			set {_product} to {_dish} parsed as item
+		set {_product_amount} to {cooking_recipe_amount::%{_dish}%}
+
+
+		set {_slot_nr} to 17
+		loop {cooking_recipes::%{_dish}%::*}:
+			add 1 to {_nr}
+			if {_page} is not 1:
+				if {_nr} < 22*({_page}-1):
+					continue
+
+			add 1 to {_slot_nr}
+			set {_item_id} to loop-value
+			set {_item} to GetItem({_item_id})
+			set {_name} to name of {_item}
+
+			#	Hide item attributes to make the lore cleaner
+			set {_nbt} to nbt of {_item}
+			hide the additional tooltip of {_item}
+
+			#	Skip edge slots
+			loop 10 times:
+				if {_slot_nr} is between 20 and 26:
+					add 1 to {_slot_nr}
+				if {_slot_nr} is between 29 and 35:
+					add 1 to {_slot_nr}
+				if {_slot_nr} is between 38 and 44:
+					add 1 to {_slot_nr}
+			set {_amount} to 1
+			if {cooking_recipe_amount::%{_item_id}%} is set:
+				if IsCookingRecipeUnlocked({_player}, {_item_id}) is true:
+					set {_amount} to {cooking_recipe_amount::%{_item_id}%}
+			set slot {_slot_nr} of metadata value "cooking_pot_menu" of {_player} to {_amount} of {_item}
+			set slot 30 of metadata value "cooking_pot_menu" of {_player} to {_product_amount} of {_product}
+
+
+
+	if metadata value "cooking_pot_menu:page" of {_player} > 1:
+		set slot 27 of metadata value "cooking_pot_menu" of {_player} to stick with custom model data 1 named {-cooking_recipes::menu::previous_page}
+	if metadata value "cooking_pot_menu:page" of {_player} < size of {_items::*} / 20:
+		set slot 35 of metadata value "cooking_pot_menu" of {_player} to stick with custom model data 2 named {-cooking_recipes::menu::next_page}
+
+	if {_player}'s current inventory is not (metadata value "cooking_pot_menu" of {_player}):
+		open (metadata value "cooking_pot_menu" of {_player}) to {_player}
+
+
+
+function IsCookingRecipeUnlocked(player: player, dish: string) :: boolean:
+#	if {forge::config::cooking_recipes::require_unlocking} is not true:#		TO DO
+#		return true
+	if {cooking_recipes::default::*} contains {_dish}:#	TO DO
+		return true
+	if {forge::known_cooking_recipes::%uuid of {_player}%::*} contains {_dish}:
+		return true
+
+
+
+function CookingPotInteraction(player: player, block: block):
+	if difference between metadata value "cooking_pot_click_cooldown" of {_player} and now < 0.15 second:
+		stop
+	set metadata value "cooking_pot_click_cooldown" of {_player} to now
+
+	loop all armor stands in radius 0.7 of location of {_block}:
+		if string tag "block_type" of custom nbt of loop-entity is "cooking_pot":
+			set {_cooking_pot} to loop-entity
+			set {_nbt} to custom nbt of {_cooking_pot}
+			set metadata value "cooking_pot" of {_player} to {_cooking_pot}
+			exit loop
+	
+	#	Add ingredient
+	if CookingPotAddIngredient({_player}, {_block}) is true:
+		stop
+
+	#	Pickup cooked dish
+	if boolean tag "cooked" of {_nbt} is true:
+		CookingPotPickupDish({_player}, {_block})
+		stop
+
+	#	Cooking GUI
+	if int tag "cooking_last_check_date" of {_nbt} is not set:
+		OpenCookingMenu({_player})
+		set metadata value "clicked_cooking_pot" of {_player} to {_block}
+
+
+function SelectCookingPotRecipe(player: player, dish: string):
+#	close the inventory of {_player}
+
+	set {_block} to metadata value "clicked_cooking_pot" of {_player}
+	set {_cooking_pot} to metadata value "cooking_pot" of {_player}
+	set {_nbt} to custom nbt of {_cooking_pot}
+
+	if string tag "dish" of {_nbt} is {_dish}:
+		stop
+	if string tag "dish" of {_nbt} is set:
+		set {_update} to true
+	set string tag "dish" of {_nbt} to {_dish}
+	set {_recipe} to join {cooking_recipes::%{_dish}%::*} with ","
+	set string tag "required_ingredients" of {_nbt} to {_recipe}
+
+	set {_pitch} to random number between 0.9 and 1.1
+	play sound "custom.ui.switch" with volume 0.5 and pitch {_pitch} at {_block}
+
+	set {_ingredients::*} to string tag "ingredients" of {_nbt} split at ","
+	loop {_ingredients::*}:
+		if GetItem("custom:%loop-value%") is set:
+			drop GetItem("custom:%loop-value%") at {_block}
+		else:
+			drop loop-value parsed as item at {_block}
+		set helmet of {_cooking_pot} to {item::cooking_pot}
+		
+	delete string tag "ingredients" of {_nbt}
+
+	if {_update} is true:
+		UpdateCookingPopup({_player}, {_block}, {_cooking_pot})
+	else:
+		CreateCookingPopup({_player}, {_block}, {_dish})
+
+function CookingPotAddIngredient(player: player, block: block) :: boolean:
+
+	set {_cooking_pot} to metadata value "cooking_pot" of {_player}
+	set {_nbt} to custom nbt of {_cooking_pot}
+
+	set {_tool} to tool of {_player}
+	if CustomItem({_tool}) is set:
+		set {_tool} to "custom:%CustomItem({_tool})%"
+	else:
+		set {_tool} to "%type of {_tool}%"
+
+	if int tag "cooking_last_check_date" of {_nbt} is not set:
+		if string tag "dish" of {_nbt} is set:
+			if string tag "ingredients" of {_nbt} doesn't contain {_tool}:
+				if string tag "required_ingredients" of {_nbt} contains {_tool}:
+					set {_pass} to true
+	if {_pass} is not true:
+		return false
+
+	if string tag "ingredients" of {_nbt} is set:
+		set string tag "ingredients" of {_nbt} to "%string tag "ingredients" of {_nbt}%,%{_tool}%"
+	else:
+		set string tag "ingredients" of {_nbt} to "%{_tool}%"
+	if tool of {_player} is milk bucket or water bucket or lava bucket:
+		set {_return_bucket} to true
+#		if {_player} doesn't have space for 1 bucket:
+#			drop bucket at location 1 meter above {_block}
+#		else:
+#			give 1 bucket to {_player}
+	remove 1 of tool of {_player} from {_player}
+	if {_return_bucket} is true:
+		set tool of {_player} to bucket
+
+	set {_ingredients::*} to string tag "ingredients" of {_nbt} split at ","
+	set {_required_ingredients::*} to string tag "required_ingredients" of {_nbt} split at ","
+	
+	draw 5 bubble pop at location 0.3 meter above {_block} with offset vector(0.25, 0.1, 0.25) with extra 0
+	set {_pitch} to random number between 1.3 and 1.3
+	play sound "entity.item.pickup" with volume 0.3 and pitch {_pitch} at {_block}
+	play sound "item.bucket.empty_lava" with volume 0.6 and pitch {_pitch} at {_block}
+
+	set helmet of {_cooking_pot} to {item::cooking_pot_dish}
+
+	AnimateCookingPot({_cooking_pot}, "add_ingredient")
+
+	if {_ingredients::*} contains {_required_ingredients::*}:
+		CookingPotStartCooking({_player}, {_block})
+		return true
+	else:
+		UpdateCookingPopup({_player}, {_block}, {_cooking_pot})
+		return true
+
+function CookingPotStartCooking(player: player, block: block):
+	set {_cooking_pot} to metadata value "cooking_pot" of {_player}
+	set {_nbt} to custom nbt of {_cooking_pot}
+
+	set int tag "cooking_last_check_date" of {_nbt} to unix timestamp of now
+	RemoveCookingPopup({_player}, {_block}, true)
+	wait 3 ticks
+
+
+	set {_loc} to location of {_cooking_pot}
+	loop 4 times:
+		add 0.08 to y coordinate of {_loc}
+		teleport {_cooking_pot} to {_loc}
+		wait 1 tick
+	loop 2 times:
+		subtract 0.08 from y coordinate of {_loc}
+		teleport {_cooking_pot} to {_loc}
+		wait 1 tick
+
+	play sound "custom.cooking_timer" with volume 0.6 and pitch 1 at {_block}
+
+	AnimateCookingPot({_cooking_pot}, "mixing")
+
+	set {_x} to 0
+	loop 10 times:
+		add 0.3 to {_x}
+		add nbt from "{Pose:{Head:[0f,0f,%{_x}%f]}}" to nbt of {_cooking_pot}
+		add 0.005 to y coordinate of {_loc}
+		teleport {_cooking_pot} to {_loc}
+		wait 1 tick
+		chance of 5%:
+			draw 2 bubble pop at location 0.4 meter above {_block} with offset vector(0.2, 0.1, 0.2) with extra 0
+			draw 0 campfire cosy smoke at location 0.65 meter above {_block} with offset vector(0, 1, 0) with extra 0.03
+	loop 5 times:
+		loop 20 times:
+			subtract 0.3 from {_x}
+			subtract 0.005 from y coordinate of {_loc}
+			teleport {_cooking_pot} to {_loc}
+			add nbt from "{Pose:{Head:[0f,0f,%{_x}%f]}}" to nbt of {_cooking_pot}
+			wait 1 tick
+			chance of 5%:
+				draw 2 bubble pop at location 0.4 meter above {_block} with offset vector(0.2, 0.1, 0.2) with extra 0
+				draw 0 campfire cosy smoke at location 0.65 meter above {_block} with offset vector(0, 1, 0) with extra 0.03
+		loop 20 times:
+			add 0.3 to {_x}
+			add 0.005 to y coordinate of {_loc}
+			teleport {_cooking_pot} to {_loc}
+			add nbt from "{Pose:{Head:[0f,0f,%{_x}%f]}}" to nbt of {_cooking_pot}
+			wait 1 tick
+			chance of 5%:
+				draw 2 bubble pop at location 0.4 meter above {_block} with offset vector(0.2, 0.1, 0.2) with extra 0
+				draw 0 campfire cosy smoke at location 0.65 meter above {_block} with offset vector(0, 1, 0) with extra 0.03
+	loop 10 times:
+		subtract 0.3 from {_x}
+		subtract 0.005 from y coordinate of {_loc}
+		teleport {_cooking_pot} to {_loc}
+		add nbt from "{Pose:{Head:[0f,0f,%{_x}%f]}}" to nbt of {_cooking_pot}
+		wait 1 tick
+		chance of 5%:
+			draw 2 bubble pop at location 0.4 meter above {_block} with offset vector(0.2, 0.1, 0.2) with extra 0
+			draw 0 campfire cosy smoke at location 0.65 meter above {_block} with offset vector(0, 1, 0) with extra 0.03
+
+	loop 10 times:
+		subtract 0.1 from {_y}
+		add nbt from "{Pose:{Head:[0f,0f,0f]}}" to nbt of {_cooking_pot}
+		wait 1 tick
+
+	CookingFinished({_block}, {_cooking_pot}, {_player})
+	
+
+function CookingPotPickupDish(player: player, block: block):
+	set {_cooking_pot} to metadata value "cooking_pot" of {_player}
+	set {_nbt} to custom nbt of {_cooking_pot}
+
+	set {_dish} to string tag "dish" of {_nbt}
+	set {_dish_item} to {item::%{_dish}%}
+	set {_amount} to {cooking_recipe_amount::%{_dish}%}
+	if {_amount} is not set:
+		set {_amount} to 1
+	delete boolean tag "cooked" of {_nbt}
+	delete string tag "dish" of {_nbt}
+	delete string tag "ingredients" of {_nbt}
+	delete string tag "required_ingredients" of {_nbt}
+	set {_loc} to location of {_cooking_pot}
+	RemoveCookingPopup({_player}, {_block}, true)
+	draw 5 bubble pop at location 0.4 meter above {_block} with offset vector(0.25, 0.1, 0.25) with extra 0
+	draw 3 cloud at location 0.4 meter above {_block} with offset vector(0.3, 0.1, 0.3) with extra 0.1
+	play sound "custom.collect_item" with volume 1 and pitch 1 at {_block}
+	set helmet of {_cooking_pot} to {item::cooking_pot}
+	AnimateCookingPot({_cooking_pot}, "pickup_dish_1")
+	wait 3 ticks
+	drop {_amount} of {_dish_item} at location 1 meter above {_block}
+	AnimateCookingPot({_cooking_pot}, "pickup_dish_2")
+
+
+function CookingFinished(block: block, cooking_pot: entity, player: player):
+	set {_nbt} to custom nbt of {_cooking_pot}
+	delete int tag "cooking_last_check_date" of {_nbt}
+	set boolean tag "cooked" of {_nbt} to true
+	play sound "custom.cooking_finished" with volume 1 and pitch 1 at location of {_cooking_pot}
+	wait 1 tick
+	UpdateCookingPopup({_player}, {_block}, {_cooking_pot})
+
+function CookingPotBreak(block: block, player: player):
+	RemoveCookingPopup({_player}, {_block}, true)
+
+
+
+function AnimateCookingPot(cooking_pot: entity, animation: string):
+	set {_loc} to location of {_cooking_pot}
+	if {_animation} is "add_ingredient":
+		loop 2 times:
+			add 0.04 to y coordinate of {_loc}
+			teleport {_cooking_pot} to {_loc}
+			wait 1 tick
+		subtract 0.08 from y coordinate of {_loc}
+		teleport {_cooking_pot} to {_loc}
+
+	if {_animation} is "mixing":
+		while boolean tag "cooked" of custom nbt of {_cooking_pot} is not true:
+			set {_nr} to -1
+			loop 8 times:
+				if boolean tag "cooked" of custom nbt of {_cooking_pot} is true:
+					stop
+				add 1 to {_nr}
+				set helmet of {_cooking_pot} to {item::cooking_pot_cooking_%{_nr}%}
+				wait 4 ticks
+
+	if {_animation} is "pickup_dish_1":
+#		set {_x} to 0
+		loop 3 times:
+#			add 0.7 to {_x}
+#			add nbt from "{Pose:{Head:[0f,0f,%{_x}%f]}}" to nbt of {_cooking_pot}
+			add 0.08 to y coordinate of {_loc}
+			teleport {_cooking_pot} to {_loc}
+			wait 1 tick
+	if {_animation} is "pickup_dish_2":#	its raised by 0.16 so we need to get it to floor
+#		set {_x} to 0
+		loop 5 times:
+#			subtract 0.42 from {_x}
+#			add nbt from "{Pose:{Head:[0f,0f,%{_x}%f]}}" to nbt of {_cooking_pot}
+			subtract 0.08 from y coordinate of {_loc}
+			teleport {_cooking_pot} to {_loc}
+			wait 1 tick
+
+
+
+
+function RemoveCookingPopup(player: player, block: block, animate: boolean = false):
+	set {_cooking_pot} to metadata value "cooking_pot" of {_player}
+	set {_nbt} to custom nbt of {_cooking_pot}
+
+	set {_loc} to location 0.7 meter above {_block}
+	if {_animate} is true:
+		loop all item displays in radius 1 of {_loc}:
+			ScaleDownDisplay(loop-entity)
+		wait 4 ticks
+		loop all item displays in radius 1 of {_loc}:
+			kill loop-entity
+	else:
+		loop all item displays in radius 1 of {_loc}:
+			kill loop-entity
+
+
+function CreateCookingPopup(player: player, block: block, dish: string):
+	loop {cooking_recipes::%{_dish}%::*}:
+		set {_ingredient} to loop-value
+		if GetItem("custom:%{_ingredient}%") is set:
+			set {_item} to GetItem("custom:%{_ingredient}%")
+		else:
+			set {_item} to {_ingredient} parsed as item
+		add {_item} to {_ingredients::*}
+
+	RemoveCookingPopup({_player}, {_block})
+
+	set {_pos::1::*} to 0
+	set {_pos::2::*} to -0.2, 0.2
+	set {_pos::3::*} to -0.4, 0, 0.4
+	set {_pos::4::*} to -0.6, -0.2, 0.2, 0.6
+	set {_pos::5::*} to -0.8, -0.4, 0, 0.4, 0.8
+
+	set {_amount} to 0
+	set {_total} to size of {_ingredients::*}
+	loop {_ingredients::*}:
+		add 1 to {_amount}
+		set {_ingredient} to loop-value
+		set {_loc} to location 0.7 meter above {_block}
+		set {_offset} to {_pos::%{_total}%::%{_amount}%}
+		if facing of {_player} is north or south:
+			set {_loc} to location {_offset} meter right of {_loc}
+		else:
+			set {_loc} to location {_offset} meter in front of {_loc}
+
+		spawn item display at {_loc}
+		set {_display} to last spawned item display
+		rotate {_display} by x 0, y 180 and z 0
+		set display item of {_display} to {_ingredient}
+		set display scale of {_display} to vector(0, 0, 0)
+		set billboard of {_display} to center
+		ScaleUpDisplay({_display}, vector(0.35, 0.35, 0.35))
+
+	set {_loc} to location 1.2 meter above {_block}
+	spawn item display at {_loc}
+	set {_display} to last spawned item display
+	set string tag "type" of custom nbt of {_display} to "dish_icon"
+	rotate {_display} by x 0, y 180 and z 0
+	set display item of {_display} to GetItem("custom:%{_dish}%")
+	set display scale of {_display} to vector(0, 0, 0)
+	set billboard of {_display} to center
+	ScaleUpDisplay({_display}, vector(0.45, 0.45, 0.45))
+
+
+
+
+function UpdateCookingPopup(player: player, block: block, cooking_pot: entity):
+#	set {_cooking_pot} to metadata value "cooking_pot" of {_player}
+	set {_nbt} to custom nbt of {_cooking_pot}
+
+	set {_dish} to string tag "dish" of {_nbt}
+
+
+	if string tag "dish_cached" of {_nbt} is set:
+		if string tag "dish_cached" of {_nbt} is not string tag "dish" of {_nbt}:
+			set {_dish_changed} to true
+	set string tag "dish_cached" of {_nbt} to string tag "dish" of {_nbt}
+
+	if boolean tag "cooked" of {_nbt} is true:
+		set {_loc} to location 1.1 meter above {_block}
+		spawn item display at {_loc}
+		set {_display} to last spawned item display
+		rotate {_display} by x 0, y 180 and z 0
+		set display item of {_display} to GetItem("custom:green_check_mark")
+		set display scale of {_display} to vector(0, 0, 0)
+		set billboard of {_display} to center
+		ScaleUpDisplay({_display}, vector(0.7, 0.7, 0.7))
+		wait 3 ticks
+
+		BobDisplayUpDown({_display})
+		
+		stop
+
+	set {_recipe::*} to {cooking_recipes::%{_dish}%::*}
+	set {_input_ingredients::*} to string tag "ingredients" of {_nbt} split at ","
+	remove {_input_ingredients::*} from {_recipe::*}
+	
+	loop {_recipe::*}:
+		set {_ingredient} to loop-value
+		if GetItem("custom:%{_ingredient}%") is set:
+			set {_item} to GetItem("custom:%{_ingredient}%")
+		else:
+			set {_item} to {_ingredient} parsed as item
+		add {_item} to {_ingredients::*}
+
+
+	set {_loc} to location 0.7 meter above {_block}
+	loop all item displays in radius 1 of {_loc}:
+		if {_dish_changed} is not true:
+			if string tag "type" of custom nbt of loop-entity is "dish_icon":
+				continue
+		ScaleDownDisplay(loop-entity)
+	wait 4 ticks
+	loop all item displays in radius 1 of {_loc}:
+		if {_dish_changed} is not true:
+			if string tag "type" of custom nbt of loop-entity is "dish_icon":
+				continue
+		kill loop-entity
+
+	set {_pos::1::*} to 0
+	set {_pos::2::*} to -0.2, 0.2
+	set {_pos::3::*} to -0.4, 0, 0.4
+	set {_pos::4::*} to -0.6, -0.2, 0.2, 0.6
+	set {_pos::5::*} to -0.8, -0.4, 0, 0.4, 0.8
+
+	set {_amount} to 0
+	set {_total} to size of {_ingredients::*}
+	loop {_ingredients::*}:
+		add 1 to {_amount}
+		set {_ingredient} to loop-value
+		set {_loc} to location 0.7 meter above {_block}
+		set {_offset} to {_pos::%{_total}%::%{_amount}%}
+		if facing of {_player} is north or south:
+			set {_loc} to location {_offset} meter right of {_loc}
+		else:
+			set {_loc} to location {_offset} meter in front of {_loc}
+
+		spawn item display at {_loc}
+		set {_display} to last spawned item display
+		rotate {_display} by x 0, y 180 and z 0
+		set display item of {_display} to {_ingredient}
+		set display scale of {_display} to vector(0, 0, 0)
+		set billboard of {_display} to center
+		ScaleUpDisplay({_display}, vector(0.35, 0.35, 0.35))
+
+	if {_dish_changed} is true:
+		set {_loc} to location 1.2 meter above {_block}
+		spawn item display at {_loc}
+		set {_display} to last spawned item display
+		set string tag "type" of custom nbt of {_display} to "dish_icon"
+		rotate {_display} by x 0, y 180 and z 0
+		set display item of {_display} to GetItem("custom:%{_dish}%")
+		set display scale of {_display} to vector(0, 0, 0)
+		set billboard of {_display} to center
+		ScaleUpDisplay({_display}, vector(0.45, 0.45, 0.45))
+
+function BobDisplayUpDown(display: entity):
+	set {_loc} to location of {_display}
+	while {_display} is alive:
+		loop 20 times:
+			add 0.005 to y coordinate of {_loc}
+			teleport {_display} to {_loc}
+			wait 1 tick
+		wait 1 tick
+		loop 20 times:
+			subtract 0.005 from y coordinate of {_loc}
+			teleport {_display} to {_loc}
+			wait 1 tick
+		wait 1 tick
+
+function ScaleDownDisplay(display: entity):
+	set {_scale} to display scale of {_display}
+	loop 4 times:
+		set display scale of {_display} to {_scale} - {_scale}*(0.25*loop-number)
+		wait 1 tick
+
+function ScaleUpDisplay(display: entity, scale: vector):
+	loop 4 times:
+		clear {_final_scale}
+		set {_final_scale} to display scale of {_display} + ({_scale}*0.25)*loop-number
+		set display scale of {_display} to {_final_scale}
+		if x of display scale of {_display} >= x of {_scale}:
+			set x of display scale of {_display} to x of {_scale}
+		if y of display scale of {_display} >= y of {_scale}:
+			set y of display scale of {_display} to y of {_scale}
+		if z of display scale of {_display} >= z of {_scale}:
+			set z of display scale of {_display} to z of {_scale}
+		wait 1 tick
+
+
+
+
+
+
+function GenerateCookingRecipe(item: string) :: item:
+	set {_recipe_item} to {item::cooking_recipe}
+	set line 7 of lore of {_recipe_item} to line 5 of lore of {_recipe_item}
+	set {_item_name} to name of GetItem("custom:%{_item}%")
+	set line 5 of lore of {_recipe_item} to {_item_name}
+	set string tag "unlocks_recipe" of custom nbt of {_recipe_item} to {_item}
+	return {_recipe_item}
+
+
+function UnlockCookingRecipe(player: player, item: string):
+	if {forge::known_cooking_recipes::%uuid of {_player}%::*} doesn't contain {_item}:
+		add {_item} to {forge::known_cooking_recipes::%uuid of {_player}%::*}
+		set {_item_name} to name of GetItem("custom:%{_item}%")
+		send "&6You have just learned a new cooking recipe! - %{_item_name}%" to {_player}
+		play sound "custom.unlock_schematic" with volume 0.5 and pitch 1 to {_player}
+		remove 1 of tool of {_player} from {_player}
+		stop
+	else:
+		send "&7You already know this cooking recipe!" to {_player}
+
+
+command /cooking [<text>] [<text>] [<player=%player%>]:
+	permission: admin
+	trigger:
+		if arg 1 is "reload":
+			CookingReload()
+		if arg 1 is "unlock":
+			loop {-forge::items_list::*}:
+				if arg-2 is loop-value:
+					UnlockCookingRecipe(player-arg, arg-2)
+					exit loop
+		if arg 1 is "lock":
+			if {forge::known_cooking_recipes::%uuid of player-arg%::*} contains arg-2:
+				remove arg-2 from {forge::known_cooking_recipes::%uuid of player-arg%::*}
+
+
+on tab complete of "/cooking":
+	set tab completions for position 1 to "reload", "unlock" and "lock"
+	if tab arg 1 is "unlock":
+		loop {-forge::items_list::*}:
+			if {forge::item::%loop-value%::cooking_pot} is true:
+				if {forge::known_cooking_recipes::%uuid of player%::*} doesn't contain loop-value:
+					add loop-value to {_list::*}
+		set tab completions for position 2 to {_list::*}
+	if tab arg 1 is "lock":
+		loop {-forge::items_list::*}:
+			if {forge::known_cooking_recipes::%uuid of player%::*} contains loop-value:
+				add loop-value to {_list::*}
+		set tab completions for position 2 to {_list::*}
+
+
+
+
+
+every 5 seconds:
+	loop {-players::*}:
+		RefreshCookingPots5(loop-value)
+
+function RefreshCookingPots5(player: player):
+	if placeholder "floodgate_device" from {_player} is not "win10":
+		stop
+	loop 5 times:
+		RefreshCookingPots({_player})
+		wait 1 second
+function RefreshCookingPots(player: player):
+	if metadata value "cooking_pot" of {_player} is set:
+		set {_cooking_pot} to metadata value "cooking_pot" of {_player}
+	else:
+		loop all armor stands in radius 6 of {_player}:
+			if string tag "type" of custom nbt of loop-entity is "cooking_pot":
+				set {_cooking_pot} to loop-entity
+				exit loop
+	if {_cooking_pot} is not set:
+		stop
+	set {_nbt} to custom nbt of {_cooking_pot}
+	if string tag "dish" of {_nbt} is not set:
+		stop
+	if int tag "cooking_last_check_date" of {_nbt} is set:
+		stop
+	set {_ingredients::*} to string tag "ingredients" of {_nbt} split at ","
+	set {_required_ingredients::*} to string tag "required_ingredients" of {_nbt} split at ","
+	remove {_ingredients::*} from {_required_ingredients::*}
+
+	loop {_required_ingredients::*}:
+		set {_name} to name of GetItem(loop-value)
+		if {_name} is not set:
+			set {_name} to translate component from GetItem(loop-value)
+		add {_name} to {_display_ingredients::*}
+
+	if distance between {_cooking_pot} and {_player} < 5:
+		send action bar "%{_display_ingredients::*}%" to {_player}
+	if boolean tag "cooked" of {_nbt} is set:
+		send action bar "&aDish ready!" to {_player}
+
+
+
+
+on consume:
+	set {_n} to custom nbt of event-item
+	loop 10 times:
+		set {_number} to loop-iteration
+		if string tag "potion_effect_%{_number}%_effect" of {_n} is set:
+			set {_effect} to string tag "potion_effect_%{_number}%_effect" of {_n}
+			set {_effect} to {_effect} parsed as potion effect type
+			if string tag "potion_effect_%{_number}%_duration" of {_n} is set:
+				set {_duration} to string tag "potion_effect_%{_number}%_duration" of {_n}
+				set {_duration} to {_duration} parsed as timespan
+			if int tag "potion_effect_%{_number}%_tier" of {_n} is set:
+				set {_tier} to int tag "potion_effect_%{_number}%_tier" of {_n}
+			else:
+				set {_tier} to 1
+
+			apply {_effect} without any particles to player for 2 seconds
+			apply {_effect} of tier {_tier} without any particles to player for {_duration}

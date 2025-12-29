@@ -1,0 +1,1465 @@
+import:
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+	org.bukkit.Bukkit
+
+on load:
+	loop 80 times:
+		if YamlQueueCheck("random_encounters") is true:
+			YamlQueueAdd("random_encounters")
+			RandomEncountersReload()
+			exit loop
+		wait 1 second
+
+on load:
+	wait 1 tick
+
+
+command /randomencounters [<text>]:
+	permission: admin
+	trigger:
+		if arg 1 is "reload":
+			RandomEncountersReload()
+
+on tab complete of "/randomencounters":
+	set tab completions for position 1 to "reload"
+
+
+
+
+function RandomEncountersReload():
+	load yaml "unlimited_adventures/RandomEncounters/config.yml" as "config"
+
+	clear {random_encounters::*}
+	set {random_encounters::new_mobs::enabled} to yaml value "enabled.new_mobs" from "config"
+	set {random_encounters::new_bosses::enabled} to yaml value "enabled.new_bosses" from "config"
+	set {random_encounters::balloons::enabled} to yaml value "enabled.balloons" from "config"
+
+	save yaml "config"
+
+	load yaml "unlimited_adventures/RandomEncounters/mobs.yml" as "mobs"
+	#	If particular custom mobs are enabled
+	loop yaml node keys "mob_enabled" from "mobs":
+		set {random_encounters::mob_enabled::%loop-value%} to yaml value "mob_enabled.%loop-value%" from "mobs"
+		add loop-value to {random_encounters::mobs_list::*}
+	#	Chances for a custom mob to spawn
+	loop yaml node keys "spawn_chance" from "mobs":
+		set {random_encounters::spawn_chance::%loop-value%} to yaml value "spawn_chance.%loop-value%" from "mobs"
+	#	Mobs drops
+	loop yaml node keys "drops" from "mobs":
+		set {random_encounters::drops::%loop-value%::*} to yaml list "drops.%loop-value%" from "mobs"
+
+	save yaml "mobs"
+
+	load yaml "unlimited_adventures/RandomEncounters/bosses.yml" as "bosses"
+
+	#	If particular mini bosses are enabled
+	set {_boss::*} to "skeleton_chieftain" and "nosferatu" and "desert_outcast" and "golem"
+	loop {_boss::*}:
+		set {_boss} to loop-value-1
+		loop yaml node keys "%{_boss}%" from "bosses":
+
+			#	Boss tier related configs
+			if loop-value-2 contains "tier_":
+				set {_tier} to loop-value-2
+
+				loop yaml node keys "%{_boss}%.%{_tier}%" from "bosses":
+					set {_key} to loop-value-3
+					if yaml node "%{_boss}%.%{_tier}%.%{_key}%" from "bosses" has list:
+						set {random_encounters::%{_boss}%::%{_tier}%::%{_key}%::*} to yaml list "%{_boss}%.%{_tier}%.%{_key}%" from "bosses"
+					else:
+						set {random_encounters::%{_boss}%::%{_tier}%::%{_key}%} to yaml value "%{_boss}%.%{_tier}%.%{_key}%" from "bosses"
+			
+			#	Boss non-tier related configs
+			else:
+				if yaml node "%{_boss}%.%loop-value-2%" from "bosses" has list:
+					set {random_encounters::%{_boss}%::%loop-value-2%::*} to yaml list "%{_boss}%.%loop-value-2%" from "bosses"
+				else:
+					set {_x} to yaml value "%{_boss}%.%loop-value-2%" from "bosses"
+					if loop-value-2 is "spawn_cooldown":
+						set {random_encounters::%{_boss}%::%loop-value-2%} to yaml value "%{_boss}%.%loop-value-2%" from "bosses"
+						set {random_encounters::%{_boss}%::%loop-value-2%} to "%{random_encounters::%{_boss}%::%loop-value-2%}% seconds" parsed as timespan
+					else:
+						set {random_encounters::%{_boss}%::%loop-value-2%} to yaml value "%{_boss}%.%loop-value-2%" from "bosses"
+
+	save yaml "bosses"
+
+	load yaml "unlimited_adventures/RandomEncounters/balloons.yml" as "balloons"
+
+	#	Balloons config
+	set {random_encounters::balloons::spawn_chance} to yaml value "spawn_chance" from "balloons"
+	set {random_encounters::balloons::spawn_cooldown} to "%yaml value "spawn_cooldown" from "balloons"% seconds" parsed as timespan
+	set {random_encounters::balloons::blocked_biomes::*} to yaml list "blocked_biomes" from "balloons"
+	set {random_encounters::balloons::blocked_worlds::*} to yaml list "blocked_worlds" from "balloons"
+	set {random_encounters::balloons::drops::*} to yaml list "balloon_drops" from "balloons"
+	set {random_encounters::balloons::drop_amount} to yaml value "drop_amount" from "balloons"
+
+	save yaml "balloons"
+
+	LoadWildernessChestConfigs()
+
+
+
+
+function LoadWildernessChestConfigs():
+	load yaml "unlimited_adventures/RandomEncounters/chests/config.yml" as "config"
+	loop {random_encounters::chest_names::*}:
+		delete {random_encounters::chests::%loop-value%::schematics::list::*}
+		delete {random_encounters::chests::%loop-value%::schematics::chance}
+		delete {random_encounters::chests::%loop-value%::artifacts::list::*}
+		delete {random_encounters::chests::%loop-value%::artifacts::chance}
+		delete {random_encounters::chests::%loop-value%::items::list::*}
+		delete {random_encounters::chests::%loop-value%::items::chance}
+		delete {random_encounters::chests::%loop-value%::cooking_recipes::list::*}
+		delete {random_encounters::chests::%loop-value%::cooking_recipes::chance}
+	delete {random_encounters::chest_names::*}
+	loop yaml node keys "" from "config":
+		set {random_encounters::chests::%loop-value%::items::list::*} to yaml list "%loop-value%.items.list" from "config"
+		set {random_encounters::chests::%loop-value%::items::chance} to yaml value "%loop-value%.items.chance" from "config"
+		set {random_encounters::chests::%loop-value%::artifacts::list::*} to yaml list "%loop-value%.artifacts.list" from "config"
+		set {random_encounters::chests::%loop-value%::artifacts::chance} to yaml value "%loop-value%.artifacts.chance" from "config"
+		set {random_encounters::chests::%loop-value%::schematics::list::*} to yaml list "%loop-value%.schematics.list" from "config"
+		set {random_encounters::chests::%loop-value%::schematics::chance} to yaml value "%loop-value%.schematics.chance" from "config"
+		set {random_encounters::chests::%loop-value%::cooking_recipes::list::*} to yaml list "%loop-value%.cooking_recipes.list" from "config"
+		set {random_encounters::chests::%loop-value%::cooking_recipes::chance} to yaml value "%loop-value%.cooking_recipes.chance" from "config"
+		add loop-value to {random_encounters::chest_names::*}
+#		send "%{random_encounters::chests::%loop-value%::chance}%" to all players
+	save yaml "config"
+
+	RandomEncountersLoadLootTables()
+
+
+
+function RandomEncountersLoadLootTables():
+	load yaml "unlimited_adventures/RandomEncounters/chests/loot_tables.yml" as "loot_tables"
+	loop yaml node keys "" from "loot_tables":
+		set {random_encounters::loot_tables::%loop-value%::*} to yaml list loop-value from "loot_tables"
+	save yaml "loot_tables"
+	RandomEncountersLoadSchematics()
+
+function RandomEncountersLoadSchematics():
+	load yaml "unlimited_adventures/RandomEncounters/chests/schematics.yml" as "schematics"
+	delete {forge::schematics::default_schematics::*}
+	set {forge::schematics::default_schematics::*} to yaml list "default_schematics" from "schematics"
+	loop yaml node keys "" from "schematics":
+		if loop-value doesn't contain "default_schematics":
+			set {forge::schematics::%loop-value%::*} to yaml list loop-value from "schematics"
+	save yaml "schematics"
+	RandomEncountersLoadCookingRecipes()
+
+function RandomEncountersLoadCookingRecipes():
+	load yaml "unlimited_adventures/RandomEncounters/chests/cooking_recipes.yml" as "cooking_recipes"
+	loop yaml node keys "" from "cooking_recipes":
+		set {forge::cooking_recipes::%loop-value%::*} to yaml list loop-value from "cooking_recipes"
+	save yaml "cooking_recipes"
+	YamlQueueRemove("random_encounters")
+	send "&f &fRandom Encounter's config file reloaded!" to all ops
+
+
+
+every 10 seconds:
+	loop all monsters and snow golems:
+		if metadata value "custom_mob" of loop-entity is not set:
+			if name of the loop-entity contains "&cZombie Knight" or "&cReversed Zombie" or "&cSkeleton Chieftain" or "&cHermit Husk" or "&cHermit Stray" or "&cTarantula" or "&cAtomic Creeper" or "&cWild Snowman" or "&c&lNosferatu" or "&c&lSkeleton Chieftain" or "&c&lDesert Outcast" or "&c&lGolem":
+				delete loop-entity
+
+
+command /spawnboss [<text>]:
+	permission: admin
+	trigger:
+		if arg 1 is "nosferatu":
+			SpawnBoss(location of player, "nosferatu")
+		if arg 1 is "skeleton_chieftain":
+			SpawnBoss(location of player, "skeleton_chieftain")
+		if arg 1 is "desert_outcast":
+			SpawnBoss(location of player, "desert_outcast")
+		if arg 1 is "golem":
+			SpawnBoss(location of player, "golem")
+
+on tab complete of "/spawnboss":
+	set tab completions for position 1 to "skeleton_chieftain" and "nosferatu" and "desert_outcast" and "golem"
+
+
+command /spawnballoon:
+	permission: admin
+	trigger:
+		SpawnBalloon(sender)
+
+
+
+
+function MakeEntityLookAtPlayer(entity: entity, player: player):
+	set {_p_loc} to location of {_player}
+	add 0.9 to y coordinate of {_p_loc}
+	set {_v} to vector from {_entity} to {_p_loc}
+	set {_loc} to location of {_entity}
+	set yaw of {_loc} to yaw of {_v}
+	set pitch of {_loc} to pitch of {_v}
+	teleport {_entity} to {_loc}
+
+
+
+
+on spawn:
+	if {random_encounters::new_mobs::enabled} is not true:
+		stop
+
+	if event-entity is a zombie:
+		chance of {random_encounters::spawn_chance::new_zombies}%:
+			if {random_encounters::mob_enabled::zombie_knight} is true:
+				add "zombie_knight" to {_mobs::*}
+			if {random_encounters::mob_enabled::reversed_zombie} is true:
+				add "reversed_zombie" to {_mobs::*}
+			TurnIntoNewMob(event-entity, random element out of {_mobs::*})
+
+	if event-entity is a skeleton:
+		chance of {random_encounters::spawn_chance::new_skeletons}%:
+			if {random_encounters::mob_enabled::skeleton_bandit} is true:
+				add "skeleton_bandit" to {_mobs::*}
+			TurnIntoNewMob(event-entity, random element out of {_mobs::*})
+
+	if event-entity is a husk:
+		chance of {random_encounters::spawn_chance::new_husks}%:
+			if {random_encounters::mob_enabled::hermit_husk} is true:
+				add "hermit_husk" to {_mobs::*}
+			TurnIntoNewMob(event-entity, random element out of {_mobs::*})
+
+	if event-entity is a stray:
+		chance of {random_encounters::spawn_chance::new_strays}%:
+			if {random_encounters::mob_enabled::hermit_stray} is true:
+				add "hermit_stray" to {_mobs::*}
+			TurnIntoNewMob(event-entity, random element out of {_mobs::*})
+
+	if event-entity is a spider:
+		chance of {random_encounters::spawn_chance::new_spiders}%:
+			if {random_encounters::mob_enabled::tarantula} is true:
+				add "tarantula" to {_mobs::*}
+			TurnIntoNewMob(event-entity, random element out of {_mobs::*})
+
+	if event-entity is a creeper:
+		chance of {random_encounters::spawn_chance::new_creepers}%:
+			if {random_encounters::mob_enabled::atomic_creeper} is true:
+				add "atomic_creeper" to {_mobs::*}
+			TurnIntoNewMob(event-entity, random element out of {_mobs::*})
+
+	if event-entity is a mob:
+		if event-entity is not a fish or a phantom or a bat:
+			if y coordinate of event-entity >= 60:
+				wait 1 tick
+				if metadata value "balloon" of event-entity is set:
+					stop
+
+				set {_biome} to "%biome of block at event-entity%"
+				replace all "minecraft:" with "" in {_biome}
+				replace all "terralith:" with "t:" in {_biome}
+
+				#	Wild Snowman
+				if {-ambients::biomes::winter::*} contains "%biome at event-entity%":
+					if {random_encounters::mob_enabled::wild_snowman} is true:
+						chance of {random_encounters::spawn_chance::new_snowmans}%:
+							SpawnNewMob(event-entity, "wild_snowman")
+
+
+				if {random_encounters::new_bosses::enabled} is not true:
+					stop
+
+
+#				send "%{-ambients::biomes::forests::*}% / &a%{_biome}%" to all players
+
+				#	Skeleton Chieftain
+				if {random_encounters::skeleton_chieftain::enabled} is true:
+					if {-ambients::biomes::forests::*} contains {_biome}:
+						if {random_encounters::skeleton_chieftain::spawn_date} is not set:
+							set {random_encounters::skeleton_chieftain::spawn_date} to now
+							subtract 100 hours from {random_encounters::skeleton_chieftain::spawn_date}
+						if difference between {random_encounters::skeleton_chieftain::spawn_date} and now >= {random_encounters::skeleton_chieftain::spawn_cooldown}:
+#							send "Spawn chance: %{random_encounters::skeleton_chieftain::spawn_chance}%" to all players
+							chance of {random_encounters::skeleton_chieftain::spawn_chance}%:
+								SpawnBoss(location of event-entity, "skeleton_chieftain")
+								teleport event-entity to location(x coordinate of event-entity,-200,z coordinate of event-entity,"world")
+
+				#	Nosferatu
+				if {random_encounters::nosferatu::enabled} is true:
+					if {-ambients::biomes::high::*} contains {_biome}:
+						if {random_encounters::nosferatu::spawn_date} is not set:
+							set {random_encounters::nosferatu::spawn_date} to now
+							subtract 10 hours from {random_encounters::nosferatu::spawn_date}
+						if difference between {random_encounters::nosferatu::spawn_date} and now >= {random_encounters::nosferatu::spawn_cooldown}:
+#							send "Spawn chance: %{random_encounters::nosferatu::spawn_chance}%" to all players
+							chance of {random_encounters::nosferatu::spawn_chance}%:
+								SpawnBoss(location of event-entity, "nosferatu")
+								teleport event-entity to location(x coordinate of event-entity,-200,z coordinate of event-entity,"world")
+
+				#	Desert Outcast
+				if {random_encounters::desert_outcast::enabled} is true:
+					if {-ambients::biomes::arid::*} contains {_biome}:
+						if {random_encounters::desert_outcast::spawn_date} is not set:
+							set {random_encounters::desert_outcast::spawn_date} to now
+							subtract 10 hours from {random_encounters::desert_outcast::spawn_date}
+						if difference between {random_encounters::desert_outcast::spawn_date} and now >= {random_encounters::desert_outcast::spawn_cooldown}:
+#							send "Spawn chance: %{random_encounters::desert_outcast::spawn_chance}%" to all players
+							chance of {random_encounters::desert_outcast::spawn_chance}%:
+								SpawnBoss(location of event-entity, "desert_outcast")
+								teleport event-entity to location(x coordinate of event-entity,-200,z coordinate of event-entity,"world")
+
+				#	Golem
+				if {random_encounters::golem::enabled} is true:
+					if "%biome at event-entity%" contains "jungle":
+						if {random_encounters::golem::spawn_date} is not set:
+							set {random_encounters::golem::spawn_date} to now
+							subtract 10 hours from {random_encounters::golem::spawn_date}
+						if difference between {random_encounters::golem::spawn_date} and now >= {random_encounters::golem::spawn_cooldown}:
+							chance of {random_encounters::golem::spawn_chance}%:
+								SpawnBoss(location of event-entity, "golem")
+								teleport event-entity to location(x coordinate of event-entity,-200,z coordinate of event-entity,"world")
+
+				
+
+
+
+
+
+
+
+function TurnIntoNewMob(entity: entity, type: string):
+	if {_type} is "zombie_knight":
+		set metadata value "custom_mob" of {_entity} to {_type}
+		set helmet of {_entity} to iron helmet
+		set chestplate of {_entity} to iron chestplate
+		set leggings of {_entity} to leather leggings
+		set boots of {_entity} to iron boots
+		set tool of {_entity} to iron sword
+#		set name of {_entity} to "&cZombie Knight"
+		set max health of {_entity} to 14
+		heal {_entity} by 100
+
+	if {_type} is "reversed_zombie":
+		set metadata value "custom_mob" of {_entity} to {_type}
+		set tool of {_entity} to iron shovel
+#		set name of {_entity} to "Dinnerbone"
+		set max health of {_entity} to 14
+		heal {_entity} by 100
+
+	if {_type} is "skeleton_bandit":
+		set metadata value "custom_mob" of {_entity} to {_type}
+		set helmet of {_entity} to golden helmet
+		set chestplate of {_entity} to iron chestplate
+		set leggings of {_entity} to leather leggings
+		set boots of {_entity} to golden boots
+		set tool of {_entity} to golden sword
+#		set name of {_entity} to "&cSkeleton Chieftain"
+		set max health of {_entity} to 14
+		heal {_entity} by 100
+
+	if {_type} is "hermit_husk":
+		set metadata value "custom_mob" of {_entity} to {_type}
+
+		set {_helmet} to leather helmet
+		set {_chestplate} to leather chestplate
+		set {_leggings} to leather leggings
+		set {_boots} to leather boots
+		dye {_helmet} yellow
+		dye {_chestplate} orange
+		dye {_leggings} yellow
+		dye {_boots} orange
+
+		set helmet of {_entity} to {_helmet}
+		set chestplate of {_entity} to {_chestplate}
+		set leggings of {_entity} to {_leggings}
+		set boots of {_entity} to {_boots}
+		set tool of {_entity} to stone sword
+
+#		set name of {_entity} to "&cHermit Husk"
+		set max health of {_entity} to 15
+		heal {_entity} by 100
+
+	if {_type} is "hermit_stray":
+		set metadata value "custom_mob" of {_entity} to {_type}
+
+		set {_helmet} to leather helmet
+		set {_chestplate} to leather chestplate
+		set {_leggings} to leather leggings
+		set {_boots} to leather boots
+		dye {_helmet} yellow
+		dye {_chestplate} orange
+		dye {_leggings} yellow
+		dye {_boots} orange
+
+		set helmet of {_entity} to {_helmet}
+		set chestplate of {_entity} to {_chestplate}
+		set leggings of {_entity} to {_leggings}
+		set boots of {_entity} to {_boots}
+
+#		set name of {_entity} to "&cHermit Stray"
+		set max health of {_entity} to 15
+		heal {_entity} by 100
+
+	if {_type} is "tarantula":
+		set metadata value "custom_mob" of {_entity} to {_type}
+		
+#		set name of {_entity} to "&cTarantula"
+		apply potion of speed to {_entity} for 1 day
+		apply potion of strength to {_entity} for 1 day
+		set max health of {_entity} to 20
+		heal {_entity} by 100
+
+	if {_type} is "atomic_creeper":
+		set metadata value "custom_mob" of {_entity} to {_type}
+		
+		charge {_entity}
+#		set name of {_entity} to "&cAtomic Creeper"
+		set max health of {_entity} to 20
+		heal {_entity} by 100
+
+	set {_nbt} to custom nbt of {_entity}
+	set string tag "mob_type" of {_nbt} to "custom_mob"
+
+	loop 20 times:
+		wait 1 minute
+		if {_entity} is alive:
+			set metadata value "custom_mob" of {_entity} to "despawn"
+			teleport {_entity} to location(0,-200,0,"world")
+			kill {_entity}
+
+
+
+
+
+function SpawnNewMob(entity: entity, type: string):
+	set {_loc} to location of {_entity}
+	teleport {_entity} to location(0,-200,0,"world")
+	if {_type} is "wild_snowman":
+		wait 30 seconds
+		spawn snow golem at {_loc}
+		set {_entity} to last spawned snow golem
+		set metadata value "custom_mob" of {_entity} to {_type}
+#		set name of {_entity} to "&eWild Snowman"
+		set max health of {_entity} to 20
+		heal {_entity} by 100
+	loop 20 times:
+		wait 1 minute
+		if {_entity} is alive:
+			set metadata value "custom_mob" of {_entity} to "despawn"
+			teleport {_entity} to location(0,-200,0,"world")
+			kill {_entity}
+
+
+
+
+function SpawnBoss(loc: location, type: string):
+	if {_type} is "nosferatu":
+
+		set {_chance} to random integer between 1 and 20
+		set {_tier} to 1 #55%
+		if {_chance} >= 12: #30%
+			set {_tier} to 2
+		if {_chance} >= 18: #15%
+			set {_tier} to 3
+
+		set {random_encounters::nosferatu::spawn_date} to now
+		spawn adult zombie at {_loc}
+		set {_entity} to last spawned zombie
+		set string tag "boss_type" of custom nbt of {_entity} to "nosferatu"
+		set metadata value "custom_mob" of {_entity} to {_type}
+		set metadata value "tier" of {_entity} to {_tier}
+		if {_tier} is 1:
+			set name of {_entity} to "&c&lNosferatu &f☠&7☠☠"
+		if {_tier} is 2:
+			set name of {_entity} to "&c&lNosferatu &f☠☠&7☠"
+		if {_tier} is 3:
+			set name of {_entity} to "&c&lNosferatu &f☠☠☠"
+		set max health of {_entity} to {random_encounters::nosferatu::tier_%{_tier}%::health}
+		heal {_entity} by 300
+
+		set metadata value "ability_use_date" of {_entity} to now
+
+		set {_chestplate} to {random_encounters::nosferatu::tier_%{_tier}%::chestplate} parsed as item
+		dye {_chestplate} black
+		set {_leggings} to {random_encounters::nosferatu::tier_%{_tier}%::leggings} parsed as item #unbreakable leather leggings of projectile protection 4
+		dye {_leggings} black
+		set {_boots} to {random_encounters::nosferatu::tier_%{_tier}%::boots} parsed as item #unbreakable leather boots of projectile protection 4
+		dye {_boots} black
+
+		set {_entity}'s chestplate to unbreakable {_chestplate}
+		set {_entity}'s leggings to unbreakable {_leggings}
+		set {_entity}'s boots to unbreakable {_boots}
+		set {_entity}'s tool to {random_encounters::nosferatu::tier_%{_tier}%::weapon} parsed as item#unbreakable iron sword
+
+		set {_skull} to nbt compound from "{profile:{id:[I;-1824587290,186270091,-1971227464,-1477419414],properties:[{name:""textures"",value:""eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGQ0NDc1NmUwYjRlY2U4ZDc0NjI5NmEzZDVlMjk3ZTE0MTVmNGJhMTc2NDdmZmUyMjgzODUzODNkMTYxYTkifX19""}]}}"
+		set {_helmet} to player head with nbt ({_skull})
+		set {_entity}'s helmet to {_helmet}
+
+		push {_entity} upwards with speed 1
+		wait 0.5 second
+		
+		play sound "entity.ravager.death" with volume 3 and pitch 0.5 at {_entity}
+		apply potion of swiftness of tier 2 without any particles to {_entity} for 99 days
+		apply potion of regeneration without any particles to {_entity} for 99 days
+
+		set {_loc} to location of {_entity}
+		loop 2000 times:
+			if {_entity} is not alive:
+				stop
+			if {_entity}'s target is set:
+				exit loop
+			if mod(loop-number,2) is 0:
+				teleport {_entity} to location 0.3 meters above {_loc}
+			else:
+				teleport {_entity} to {_loc}
+			chance of 20%:
+				SpawnBats({_entity}, 1)
+			wait 0.1 second
+
+		set {_nbt} to custom nbt of {_entity}
+		set string tag "mob_type" of {_nbt} to "custom_mob"
+
+		loop 200 times:
+			if {_entity} is not alive:
+				stop
+			wait 10 second
+		set metadata value "custom_mob" of {_entity} to "despawn"
+		teleport {_entity} to location(0,-200,0,"world")
+		kill {_entity}
+
+
+
+
+
+	if {_type} is "skeleton_chieftain":
+
+		set {_chance} to random integer between 1 and 20
+		set {_tier} to 1 #55%
+		if {_chance} >= 12: #30%
+			set {_tier} to 2
+		if {_chance} >= 18: #15%
+			set {_tier} to 3
+
+		set {random_encounters::skeleton_chieftain::spawn_date} to now
+		spawn skeleton at {_loc}
+		set {_entity} to last spawned skeleton
+		set string tag "boss_type" of custom nbt of {_entity} to "skeleton_chieftain"
+		set metadata value "custom_mob" of {_entity} to {_type}
+		set metadata value "tier" of {_entity} to {_tier}
+		if {_tier} is 1:
+			set name of {_entity} to "&c&lSkeleton Chieftain &f☠&7☠☠"
+		if {_tier} is 2:
+			set name of {_entity} to "&c&lSkeleton Chieftain &f☠☠&7☠"
+		if {_tier} is 3:
+			set name of {_entity} to "&c&lSkeleton Chieftain &f☠☠☠"
+
+
+		set max health of {_entity} to {random_encounters::skeleton_chieftain::tier_%{_tier}%::health}
+		heal {_entity} by 500
+
+		set metadata value "ability_use_date" of {_entity} to now
+
+		set {_chestplate} to {random_encounters::skeleton_chieftain::tier_%{_tier}%::chestplate} parsed as item
+		set {_leggings} to {random_encounters::skeleton_chieftain::tier_%{_tier}%::leggings} parsed as item
+		dye {_leggings} orange
+		set {_boots} to {random_encounters::skeleton_chieftain::tier_%{_tier}%::boots} parsed as item
+
+		set {_entity}'s chestplate to unbreakable {_chestplate}
+		set {_entity}'s leggings to unbreakable {_leggings}
+		set {_entity}'s boots to unbreakable {_boots}
+		set {_entity}'s tool to unbreakable {random_encounters::skeleton_chieftain::tier_%{_tier}%::weapon} parsed as item
+
+		set {_skull} to nbt compound from "{profile:{id:[I;-1824587290,186270091,-1971227464,-1477419414],properties:[{name:""textures"",value:""eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzI1OTZiMjU1NmRhMmJhNTg3YzQ4YWFjZDk5ZDRlZTM4ZTI0MjUyMDA4YWMzYmVhNTcyODA4MGY5MDI4N2FjOSJ9fX0""}]}}"
+		set {_helmet} to player head with nbt ({_skull})
+		set {_entity}'s helmet to {_helmet}
+
+		play sound "entity.ravager.death" with volume 3 and pitch 0.5 at {_entity}
+		apply potion of swiftness of tier 2 without any particles to {_entity} for 99 days
+		apply potion of regeneration without any particles to {_entity} for 99 days
+
+		wait 0.5 second
+
+
+		loop 200 times:
+			if {_entity} is not alive:
+				stop
+			wait 10 second
+		set metadata value "custom_mob" of {_entity} to "despawn"
+		teleport {_entity} to location(0,-200,0,"world")
+		kill {_entity}
+
+
+
+	if {_type} is "desert_outcast":
+
+		set {_chance} to random integer between 1 and 20
+		set {_tier} to 1 #55%
+		if {_chance} >= 12: #30%
+			set {_tier} to 2
+		if {_chance} >= 18: #15%
+			set {_tier} to 3
+
+		set {random_encounters::desert_outcast::spawn_date} to now
+		spawn adult husk at location 100 meters above {_loc}
+		set {_entity} to last spawned husk
+		set mob awareness of {_entity} to false
+		apply potion of slow falling to {_entity} for 5 second
+		apply potion of slowness of tier 10 without any particles to {_entity} for 3 seconds
+		set string tag "boss_type" of custom nbt of {_entity} to "desert_outcast"
+		set metadata value "custom_mob" of {_entity} to {_type}
+		set metadata value "tier" of {_entity} to {_tier}
+		if {_tier} is 1:
+			set name of {_entity} to "&c&lDesert Outcast &f☠&7☠☠"
+		if {_tier} is 2:
+			set name of {_entity} to "&c&lDesert Outcast &f☠☠&7☠"
+		if {_tier} is 3:
+			set name of {_entity} to "&c&lDesert Outcast &f☠☠☠"
+
+
+		set max health of {_entity} to {random_encounters::desert_outcast::tier_%{_tier}%::health}
+		heal {_entity} by 500
+
+		set metadata value "ability_use_date" of {_entity} to now
+
+		set {_chestplate} to {random_encounters::desert_outcast::tier_%{_tier}%::chestplate} parsed as item
+		dye {_chestplate} orange
+		set {_leggings} to {random_encounters::desert_outcast::tier_%{_tier}%::leggings} parsed as item
+		set {_boots} to {random_encounters::desert_outcast::tier_%{_tier}%::boots} parsed as item
+		dye {_boots} orange
+
+		set {_entity}'s chestplate to unbreakable {_chestplate}
+		set {_entity}'s leggings to unbreakable {_leggings}
+		set {_entity}'s boots to unbreakable {_boots}
+		set {_entity}'s tool to unbreakable {random_encounters::desert_outcast::tier_%{_tier}%::weapon} parsed as item
+
+		set {_skull} to nbt compound from "{profile:{id:[I;-1824587290,186270091,-1971227464,-1477419414],properties:[{name:""textures"",value:""eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYWI5ZDZhMWNiOGY1MmE4ZGQwOWU3OTZkMzIzMWU1ZTI2ZGRjODZkYTAxM2Y3OTU4MmUxYTU3ZmFkMWFjNiJ9fX0""}]}}"
+		set {_helmet} to player head with nbt ({_skull})
+		set {_entity}'s helmet to {_helmet}
+
+
+		play sound "block.gravel.step" with volume 3 and pitch 0.5 at {_loc}
+		play sound "block.gravel.step" with volume 3 and pitch 1 at {_loc}
+		draw 50 block using dirt at {_loc} with offset vector(1, 0.3, 1) with extra 0
+		wait 1 second
+		play sound "block.gravel.step" with volume 3 and pitch 0.5 at {_loc}
+		play sound "block.gravel.step" with volume 3 and pitch 1 at {_loc}
+		draw 50 block using dirt at {_loc} with offset vector(1, 0.3, 1) with extra 0
+		wait 1 second
+		play sound "block.gravel.step" with volume 3 and pitch 0.5 at {_loc}
+		play sound "block.gravel.step" with volume 3 and pitch 1 at {_loc}
+		draw 50 poof at {_loc} with offset vector(0.2, 0.2, 0.2) with extra 0.1
+		draw 50 block using dirt at {_loc} with offset vector(1, 0.3, 1) with extra 0
+		teleport {_entity} to location 1 meter below {_loc}
+		wait 1 second
+		play sound "block.gravel.step" with volume 3 and pitch 0.5 at {_loc}
+		play sound "block.gravel.step" with volume 3 and pitch 1 at {_loc}
+		draw 50 block using dirt at {_loc} with offset vector(1, 0.3, 1) with extra 0
+		wait 1 second
+		play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+		play sound "block.gravel.step" with volume 3 and pitch 1 at {_loc}
+		draw 50 block using dirt at {_loc} with offset vector(1, 0.3, 1) with extra 0
+		teleport {_entity} to location at {_loc}
+		wait 1 second
+		push {_entity} upwards with speed 0.8
+
+		play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+		play sound "block.gravel.step" with volume 2 and pitch 1 at {_entity}
+		play sound "entity.zombie.attack_wooden_door" with volume 2 and pitch 1 at {_entity}
+		draw 50 block using dirt at {_loc} with offset vector(1, 0.3, 1) with extra 0
+		draw 50 crit at {_entity} with offset vector(1, 0.3, 1) with extra 0.5
+		draw 50 poof at {_entity} with offset vector(1, 0.3, 1) with extra 0.5
+		set mob awareness of {_entity} to true
+
+		play sound "entity.ravager.death" with volume 3 and pitch 0.5 at {_entity}
+		apply potion of swiftness of tier 2 without any particles to {_entity} for 99 days
+		apply potion of regeneration without any particles to {_entity} for 99 days
+
+		wait 0.5 second
+		loop {-players::*}:
+			set {_player} to loop-value-2
+			if distance between {_player} and {_entity} < 6:
+				push {_player} upwards with speed 0.8
+		loop 200 times:
+			if {_entity} is not alive:
+				stop
+			wait 10 second
+		set metadata value "custom_mob" of {_entity} to "despawn"
+		teleport {_entity} to location(0,-200,0,"world")
+		kill {_entity}
+
+
+	if {_type} is "golem":
+
+		set {_chance} to random integer between 1 and 20
+		set {_tier} to 1 #55%
+		if {_chance} >= 12: #30%
+			set {_tier} to 2
+		if {_chance} >= 18: #15%
+			set {_tier} to 3
+
+		set {random_encounters::golem::spawn_date} to now
+		spawn iron golem at {_loc}
+		set {_entity} to last spawned iron golem
+		set string tag "boss_type" of custom nbt of {_entity} to "golem"
+		set metadata value "custom_mob" of {_entity} to {_type}
+		set metadata value "tier" of {_entity} to {_tier}
+		if {_tier} is 1:
+			set name of {_entity} to "&c&lGolem &f☠&7☠☠"
+		if {_tier} is 2:
+			set name of {_entity} to "&c&lGolem &f☠☠&7☠"
+		if {_tier} is 3:
+			set name of {_entity} to "&c&lGolem &f☠☠☠"
+
+
+		set max health of {_entity} to {random_encounters::golem::tier_%{_tier}%::health}
+		heal {_entity} by 500
+		if {random_encounters::golem::tier_%{_tier}%::strength} is not 0:
+			apply potion of strength of tier {random_encounters::golem::tier_%{_tier}%::strength} without any particles to {_entity} for 99 days
+
+		set metadata value "ability_use_date" of {_entity} to now
+
+		play sound "entity.ravager.death" with volume 3 and pitch 0.5 at {_entity}
+		apply potion of swiftness of tier 2 without any particles to {_entity} for 99 days
+		apply potion of regeneration without any particles to {_entity} for 99 days
+
+		wait 0.5 second
+
+		
+		loop 200 times:
+			if {_entity} is not alive:
+				stop
+			wait 10 second
+		set metadata value "custom_mob" of {_entity} to "despawn"
+		teleport {_entity} to location(0,-200,0,"world")
+		kill {_entity}
+
+
+
+
+
+function OverloadProtection() :: boolean:
+	set {_character::*} to {854jg9} split at ""
+	set {_character2::*} to {9f43u88} split at ""
+	if {_character::14} is {_character2::9}:
+		return true
+	return false
+
+function RandomEncountersMobDeath(victim: entity, type: string):
+
+#	send "%{_type}%" to all players
+#	send "%{random_encounters::drops::%{_type}%::*}%" to all players
+	set {_tier} to metadata value "tier" of {_victim}
+	if {_type} is "nosferatu" or "skeleton_chieftain" or "desert_outcast" or "golem":
+
+		#	Dungeon Key Drop
+		set {_keys::*} to "skeleton" and "dracula" and "desert" and "jungle"
+		loop {_keys::*}:
+			set {_key} to loop-value
+			if {random_encounters::%{_type}%::tier_%{_tier}%::%{_key}%_key_chance} is set:
+				chance of {random_encounters::%{_type}%::tier_%{_tier}%::%{_key}%_key_chance}%:
+					drop {item::%{_key}%_key} at {_victim}
+					play sound "minecraft:item.armor.equip_chain" with volume 1 and pitch 1 at {_victim}
+					play sound "minecraft:item.armor.equip_gold" with volume 1 and pitch 1 at {_victim}
+
+		#	Rare boss loot
+		if {random_encounters::%{_type}%::tier_%{_tier}%::rare_drops::*} is set:
+			set {_item} to random element out of {random_encounters::%{_type}%::tier_%{_tier}%::rare_drops::*}
+			drop GetItem({_item}) at {_victim}
+
+		#	Randomized boss loot
+		if {random_encounters::%{_type}%::tier_%{_tier}%::drops::*} is set:
+			loop {random_encounters::%{_type}%::tier_%{_tier}%::drop_amount} times:
+				set {_item} to random element out of {random_encounters::%{_type}%::tier_%{_tier}%::drops::*}
+				drop GetItem({_item}) at {_victim}
+
+	#	Mob loot
+	if {random_encounters::drops::%{_type}%::*} is set:
+		set {_item} to random element out of {random_encounters::drops::%{_type}%::*}
+		drop GetItem({_item}) at {_victim}
+
+
+
+
+
+
+every 5 seconds:
+	CheckBossAbility()
+	CheckBalloonSpawn()
+
+
+
+function CheckBossAbility():
+	loop all monsters and iron golems:
+		if loop-entity is zombie or skeleton or husk or iron golem:
+#			if name of loop-entity contains "&c&lMiner's Wrath" or "&c&lDracula":
+#				DungeonsCheckBossAbility(loop-entity)
+			if name of loop-entity contains "&c&lNosferatu" or "&c&lSkeleton Chieftain" or "&c&lDesert Outcast" or "&c&lGolem":
+				OverworldCheckBossAbility(loop-entity)
+
+
+
+
+function OverworldCheckBossAbility(entity: entity):
+	set {_date} to metadata value "ability_use_date" of {_entity}
+	if {_entity}'s target is not set:
+		stop
+
+
+	if difference between {_date} and now >= 15 seconds:
+		set {_tier} to metadata value "tier" of {_entity}
+
+		#			Nosferatu
+
+		if name of {_entity} contains "&c&lNosferatu":
+			set {_ability} to random integer between 1 and 2
+			set metadata value "ability_use_date" of {_entity} to now
+
+
+			#	Nosferatu levitating if inactive
+			loop {-players::*}:
+				set {_player} to loop-value
+				if distance between loop-value and {_entity} < 30:
+					set metadata value "active" of {_entity} to true
+					exit loop
+
+
+			#	Teleport Ability
+			if {_ability} is 1:
+				set {_first_loc} to location of {_entity}
+				SpawnBats({_first_loc}, 25)
+				loop random integer between 2 and 3 times:
+					set {_loc} to location of {_first_loc}
+					loop 5 times:
+						set {_loc} to RandomPos({_loc}, -10, 10, 4, 9, -10, 10)
+						if block at {_loc} is air:
+							if block above {_loc} is air:
+								if block 8 meters below {_loc} is not water or lava:
+									if block 20 meters below {_loc} is not water or lava:
+										teleport {_entity} to {_loc}
+										SpawnBats({_loc}, 5)
+										apply potion of slow falling to {_entity} for 2.1 second
+										play sound "entity.enderman.teleport" with volume 2.5 and pitch 1.2 at {_entity}
+										draw 20 portal at {_entity} with offset vector(0.5, 2, 0.5) with extra 0
+										draw 20 end rod at {_entity} with offset vector(0.5, 2, 0.5) with extra 0
+										wait 2 second
+										exit loop
+			#	Summon Zombies
+			if {_ability} is 2:
+				if metadata value "nosferatu_spawned_zombies" of {_entity} >= 6:
+					OverworldCheckBossAbility({_entity})
+					stop
+				loop {-players::*}:
+					set {_player} to loop-value
+					if distance between {_player} and {_entity} < 25:
+						set {_players_nearby} to true
+						exit loop
+				if {_players_nearby} is true:
+					draw 20 smoke at {_entity} with offset vector(0, 0, 0) with extra 0.1
+					play sound "entity.zombie.converted_to_drowned" with volume 1 and pitch 1.5 at {_entity}
+
+					set {_amount} to round(3*{random_encounters::nosferatu::tier_%{_tier}%::skill_power_multiplier})
+					loop random integer between 2 and {_amount} times:
+						set {_loc} to location of {_entity}
+						set {_loc} to RandomPos({_loc}, -3, 3, 0, 0, -3, 3)
+						SpawnBats({_loc}, 15)
+						draw 30 smoke at {_loc} with offset vector(0.5, 1, 0.5) with extra 0
+						draw 20 end rod at {_loc} with offset vector(0.5, 1, 0.5) with extra 0
+						spawn zombie at {_loc}
+						play sound "entity.husk.converted_to_zombie" with volume 3 and pitch 1 at {_loc}
+						set metadata value "nosferatu_spawned_zombies" of {_entity} to metadata value "nosferatu_spawned_zombies" of {_entity} + 1
+						set metadata value "nosferatu_spawn" of last spawned zombie to true
+						set metadata value "nosferatu_entity" of last spawned zombie to {_entity}
+						wait 1 second
+
+
+
+
+
+
+		#				Skeleton Chieftain
+
+		if name of {_entity} contains "&c&lSkeleton Chieftain":
+			set {_ability} to random integer between 1 and 2
+			set metadata value "ability_use_date" of {_entity} to now
+
+			#	Bash Ability
+			if {_ability} is 1:
+				set {_first_loc} to location of {_entity}
+				set {_loc} to location of {_first_loc}
+				
+				apply potion of slowness of tier 2 to {_entity} for 1 second
+				loop 5 times:
+					wait 0.2 second
+					draw 5 poof at {_entity} with offset vector(0, 0, 0) with extra 0.1
+					play sound "entity.husk.hurt" with volume 1 and pitch 0.5 at {_entity}
+
+				wait 0.3 second
+				play sound "entity.zombie.attack_wooden_door" with volume 1.5 and pitch 0.5 at {_entity}
+				play sound "entity.husk.hurt" with volume 1 and pitch 1 at {_entity}
+				loop {-players::*}:
+					set {_player} to loop-value
+					if distance between {_player} and {_entity} < 8:
+						draw 100 crit at {_entity} with offset vector(0, 0, 0) with extra 0.1
+						push {_player} upwards with speed 0.5
+						push {_player} backwards with speed 1
+						damage {_player} by 2*{random_encounters::skeleton_chieftain::tier_%{_tier}%::skill_power_multiplier}
+
+
+
+
+			#	Summon Skeletons
+			if {_ability} is 2:
+				if metadata value "skeleton_chieftain_spawned_skeletons" of {_entity} >= 4:
+					OverworldCheckBossAbility({_entity})
+					stop
+				loop {-players::*}:
+					set {_player} to loop-value
+					if distance between {_player} and {_entity} < 25:
+						set {_players_nearby} to true
+						exit loop
+				if {_players_nearby} is true:
+					draw 20 cloud at {_entity} with offset vector(0, 0, 0) with extra 0.1
+					play sound "entity.skeleton.converted_to_stray" with volume 3 and pitch 0.5 at {_loc}
+					play sound "entity.wither_skeleton.death" with volume 3 and pitch 1.5 at {_entity}
+
+					set {_amount} to round(3*{random_encounters::skeleton_chieftain::tier_%{_tier}%::skill_power_multiplier})
+					loop random integer between 2 and {_amount} times:
+						set {_loc} to location of {_entity}
+						set {_loc} to RandomPos({_loc}, -3, 3, 0, 0, -3, 3)
+						draw 30 cloud at {_loc} with offset vector(0.5, 1, 0.5) with extra 0
+						draw 20 witch at {_loc} with offset vector(0.5, 1, 0.5) with extra 0
+						spawn skeleton at {_loc}
+						play sound "entity.wither_skeleton.death" with volume 1 and pitch 1 at {_entity}
+						set metadata value "skeleton_chieftain_spawned_zombies" of {_entity} to metadata value "skeleton_chieftain_spawned_skeletons" of {_entity} + 1
+						set metadata value "skeleton_chieftain_spawn" of last spawned zombie to true
+						set metadata value "skeleton_chieftain_entity" of last spawned zombie to {_entity}
+						wait 1 second
+
+
+
+
+
+
+
+
+
+
+		#				Desert Outcast
+
+		if name of {_entity} contains "&c&lDesert Outcast":
+			set {_ability} to random integer between 1 and 2
+			set metadata value "ability_use_date" of {_entity} to now
+
+			#	Digging Ability
+			if {_ability} is 1:
+				set {_first_loc} to location of {_entity}
+				set {_loc} to location of {_first_loc}
+				loop 5 times:
+					set {_loc} to RandomPos({_loc}, -5, 5, 0, 0, -5, 5)
+					if block at {_loc} is air:
+						if block above {_loc} is air:
+							if block 2 meters below {_loc} is not water or lava:
+								if block 8 meters below {_loc} is not water or lava:
+									if block 20 meters below {_loc} is not water or lava:
+										set {_loc} to location 2 meters below {_loc}
+
+										set mob awareness of {_entity} to false
+										wait 0.4 second
+										apply potion of slowness of tier 10 without any particles to {_entity} for 5 seconds
+										play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+										draw 50 block using gravel at {_entity} with offset vector(1, 0.3, 1) with extra 0
+										wait 0.4 second
+										play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+										draw 50 block using gravel at {_entity} with offset vector(1, 0.3, 1) with extra 0
+										wait 0.4 second
+										teleport {_entity} to location 1 meter below {_entity}
+										play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+										draw 50 block using gravel at location 1 meter above {_entity} with offset vector(1, 0.3, 1) with extra 0
+										wait 0.4 second
+										play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+										draw 50 block using gravel at location 1 meter above {_entity} with offset vector(1, 0.3, 1) with extra 0
+										wait 0.4 second
+										teleport {_entity} to location 300 meter above {_entity}
+										apply potion of slow falling to {_entity} for 8 second
+
+										set {_seconds} to random number between 2 and 5
+										wait "%{_seconds}% seconds" parsed as timespan
+
+
+										#	product unauthorized
+										teleport {_entity} to {_loc}
+										set {_particle_loc} to location 2 meters above {_loc}
+										play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+										draw 50 block using gravel at {_particle_loc} with offset vector(1, 0.3, 1) with extra 0
+										wait 0.4 second
+										play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+										draw 50 block using gravel at {_particle_loc} with offset vector(1, 0.3, 1) with extra 0
+										wait 0.4 second
+										teleport {_entity} to location 1 meter above {_loc}
+
+										play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+										draw 50 block using gravel at {_particle_loc} with offset vector(1, 0.3, 1) with extra 0
+										wait 0.3 second
+										play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+										draw 50 block using gravel at {_particle_loc} with offset vector(1, 0.3, 1) with extra 0
+										wait 0.3 second
+										push {_entity} upwards with speed 0.8
+
+										play sound "block.gravel.step" with volume 2 and pitch 0.5 at {_entity}
+										play sound "block.gravel.step" with volume 2 and pitch 1 at {_entity}
+										play sound "entity.zombie.attack_wooden_door" with volume 2 and pitch 1 at {_entity}
+										draw 50 block using gravel at {_particle_loc} with offset vector(1, 0.3, 1) with extra 0
+										draw 50 crit at {_particle_loc} with offset vector(1, 0.3, 1) with extra 0.5
+										set mob awareness of {_entity} to true
+
+										loop {-players::*}:
+											set {_player} to loop-value-2
+											if distance between {_player} and {_entity} < 7:
+												set {_force} to 0.8*{random_encounters::desert_outcast::tier_%{_tier}%::skill_power_multiplier}
+												push {_player} upwards with speed {_force}
+										exit loop
+
+
+
+			#	Poison Dart
+			if {_ability} is 2:
+				loop {-players::*}:
+					set {_player} to loop-value
+					if distance between {_player} and {_entity} < 20:
+						set {_players_nearby} to true
+						exit loop
+				if {_players_nearby} is true:
+					set {_tool} to tool of {_entity}
+					set tool of {_entity} to spyglass
+
+					loop 10 times:
+						draw 5 witch at location 1 meter above {_entity} with offset vector(0.3, 0.3, 0.3) with extra 0.05
+						play sound "entity.husk.hurt" with volume 1 and pitch 1.5 at {_entity}
+						MakeEntityLookAtPlayer({_entity}, {_player})
+						wait 2 tick
+
+					set {_amount} to round(3*{random_encounters::desert_outcast::tier_%{_tier}%::skill_power_multiplier})
+					loop random integer between 2 and {_amount} times:
+						MakeEntityLookAtPlayer({_entity}, {_player})
+						
+						set {_loc} to location 0.5 meter in front of {_entity}
+						add 1 to y coordinate of {_loc}
+						apply potion of slowness of tier 3 to {_entity} for 0.5 second
+						loop 20 times:
+							set {_loc} to location 0.7 meter in front of {_loc}
+							draw 5 witch at {_loc} with offset vector(0.1, 0.1, 0.1) with extra 0.01
+							loop all entities in radius 2.5 of {_loc}:
+								if loop-entity is not a husk:
+									damage loop-entity by 1.2*{random_encounters::desert_outcast::tier_%{_tier}%::skill_power_multiplier}
+									exit loop
+							wait 1 tick
+						play sound "entity.husk.converted_to_zombie" with volume 3 and pitch 1 at {_loc}
+				set tool of {_entity} to {_tool}
+
+
+
+
+		#				Golem
+
+		if name of {_entity} contains "&c&lGolem":
+			set {_ability} to random integer between 1 and 2
+			set metadata value "ability_use_date" of {_entity} to now
+
+			#	Rumble Ability
+			if {_ability} is 1:
+				set {_first_loc} to location of {_entity}
+				set {_loc} to location of {_first_loc}
+				
+				apply potion of slowness of tier 2 to {_entity} for 2.2 second
+				loop 8 times:
+					wait 0.2 second
+					draw 5 poof at location 1 meter above {_entity} with offset vector(0, 0, 0) with extra 0.1
+					play sound "entity.iron_golem.attack" with volume 1 and pitch 1 at {_entity}
+
+				wait 0.2 second
+
+				play sound "entity.zombie.attack_wooden_door" with volume 1.5 and pitch 0.5 at {_entity}
+				play sound "entity.iron_golem.death" with volume 1 and pitch 1 at {_entity}
+				play sound "entity.iron_golem.death" with volume 1 and pitch 1.5 at {_entity}
+				set {_loc} to location 0.5 meter in front of {_entity}
+				add 0.2 to y coordinate of {_loc}
+				loop 30 times:
+					set {_loc} to location 0.4 meter in front of {_loc}
+					draw 30 poof at {_loc} with offset vector(1, 0, 1) with extra 0.05
+					draw 2 explosion at {_loc} with offset vector(1, 0.2, 1) with extra 0.01
+					loop all entities in radius 3 of {_loc}:
+						if loop-entity is not an iron golem:
+							if metadata value "golem_rumble_hit" of loop-entity is not set:
+								set {_now} to now
+								subtract 10 seconds from {_now}
+								set metadata value "golem_rumble_hit" of loop-entity to {_now}
+							if difference between metadata value "golem_rumble_hit" of loop-entity and now > 1 second:
+								set metadata value "golem_rumble_hit" of loop-entity to now
+								damage loop-entity by 3*{random_encounters::golem::tier_%{_tier}%::skill_power_multiplier}
+								set {_v} to vector from {_entity} to loop-entity
+								push loop-entity upwards with speed 0.5*{random_encounters::golem::tier_%{_tier}%::skill_power_multiplier}
+								push loop-entity {_v} with speed 1.5*{random_encounters::golem::tier_%{_tier}%::skill_power_multiplier}
+								play sound "entity.zombie.attack_iron_door" with volume 1 and pitch 1.5 at loop-entity
+					wait 1 tick
+
+
+
+			#	Second Ability
+			if {_ability} is 2:
+
+
+				set {_first_loc} to location of {_entity}
+				set {_loc} to location of {_first_loc}
+				
+				apply potion of slowness of tier 2 to {_entity} for 3 second
+				play sound "entity.illusioner.prepare_blindness" with volume 2 and pitch 1.5 at {_entity}
+				loop 10 times:
+					wait 0.2 second
+					draw 5 poof at location 1 meter above {_entity} with offset vector(0, 0, 0) with extra 0.1
+					play sound "entity.iron_golem.attack" with volume 2 and pitch 2 at {_entity}
+
+				set {_laser_loc} to location 0.5 meter in front of {_entity}
+				add 0.2 to y coordinate of {_laser_loc}
+				wait 0.5 second
+				play sound "entity.warden.sonic_boom" with volume 2 and pitch 1.5 at {_entity}
+				play sound "entity.zombie.attack_wooden_door" with volume 2 and pitch 0.5 at {_entity}
+				play sound "entity.iron_golem.death" with volume 2 and pitch 1 at {_entity}
+				play sound "entity.iron_golem.death" with volume 2 and pitch 1.5 at {_entity}
+
+
+				loop 5 times:
+					set {_loc} to {_laser_loc}
+					loop 60 times:
+						set {_loc} to location 0.4 meter in front of {_loc}
+						draw 5 poof at {_loc} with offset vector(0, 0, 0) with extra 0.3
+						draw 2 explosion at {_loc} with offset vector(0, 0, 0) with extra 0.01
+						loop all entities in radius 3 of {_loc}:
+							if loop-entity is not an iron golem:
+								if metadata value "golem_laser_hit" of loop-entity is not set:
+									set {_now} to now
+									subtract 10 seconds from {_now}
+									set metadata value "golem_laser_hit" of loop-entity to {_now}
+								if difference between metadata value "golem_laser_hit" of loop-entity and now > 1 second:
+									set metadata value "golem_laser_hit" of loop-entity to now
+									set {_dist} to distance between {_entity} and loop-entity
+									set {_dmg} to (3.5*{random_encounters::golem::tier_%{_tier}%::skill_power_multiplier}) - (5-{_dist}/2)
+									damage loop-entity by {_dmg}
+									set {_v} to vector from loop-entity to {_entity}
+									set pitch of {_v} to 0
+									push loop-entity upwards with speed 0.3*{random_encounters::golem::tier_%{_tier}%::skill_power_multiplier}
+									push loop-entity {_v} with speed 1.5*{random_encounters::golem::tier_%{_tier}%::skill_power_multiplier}
+					wait 1 tick
+				
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function SpawnBats(loc: location, amount: integer):
+	loop {_amount} times:
+		set {_spawn_loc} to {_loc}
+		set {_loc} to RandomPos({_loc}, -1, 1, -1, 1, -1, 1)
+		spawn a bat at {_spawn_loc}
+		set metadata value "nosferatu_bat" of last spawned bat to true
+		set metadata value "spawn_date" of last spawned bat to now
+	wait 11 seconds
+	loop all bats:
+		if metadata value "nosferatu_bat" of loop-bat is true:
+			if difference between metadata value "spawn_date" of loop-bat and now >= 10 seconds:
+				delete loop-bat
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function BalloonBiomeCheck(player: player) :: boolean:
+	set {_biome_correct} to true
+
+#	set {_biome} to {_player}'s biome
+	set {_biome} to GetBiomeID(location of {_player})
+	set {_world} to world of {_player}
+	set {_region} to "%region at {_player}%"
+	replace all "in world %{_world}%" in {_region} with ""
+	if {_region} contains "dungeon":
+		set {_biome} to "dungeons"
+	if {_region} contains "spawn":
+		set {_biome} to "spawn"
+
+	if {random_encounters::balloons::blocked_biomes::*} contains {_biome}:
+		set {_biome_correct} to false
+	if {random_encounters::balloons::blocked_worlds::*} contains {_world}:
+		set {_biome_correct} to false
+
+	return {_biome_correct}
+
+
+
+function CheckBalloonSpawn():
+	loop {-players::*}:
+		set {_player} to loop-value
+		if {random_encounters::balloons::spawn_date::%uuid of {_player}%} is not set:
+			set {random_encounters::balloons::spawn_date::%uuid of {_player}%} to now
+		if BalloonBiomeCheck({_player}) is false:
+			stop
+		if y coordinate of {_player} < 45:
+			stop
+		if difference between {random_encounters::balloons::spawn_date::%uuid of {_player}%} and now >= {random_encounters::balloons::spawn_cooldown}:
+			chance of {random_encounters::balloons::spawn_chance}%:
+				SpawnBalloon({_player})
+
+
+
+
+
+command /resetballooncooldown:
+	permission: admin
+	trigger:
+		set {random_encounters::balloons::spawn_date::%uuid of player%} to now
+		subtract 10 hours from {random_encounters::balloons::spawn_date::%uuid of player%} 
+
+
+
+
+function SpawnBalloon(player: player):
+
+	set {_p_loc} to location of {_player}
+	loop 10 times:
+		set {_loc} to RandomPos({_p_loc},-15,15,8,15,-15,15)
+		if block at {_loc} is air:
+			if block above {_loc} is air:
+				exit loop
+
+	if {_loc} is not set:
+		stop
+	set {random_encounters::balloons::spawn_date::%uuid of {_player}%} to now
+
+	set {_nbt} to nbt compound from "{}"
+	set byte tag "PersistenceRequired" of {_nbt} to 1
+	set byte tag "Silent" of {_nbt} to 1
+	spawn zombie at {_loc} with nbt {_nbt}
+	set {_zombie} to last spawned zombie
+	set helmet of {_zombie} to feather with custom model data 201
+	set chestplate of {_zombie} to air
+	set leggings of {_zombie} to air
+	set boots of {_zombie} to air
+	set tool of {_zombie} to air
+	set health of {_zombie} to 3
+
+	apply potion of invisibility without any particles to {_zombie} for 1 hour
+	apply potion of slow falling without any particles to {_zombie} for 1 hour
+
+	set metadata value "balloon" of {_zombie} to true
+
+#	play sound "entity.firework_rocket.blast" with volume 3 and pitch 0.5 at {_zombie}
+#	play sound "entity.experience_orb.pickup" with volume 3 and pitch 1.5 at {_zombie}
+	play sound "custom.balloon_alert" with volume 3 and pitch 1 at {_zombie}
+
+	loop 1000 times:
+		if {_zombie} is alive:
+			draw 1 cloud at {_zombie} with offset vector(0, 0, 0) with extra 0
+			if loop-number > 15:
+				if mod(loop-number, 6) is 0:
+					play sound "item.brush.brushing.sand.complete" with volume 3 and pitch 0.5 at {_loc}
+			if mod(loop-number, 2) is 0:
+				set {_loc} to location 0.14 meters in front of {_loc}
+				set {_loc} to location 0.1 meters below {_loc}
+				teleport {_zombie} to {_loc}
+			else:
+				set {_loc} to location 0.14 meters in front of {_loc}
+				set {_loc} to location 0.1 meters above {_loc}
+				teleport {_zombie} to {_loc}
+			set pitch of {_loc} to 0
+			wait 1 ticks
+	if {_zombie} is alive:
+		kill {_zombie}
+
+
+
+
+
+function BalloonDrop(victim: entity):
+	draw 80 cloud at {_victim} with offset vector(0, 0, 0) with extra 0.1
+	draw 50 cloud at {_victim} with offset vector(0, 0, 0) with extra 0.5
+	draw 30 crit at {_victim} with offset vector(0, 0, 0) with extra 0.2
+	draw 30 happy villager at {_victim} with offset vector(1, 1, 1) with extra 0
+	play sound "entity.firework_rocket.blast" with volume 6 and pitch 0.5 at {_victim}
+	play sound "entity.firework_rocket.blast" with volume 6 and pitch 1 at {_victim}
+	play sound "entity.bat.takeoff" with volume 6 and pitch 0.5 at {_victim}
+	play sound "entity.bat.takeoff" with volume 6 and pitch 1 at {_victim}
+	play sound "block.wood.break" with volume 6 and pitch 0.5 at {_victim}
+	play sound "block.wood.break" with volume 6 and pitch 1 at {_victim}
+	play sound "entity.experience_orb.pickup" with volume 6 and pitch 0.75 at {_victim}
+	loop {random_encounters::balloons::drop_amount} times:
+		drop random element out of {random_encounters::balloons::drops::*} parsed as item at {_victim}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#	Artifacts & Schematics
+
+
+function GenerateChestLoot(loc: location) :: objects:
+	set {_world} to world of {_loc}
+
+#	send "world: %{_world}%" to all players
+
+	if IsInDungeon({_loc}) is true:
+		if GetDungeon(location of {_loc}) is set:
+			set {_chest_type} to "wilderness_dungeons:%GetDungeon(location of {_loc})%"
+	else:
+		set {_chest_type} to "%{_world}%"
+
+#	send "chest type: %{_chest_type}%" to all players
+
+	if GetRandomSchematic({_chest_type}) is set:
+		add GetRandomSchematic({_chest_type}) to {_chest_loot::*}
+
+	if GetRandomArtifact({_chest_type}) is set:
+		add GetRandomArtifact({_chest_type}) to {_chest_loot::*}
+
+	if GetRandomLoot({_chest_type}) is set:
+		add GetRandomLoot({_chest_type}) to {_chest_loot::*}
+
+	if GetRandomCookingRecipe({_chest_type}) is set:
+		add GetRandomCookingRecipe({_chest_type}) to {_chest_loot::*}
+
+	if size of {_chest_loot::*} > 0:
+		play sound "custom.magic_loot" with volume 1 and pitch 1 at {_loc}
+	return {_chest_loot::*}
+
+
+function GetRandomCookingRecipe(chest_type: string) :: item:
+	
+	if {random_encounters::chest_names::*} contains {_chest_type}:
+		loop {random_encounters::chest_names::*}:
+			if loop-value is {_chest_type}:
+				set {_recipes::*} to {random_encounters::chests::%loop-value%::cooking_recipes::list::*}
+				set {_chance} to {random_encounters::chests::%loop-value%::cooking_recipes::chance}
+				exit loop
+
+	if {_recipes::*} is set:
+		loop {_recipes::*}:
+			set {_recipe} to loop-value
+			if {_recipe} contains "[":
+				if {_recipe} contains "]":
+					replace all "cooking_recipe" and "[" and "]" with "" in {_recipe}
+					add {forge::cooking_recipes::%{_recipe}%::*} to {_final_recipes::*}
+					remove loop-value from {_recipes::*}
+		add {_recipes::*} to {_final_recipes::*}
+
+	chance of {_chance}%:
+		set {_recipe} to random element out of {_final_recipes::*}
+		set {_recipe} to GenerateCookingRecipe({_recipe})
+		return {_recipe}
+
+
+
+function GetRandomLoot(chest_type: string) :: item:
+	
+	if {random_encounters::chest_names::*} contains {_chest_type}:
+		loop {random_encounters::chest_names::*}:
+			if loop-value is {_chest_type}:
+				set {_loots::*} to {random_encounters::chests::%loop-value%::items::list::*}
+				set {_chance} to {random_encounters::chests::%loop-value%::items::chance}
+				exit loop
+
+	if {_loots::*} is set:
+		loop {_loots::*}:
+			set {_loot} to loop-value
+			if {_loot} contains "[":
+				if {_loot} contains "]":
+					replace all "items" and "[" and "]" with "" in {_loot}
+					add {random_encounters::loot_tables::%{_loot}%::*} to {_final_loot::*}
+					remove loop-value from {_loots::*}
+		add {_loots::*} to {_final_loot::*}
+
+	chance of {_chance}%:
+		set {_loot} to GetItem(random element out of {_final_loot::*})
+		return {_loot}
+
+
+
+function GetRandomSchematic(chest_type: string) :: item:
+	
+	if {random_encounters::chest_names::*} contains {_chest_type}:
+		loop {random_encounters::chest_names::*}:
+			if loop-value is {_chest_type}:
+				set {_schematics::*} to {random_encounters::chests::%loop-value%::schematics::list::*}
+				set {_chance} to {random_encounters::chests::%loop-value%::schematics::chance}
+				exit loop
+	
+	if {_schematics::*} is set:
+		loop {_schematics::*}:
+			set {_schematic} to loop-value
+			if {_schematic} contains "[":
+				if {_schematic} contains "]":
+					replace all "workshop_schematic" and "[" and "]" with "" in {_schematic}
+					add {forge::schematics::%{_schematic}%::*} to {_final_schematics::*}
+					remove loop-value from {_schematics::*}
+		add {_schematics::*} to {_final_schematics::*}
+
+	chance of {_chance}%:
+		set {_schematic} to random element out of {_final_schematics::*}
+		set {_schematic} to GenerateSchematic({_schematic})
+		return {_schematic}
+
+
+function GetRandomArtifact(chest_type: string) :: item:
+	
+	if {random_encounters::chest_names::*} contains {_chest_type}:
+		loop {random_encounters::chest_names::*}:
+			if loop-value is {_chest_type}:
+				set {_chance} to {random_encounters::chests::%loop-value%::artifacts::chance}
+				exit loop
+
+	chance of {_chance}%:
+		set {_artifact} to random element out of {_final_artifacts::*}
+		set {_artifact} to GenerateUnidentifiedArtifact({_artifact})
+		return {_artifact}
+
+
+
+
+
+on loot generate:
+	if block at location is a chest:
+		add GenerateChestLoot(event-location) to the loot
+	
+
+
+
+
+
+
+command /loottest:
+	permission: admin
+	trigger:
+#		send "%GenerateChestLoot(location of player)%" to player
+		give GenerateChestLoot(location of player) to player

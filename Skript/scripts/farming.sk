@@ -1,0 +1,216 @@
+options:
+	growth-time: 17 seconds
+
+
+function PlanterBreak(block: block, player: player):
+	if game mode of {_player} is creative:
+		stop
+	loop all armor stands in radius 0.7 of location of {_block}:
+		if string tag "block_type" of custom nbt of loop-entity is "planter":
+			set {_planter} to loop-entity
+			exit loop
+	set {_crop} to string tag "crop" of custom nbt of {_planter}
+	if {_crop} is set:
+		drop 1 of {item::%{_crop}%_seeds} at {_planter}
+
+function PlanterInteraction(player: player, block: block):
+	if difference between metadata value "planter_click_cooldown" of {_player} and now < 0.15 second:
+		stop
+	set metadata value "planter_click_cooldown" of {_player} to now
+
+	loop all armor stands in radius 0.7 of location of {_block}:
+		if string tag "block_type" of custom nbt of loop-entity is "planter":
+			set {_planter} to loop-entity
+			set {_nbt} to custom nbt of {_planter}
+			exit loop
+	add nbt from "{Pose:{RightArm:[-90f,0f,0f]}}" to nbt of {_planter}
+	
+	#	Collecting harvest
+
+	if string tag "crop" of {_nbt} is set:
+		if int tag "stage" of {_nbt} is 3:
+			set {_crop} to string tag "crop" of {_nbt}
+			drop 1 of {item::%{_crop}%} at {_planter}
+			chance of 2%:
+				drop 1 of {item::%{_crop}%_seeds} at location 1.7 meter above {_planter}
+			drop 1 of {item::%{_crop}%_seeds} at location 1.7 meter above {_planter}
+			set tool of {_planter} to air
+			delete string tag "crop" of {_nbt}
+			delete int tag "stage" of {_nbt}
+			delete int tag "growth_last_check_date" of {_nbt}
+			delete int tag "last_watered_date" of {_nbt}
+			delete int tag "last_fertilized_date" of {_nbt}
+			play sound "block.crop.break" with volume 1 and pitch random number between 0.8 and 1.2 at {_planter}
+
+	#	Watering crops
+
+	if tool of {_player} is water bucket or water bottle:
+		if int tag "last_watered_date" of {_nbt} is not set:
+			set int tag "last_watered_date" of {_nbt} to unix timestamp of now
+			if string tag "crop" of {_nbt} is set:
+				set int tag "growth_last_check_date" of {_nbt} to unix timestamp of now
+			if int tag "last_fertilized_date" of {_nbt} is set:
+				set helmet of {_planter} to {item::planter_watered_fertilized}
+			else:
+				set helmet of {_planter} to {item::planter_watered}
+			if tool of {_player} is water bottle:
+				play sound "item.bucket.empty" in blocks category with volume 1 and pitch 1 at {_planter}
+			draw 5 rain at location 0.7 meter above {_block} with offset vector(0.2, 0, 0.2) with extra 0.12
+
+	#	Fertilizing crops
+
+	if tool of {_player} is bone meal:
+		if int tag "last_fertilized_date" of {_nbt} is not set:
+			set int tag "last_fertilized_date" of {_nbt} to unix timestamp of now
+			if gamemode of {_player} is not creative:
+				remove 1 of bone meal from {_player}
+			if int tag "last_watered_date" of {_nbt} is set:
+				set helmet of {_planter} to {item::planter_watered_fertilized}
+			else:
+				set helmet of {_planter} to {item::planter_fertilized}
+			play sound "item.bone_meal.use" with volume 1 and pitch 1 at {_planter}
+			draw 5 item using bone at location 0.8 meter above {_block} with offset vector(0.3, 0, 0.3) with extra 0.05
+
+
+
+	#	Planting seeds
+
+	if string tag "crop" of {_nbt} is not set:
+		delete {_crop}
+		if CustomItem(tool of {_player}) is "corn_seeds":
+			set {_crop} to "corn"
+		if CustomItem(tool of {_player}) is "lettuce_seeds":
+			set {_crop} to "lettuce"
+		if CustomItem(tool of {_player}) is "chili_seeds":
+			set {_crop} to "chili"
+		if CustomItem(tool of {_player}) is "tomato_seeds":
+			set {_crop} to "tomato"
+		if {_crop} is set:
+			set string tag "crop" of {_nbt} to {_crop}
+			set int tag "stage" of {_nbt} to 0
+			if int tag "last_watered_date" of {_nbt} is set:
+				set int tag "growth_last_check_date" of {_nbt} to unix timestamp of now
+			set tool of {_planter} to {item::%{_crop}%_0}
+			if gamemode of {_player} is not creative:
+				remove 1 of {item::%{_crop}%_seeds} from {_player}
+			play sound "item.crop.plant" in blocks category with volume 1 and pitch 1 at {_planter}
+			draw 5 block using dirt at location 0.8 meter above {_block} with offset vector(0.2, 0, 0.2) with extra 0.12
+
+
+every 10 seconds:
+	TickCrops()
+
+function TickCrops():
+	loop armor stands:
+		TickCrop(loop-entity)
+
+function TickCrop(entity: entity):
+	set {_planter} to {_entity}
+	set {_nbt} to custom nbt of {_planter}
+	if string tag "block_type" of {_nbt} is "planter":	
+
+		#	Growth
+
+		if int tag "last_watered_date" of {_nbt} is set:
+			if string tag "crop" of {_nbt} is set:
+				if int tag "stage" of {_nbt} < 3:
+					set {_crop} to string tag "crop" of {_nbt}
+					set {_last_growth_check} to int tag "growth_last_check_date" of {_nbt}
+					set {_last_growth_check} to unix date of {_last_growth_check}
+					set {_diff} to difference between {_last_growth_check} and now
+					set {_growth_time} to {@growth-time}
+					set {_final_growth_time} to {@growth-time}
+					if int tag "last_fertilized_date" of {_nbt} is set:
+						subtract {_growth_time}*0.2 from {_final_growth_time}
+
+					loop 4 times:
+						if {_diff} >= {_final_growth_time}:
+							subtract {_final_growth_time} from {_diff}
+							add 1 to int tag "stage" of {_nbt}
+							set int tag "growth_last_check_date" of {_nbt} to int tag "growth_last_check_date" of {_nbt} + seconds of {_final_growth_time}
+
+#						set int tag "growth_last_check_date" of {_nbt} to unix timestamp of now
+						set int tag "stage" of {_nbt} to clamp(int tag "stage" of {_nbt}, 0, 3)
+
+					if int tag "stage" of {_nbt} is 1:
+						set tool of {_planter} to {item::%{_crop}%_1}
+					if int tag "stage" of {_nbt} is 2:
+						set tool of {_planter} to {item::%{_crop}%_2}
+					if int tag "stage" of {_nbt} is 3:
+						set tool of {_planter} to {item::%{_crop}%_3}
+
+		if int tag "last_watered_date" of {_nbt} is set:
+			set {_last_watered_check} to int tag "last_watered_date" of {_nbt}
+			set {_last_watered_check} to unix date of {_last_watered_check}
+			set {_diff} to difference between {_last_watered_check} and now
+			if {_diff} >= {@growth-time}*4:
+				delete int tag "last_watered_date" of {_nbt}
+
+		if int tag "last_fertilized_date" of {_nbt} is set:
+			set {_last_fertilized_check} to int tag "last_fertilized_date" of {_nbt}
+			set {_last_fertilized_check} to unix date of {_last_fertilized_check}
+			set {_diff} to difference between {_last_fertilized_check} and now
+			if {_diff} >= {@growth-time}*4:
+				delete int tag "last_fertilized_date" of {_nbt}
+			else:
+				set {_fertilized} to true
+
+		if int tag "last_fertilized_date" of {_nbt} is not set:
+			set {_update} to true
+		if int tag "last_watered_date" of {_nbt} is not set:
+			set {_update} to true
+		if {_update} is true:
+			if int tag "last_fertilized_date" of {_nbt} is set:
+				set helmet of {_planter} to {item::planter_fertilized}
+			else if int tag "last_watered_date" of {_nbt} is set:
+				set helmet of {_planter} to {item::planter_watered}
+			else:
+				set helmet of {_planter} to {item::planter}
+
+
+
+
+
+function ScarecrowInteraction(player: player, block: block):
+	if difference between metadata value "scarecrow_click_cooldown" of {_player} and now < 2.3 second:
+		stop
+	if difference between metadata value "scarecrow_click_cooldown" of {_block} and now < 2 second:
+		stop
+	set metadata value "scarecrow_click_cooldown" of {_player} to now
+	set metadata value "scarecrow_click_cooldown" of {_block} to now
+	
+	set {_pitch} to random number between 1 and 1.2
+	play sound "custom.raven.ambient" with volume 0.5 and pitch {_pitch} at {_block}
+
+	loop all armor stands in radius 1 of location of {_block}:
+		if string tag "block_type" of custom nbt of loop-entity is "scarecrow":
+			set {_scarecrow} to loop-entity
+			exit loop
+
+	draw 3 poof at location 1 meter above {_block} with offset vector(0, 0, 0) with extra 0.12
+	wait 1 tick
+	set {_loc} to location of {_scarecrow}
+	add 0.1 to y coordinate of {_loc}
+	add 14 to yaw of {_loc}
+	add 5 to pitch of {_loc}
+	teleport {_scarecrow} to {_loc}
+	wait 2 tick
+	loop 2 times:
+		subtract 14 from yaw of {_loc}
+		subtract 5 from pitch of {_loc}
+		subtract 0.05 from y coordinate of {_loc}
+		teleport {_scarecrow} to {_loc}
+		wait 1 tick
+	add 14 to yaw of {_loc}
+	add 5 to pitch of {_loc}
+	teleport {_scarecrow} to {_loc}
+
+
+
+
+
+
+
+
+
+

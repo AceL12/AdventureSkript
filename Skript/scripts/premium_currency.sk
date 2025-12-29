@@ -1,0 +1,75 @@
+
+function PremiumCurrency(player: player, action: string, amount: integer):
+	if {premium_currency::%uuid of {_player}%} is not set:
+		set {premium_currency::%uuid of {_player}%} to 0
+	
+	if {_action} is "set":
+		set {premium_currency::%uuid of {_player}%} to {_amount}
+	if {_action} is "add":
+		add {_amount} to {premium_currency::%uuid of {_player}%}
+	if {_action} is "remove" or "reduce":
+		reduce {premium_currency::%uuid of {_player}%} by {_amount}
+
+
+
+
+
+command /premiumcurrency [<player>] [<string>] [<integer>]:
+	aliases: pcurrency, gems
+	permission: admin
+	trigger:
+		if player-arg is set:
+			set {_player} to player-arg
+		else:
+			set {_player} to sender
+		set {_amount} to arg-3
+		if {premium_currency::%uuid of {_player}%} is set:
+			set {_gems} to {premium_currency::%uuid of {_player}%}
+		else:
+			set {_gems} to 0
+		if arg 2 is "set":
+			if {_amount} is not set:
+				send "&f &cYou need to specify the amount to set!" to sender
+				stop
+			PremiumCurrency({_player}, "set", {_amount})
+			send "&f &e%{_player}% &fpremium currency amount is now: <##e84848>%{_gems}% Gems &f" to sender
+		if arg 2 is "add" or "give":
+			if {_amount} is not set:
+				send "&f &cYou need to specify the amount to add!" to sender
+				stop
+			PremiumCurrency({_player}, "add", {_amount})
+			send "&f &e%{_player}% &fpremium currency amount is now: <##e84848>%{premium_currency::%uuid of {_player}%}% Gems &f" to sender
+		if arg 2 is "remove" or "reduce":
+			if {_amount} is not set:
+				send "&f &cYou need to specify the amount to remove!" to sender
+				stop
+			PremiumCurrency({_player}, "reduce", {_amount})
+			send "&f &e%{_player}% &fpremium currency amount is now: <##e84848>%{premium_currency::%uuid of {_player}%}% Gems &f" to sender
+		
+		if arg 1 is not set:
+			set {_gems} to {premium_currency::%uuid of {_player}%}
+			if {_gems} is not set:
+				set {_gems} to 0
+			send "&fYour Gems: <##e84848>%shortenNumber({_gems})% &f" to sender
+			stop
+
+		if arg 2 is not set:
+			if {_player} is set:
+				send "&f%{_player}%'s Gems: <##e84848>%{premium_currency::%uuid of {_player}%}% &f" to sender
+			else:
+				send "<##e84848>&lPremium Currency ▶ &fAvailable commands:" to sender
+				send "<##e84848>• &f/premiumcurrency &e<nickname> set <amount> &7- sets player's currency amount." to sender
+				send "<##e84848>• &f/premiumcurrency &e<nickname> add <amount> &7- adds currency to player's balance." to sender
+				send "<##e84848>• &f/premiumcurrency &e<nickname> remove <amount> &7- removes currency from player's balance." to sender
+
+
+on tab complete of "/premiumcurrency":
+	set tab completions for position 1 to all players
+	set tab completions for position 2 to "set" and "add" and "reduce"
+
+
+
+
+
+
+

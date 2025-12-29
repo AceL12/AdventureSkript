@@ -1,0 +1,446 @@
+on load:
+	loop 80 times:
+		if YamlQueueCheck("interface") is true:
+			YamlQueueAdd("interface")
+			MotdReload()
+			LoadInterfaceConfig()
+			exit loop
+		wait 1 second
+	
+
+function LoadInterfaceConfig():
+	load yaml "unlimited_adventures/AdventureCore/interface.yml" as "interface"
+	if yaml value "config.built_in_death_messages" of "interface" is not set:
+		if yaml value "built_in_death_messages" of "interface" is set:
+			ImportInterfaceConfig()
+			wait 1 second
+
+	if yaml value "config.built_in_death_messages" of "interface" is not set:
+		set yaml value "config.built_in_death_messages" of "interface" to true
+	if yaml value "config.print_day_count" of "interface" is not set:
+		set yaml value "config.print_day_count" of "interface" to true
+	if yaml value "config.print_biome_name" of "interface" is not set:
+		set yaml value "config.print_biome_name" of "interface" to true
+	
+	if yaml value "bossbar.spawn" of "interface" is not set:
+		set yaml value "bossbar.spawn" of "interface" to "&f LOCATION  &f %{colors::gold}%GOLD  &f %{colors::gems}%GEMS"
+	if yaml value "bossbar.wilderness" of "interface" is not set:
+		set yaml value "bossbar.wilderness" of "interface" to "COMPASS"
+	if yaml value "bossbar.dungeons" of "interface" is not set:
+		set yaml value "bossbar.dungeons" of "interface" to "DUNGEONS"
+	if yaml value "bossbar.in_combat" of "interface" is not set:
+		set yaml value "bossbar.in_combat" of "interface" to "#db0d18&lIN COMBAT! COUNTDOWN_MESSAGE"
+	if yaml value "bossbar.in_combat_countdown_message" of "interface" is not set:
+		set yaml value "bossbar.in_combat_countdown_message" of "interface" to "&cDo not logout for TIMER seconds!"
+
+	if yaml value "dungeons.dungeon_world_name" of "interface" is not set:
+		set yaml value "dungeons.dungeon_world_name" of "interface" to "&7⛏ Dungeons' World"
+	if yaml value "dungeons.dungeon_generic_name" of "interface" is not set:
+		set yaml value "dungeons.dungeon_generic_name" of "interface" to "&7⛏ Dungeon: DUNGEON_NAME"
+	if yaml value "dungeons.dungeon_next_floor_unlocked" of "interface" is not set:
+		set yaml value "dungeons.dungeon_next_floor_unlocked" of "interface" to "&e&lNEXT FLOOR UNLOCKED!"
+	if yaml value "dungeons.dungeon_boss_spawned" of "interface" is not set:
+		set yaml value "dungeons.dungeon_boss_spawned" of "interface" to "&e&lBOSS SPAWNED!"
+	
+	if yaml value "messages.server_name" of "interface" is not set:
+		set yaml value "messages.server_name" of "interface" to "<#6dd444>Unlimited Adventures"
+	if yaml value "messages.day_print" of "interface" is not set:
+		set yaml value "messages.day_print" of "interface" to "Day DAY_NUMBER"
+	if yaml value "messages.spawn_name" of "interface" is not set:
+		set yaml value "messages.spawn_name" of "interface" to "<##4dff2b>Adventurers' Town"
+
+	set {interface::built_in_death_messages} to yaml value "config.built_in_death_messages" of "interface"
+	set {interface::print_day_count} to yaml value "config.print_day_count" of "interface"
+	set {interface::print_biome_name} to yaml value "config.print_biome_name" of "interface"
+	
+	set {interface::spawn} to yaml value "bossbar.spawn" of "interface"
+	set {interface::wilderness} to yaml value "bossbar.wilderness" of "interface"
+	set {interface::dungeons} to yaml value "bossbar.dungeons" of "interface"
+	set {interface::in_combat} to yaml value "bossbar.in_combat" of "interface"
+	set {interface::in_combat_countdown_message} to yaml value "bossbar.in_combat_countdown_message" of "interface"
+
+	set {interface::dungeon_world_name} to yaml value "dungeons.dungeon_world_name" of "interface"
+	set {interface::dungeon_generic_name} to yaml value "dungeons.dungeon_generic_name" of "interface"
+	set {interface::dungeon_next_floor_unlocked} to yaml value "dungeons.dungeon_next_floor_unlocked" of "interface"
+	set {interface::dungeon_boss_spawned} to yaml value "dungeons.dungeon_boss_spawned" of "interface"
+	
+	set {interface::server_name} to yaml value "messages.server_name" of "interface"
+	set {interface::day_print} to yaml value "messages.day_print" of "interface"
+	set {interface::spawn_name} to yaml value "messages.spawn_name" of "interface"
+	if {interface::server_name::raw} is not set:
+		set {interface::server_name::raw} to yaml value "messages.server_name" of "interface"
+
+	save yaml "interface"
+
+	YamlQueueRemove("interface")
+
+
+
+function ImportInterfaceConfig():
+
+	load yaml "unlimited_adventures/AdventureCore/interface.yml" as "interface"
+	if yaml value "config.built_in_death_messages" of "interface" is not set:
+		set yaml value "config.built_in_death_messages" of "interface" to yaml value "built_in_death_messages" of "interface"
+	if yaml value "config.print_day_count" of "interface" is not set:
+		set yaml value "config.print_day_count" of "interface" to yaml value "print_day_count" of "interface"
+	if yaml value "config.print_biome_name" of "interface" is not set:
+		set yaml value "config.print_biome_name" of "interface" to yaml value "print_biome_name" of "interface"
+	delete yaml value "built_in_death_messages" of "interface"
+	delete yaml value "print_day_count" of "interface"
+	delete yaml value "print_biome_name" of "interface"
+
+	if yaml value "bossbar.spawn" of "interface" is not set:
+		set yaml value "bossbar.spawn" of "interface" to "&f LOCATION  &f %{colors::gold}%GOLD  &f %{colors::gems}%GEMS"
+	if yaml value "bossbar.wilderness" of "interface" is not set:
+		set yaml value "bossbar.wilderness" of "interface" to "COMPASS"
+	if yaml value "bossbar.dungeons" of "interface" is not set:
+		set yaml value "bossbar.dungeons" of "interface" to "DUNGEONS"
+	if yaml value "bossbar.in_combat" of "interface" is not set:
+		set yaml value "bossbar.in_combat" of "interface" to "#db0d18&lIN COMBAT! COUNTDOWN_MESSAGE"
+	if yaml value "bossbar.in_combat_countdown_message" of "interface" is not set:
+		set yaml value "bossbar.in_combat_countdown_message" of "interface" to "&cDo not logout for TIMER seconds!"
+
+
+
+	if yaml value "dungeons.dungeon_world_name" of "interface" is not set:
+		set yaml value "dungeons.dungeon_world_name" of "interface" to yaml value "dungeon_world_name" of "interface"
+	if yaml value "dungeons.dungeon_generic_name" of "interface" is not set:
+		set yaml value "dungeons.dungeon_generic_name" of "interface" to "&7⛏ Dungeon: DUNGEON_NAME"
+	if yaml value "dungeons.dungeon_next_floor_unlocked" of "interface" is not set:
+		set yaml value "dungeons.dungeon_next_floor_unlocked" of "interface" to yaml value "dungeon_next_floor_unlocked" of "interface"
+	if yaml value "dungeons.dungeon_boss_spawned" of "interface" is not set:
+		set yaml value "dungeons.dungeon_boss_spawned" of "interface" to yaml value "dungeon_boss_spawned" of "interface"
+	delete yaml value "dungeon_world_name" of "interface"
+	delete yaml value "dungeon_generic_name" of "interface"
+	delete yaml value "dungeon_next_floor_unlocked" of "interface"
+	delete yaml value "dungeon_boss_spawned" of "interface"
+
+	if yaml value "messages.server_name" of "interface" is not set:
+		set yaml value "messages.server_name" of "interface" to yaml value "server_name" of "interface"
+	if yaml value "messages.day_print" of "interface" is not set:
+		set yaml value "messages.day_print" of "interface" to yaml value "day_print" of "interface"
+	if yaml value "messages.spawn_name" of "interface" is not set:
+		set yaml value "messages.spawn_name" of "interface" to yaml value "spawn_name" of "interface"
+	delete yaml value "server_name" of "interface"
+	delete yaml value "day_print" of "interface"
+	delete yaml value "spawn_name" of "interface"
+
+
+	set {interface::built_in_death_messages} to yaml value "config.built_in_death_messages" of "interface"
+	set {interface::print_day_count} to yaml value "config.print_day_count" of "interface"
+	set {interface::print_biome_name} to yaml value "config.print_biome_name" of "interface"
+	
+	set {interface::spawn} to yaml value "bossbar.spawn" of "interface"
+	set {interface::wilderness} to yaml value "bossbar.wilderness" of "interface"
+	set {interface::dungeons} to yaml value "bossbar.dungeons" of "interface"
+	set {interface::in_combat} to yaml value "bossbar.in_combat" of "interface"
+	set {interface::in_combat_countdown_message} to yaml value "bossbar.in_combat_countdown_message" of "interface"
+
+	set {interface::dungeon_world_name} to yaml value "dungeons.dungeon_world_name" of "interface"
+	set {interface::dungeon_generic_name} to yaml value "dungeons.dungeon_generic_name" of "interface"
+	set {interface::dungeon_next_floor_unlocked} to yaml value "dungeons.dungeon_next_floor_unlocked" of "interface"
+	set {interface::dungeon_boss_spawned} to yaml value "dungeons.dungeon_boss_spawned" of "interface"
+	
+	set {interface::server_name} to yaml value "messages.server_name" of "interface"
+	set {interface::day_print} to yaml value "messages.day_print" of "interface"
+	set {interface::spawn_name} to yaml value "messages.spawn_name" of "interface"
+	if {interface::server_name::raw} is not set:
+		set {interface::server_name::raw} to yaml value "messages.server_name" of "interface"
+
+	save yaml "interface"
+
+
+
+
+every second:
+	loop {-players::*}:
+		UpdateInterface(loop-value)
+		DisplayInterface(loop-value)
+
+
+function UpdateInterface(player: player):
+	loop 4 times:
+		set {_location} to metadata value "location" of {_player}
+		if world of {_player} is "dungeons":
+			set metadata value "ui_content_dungeons" of {_player} to "%{interface::dungeon_world_name}%"
+			if GetDungeon({_player}) is set:
+				set {_ui_content} to {interface::dungeon_generic_name}
+				replace all "DUNGEON_NAME" with {_location} in {_ui_content}
+				set metadata value "ui_content_dungeons" of {_player} to {_ui_content}
+			if GetPlayerFloor({_player}) is set:
+				set {_floor} to GetPlayerFloor({_player})
+				set {_dungeon_floor} to FindFloor({_floor})
+				set {_dungeon_nr} to FindDungeon({_floor})
+				set {_killed_monsters} to {dungeons::killed_monsters::%uuid of {_player}%}
+				set {_required_kills} to {dungeons::config::dungeon_%{_dungeon_nr}%::%{_dungeon_floor}%::monster_kills_required}
+				set {_bosses::*} to "miner_wrath" and "dracula" and "pharaoh"
+				loop {_bosses::*}:
+					set {_boss} to loop-value-2
+					if {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%} is set:
+						if {dungeons::loc::boss_spawn::%{_floor}%::%{_boss}%} is set:
+							add {dungeons::config::dungeon_%{_dungeon_nr}%::%{_dungeon_floor}%::extra_kills_per_player}*size of GetPlayersInFloor({_floor}) to {_required_kills}
+							set {_boss_floor} to true
+							exit loop
+
+				#	Dungeons Status
+				if {_boss_floor} is true:
+					if {dungeons::boss_alive::%{_floor}%::%{_boss}%} is true:
+						set {_status} to {interface::dungeon_boss_spawned}
+					else:
+						if difference between {dungeons::boss_death_date::%{_floor}%::%{_boss}%} and now >= {dungeons::config::boss::%{_boss}%::respawn_delay}:
+							set {_status} to "&f☠ %{_killed_monsters}%/%{_required_kills}%"
+						else:
+							set {_status} to "&8☠ %{_killed_monsters}%/%{_required_kills}%"
+				else:
+					if {_killed_monsters} >= {_required_kills}:
+						set {_status} to {interface::dungeon_next_floor_unlocked}
+					else:
+						set {_status} to "&f☠ %{_killed_monsters}%/%{_required_kills}%"
+				set metadata value "ui_content_dungeons" of {_player} to "&f⛏ %{_location}%  %{_status}%"
+
+		wait 0.25 second
+
+
+function DisplayInterface(player: player):
+	loop 20 times:
+
+		if LicenseAuthorized() is false:
+			set {_ui_content} to "<#03fc90>Please authorize your license with &e/dashboard"
+		if AuthorizationServerOnline() is false:
+			set {_ui_content} to "<#11bd2b>Attempting to connect to authorization server..."
+		
+		if LicenseAuthorized() is true:
+#			if placeholder "floodgate_device" from {_player} is "win10":
+
+				#	Combat Log
+			if difference between metadata value "combat_log:date" of {_player} and now < {combatlog::config::combat_duration}:
+				set {_timer} to {combatlog::config::combat_duration} - difference between metadata value "combat_log:date" of {_player} and now
+				set {_time} to first character of "%{_timer}%"
+				set {_msg} to {interface::in_combat_countdown_message}
+				replace all "TIMER" with "%{_time}%" in {_msg}
+				
+				set {_progress} to 1 - {_timer} / {combatlog::config::combat_duration}
+				set {_max_chars} to length of {_msg}
+				set {_chars} to round({_max_chars}*{_progress})
+				set {_fill} to first {_max_chars}-{_chars} characters of {_msg}
+				set {_not_fill} to last {_chars} characters of {_msg}
+
+				if {_fill} is not set:
+					set {_fill} to ""
+				if {_not_fill} is not set:
+					set {_not_fill} to ""
+
+				if {_chars} is {_max_chars}-1:
+					stop
+				set {_final_msg} to "%{_fill}%&f%{_not_fill}%"
+
+				
+				if {combatlog::config::display_on_top_screen_ui} is true:
+					set {_ui_content} to {interface::in_combat}
+					replace all "COUNTDOWN_MESSAGE" with {_final_msg} in {_ui_content}
+#					set {_ui_content} to "%{interface::in_combat}% %{combatlog::messages::ui_message_prefix}%&r%{_final_msg}%"
+				if {combatlog::config::display_on_action_bar} is true:
+					send action bar "%{combatlog::messages::ui_message_prefix}%&r%{_final_msg}%" to {_player}
+
+
+
+				#DetectUIAnimation({_player}, "combat_log")
+			else:
+
+				#	Dungeons
+				if world of {_player} is "dungeons":
+					set {_ui_content} to {interface::dungeons}
+					replace all "DUNGEONS" with metadata value "ui_content_dungeons" of {_player} in {_ui_content}
+					#DetectUIAnimation({_player}, "dungeons")
+				
+				# 	Spawn
+				if world of {_player} is "spawn":
+					if {premium_currency::%uuid of {_player}%} is set:
+						set {_gems} to {premium_currency::%uuid of {_player}%}
+					else:
+						set {_gems} to 0
+					set {_location} to metadata value "location" of {_player}
+					set {_gold} to shortenNumber(floor({_player}'s money))
+					set {_gems} to shortenNumber({_gems})
+					set {_ui_content} to {interface::spawn}
+
+					replace all "LOCATION" with {_location} in {_ui_content}
+					replace all "GOLD" with {_gold} in {_ui_content}
+					replace all "GEMS" with {_gems} in {_ui_content}
+					#DetectUIAnimation({_player}, "spawn")
+
+				#	Wilderness
+				if world of {_player} is not "spawn" or "dungeons":
+					set {_ui_content} to {interface::wilderness}
+					replace all "COMPASS" with metadata value "compass" of {_player} in {_ui_content}
+					#DetectUIAnimation({_player}, "wilderness")
+
+				#	Generating World
+				if placeholder "chunky_task_pregen_running_world" is "true":
+					if {_player} has permission "admin":
+						set {_progress_bar} to "#0c7a68▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌"#	<- Not filled bar color
+
+						set {_max_chars} to length of {_progress_bar}
+						set {_chars} to {_max_chars}*({_percentage}/100)
+						set {_not_fill} to first {_max_chars}-{_chars} characters of {_progress_bar}
+						set {_fill} to last {_chars} characters of {_progress_bar}
+
+						if {_fill} is not set:
+							set {_fill} to ""
+						if {_not_fill} is not set:
+							set {_not_fill} to ""
+
+						if {_chars} is {_max_chars}-1:
+							stop
+						set {_final_msg} to "#28de8c%{_fill}%%{_not_fill}%"#	<- Filled bar color
+
+						set {_ui_content} to "#43e6a5Generating World: %{_final_msg}%"#		<- Text color
+
+		if {server::test_server} is true:
+			if {_player} has permission "admin":
+				set {_ui_content} to "&fDisable &e/testserver &funless you know what you're doing."
+		
+		if metadata value "inactive" of {_player} is true:
+			set {_ui_content} to ""
+		
+		set metadata value "ui_content" of {_player} to {_ui_content}
+
+		wait 1 tick
+
+function DetectUIAnimation(player: player, type: string):
+	if metadata value "last_ui_type" of {_player} is not {_type}:
+		set metadata value "last_ui_type" of {_player} to {_type}
+		wait 2 ticks
+		AnimateTopScreenUI({_player})
+
+function AnimateTopScreenUI(player: player):
+	set metadata value "top_screen_ui_animation_date" of {_player} to now
+	set {_start_text} to metadata value "ui_content_saved" of {_player}
+
+	loop length of {_start_text} times:
+		set {_text} to first loop-number characters of {_start_text}
+		if length of {_text} is length of {_start_text}:
+			set metadata value "ui_content" of {_player} to {_start_text}
+		set metadata value "ui_content" of {_player} to {_text}
+		wait 1 tick
+
+
+
+
+
+at 6:01:
+	if {interface::print_day_count} is true:
+		loop {-players::*}:
+			PrintDayCount(loop-value)
+
+function PrintDayCount(player: player):
+	set metadata value "print_day_count_date" of {_player} to now
+	set {_day} to round(({_player}'s time played / 20 minutes))
+	set {_text} to "%{interface::day_print}%"
+	replace all "DAY_NUMBER" with "%{_day}%" in {_text}
+	loop length of {_text} times:
+		set {_msg} to first loop-number characters of {_text}
+		send action bar "%{_msg}%" to {_player}
+		wait 3 tick
+		play sound "entity.item.pickup" with volume 0.2 and pitch random number between 1.6 and 2 to {_player}
+	wait 10 tick
+	send action bar "- %{_msg}% -" to {_player}
+	wait 10 tick
+	send action bar "  %{_msg}%  " to {_player}
+	wait 10 tick
+	send action bar "- %{_msg}% -" to {_player}
+	wait 10 tick
+	send action bar "  %{_msg}%  " to {_player}
+	wait 20 tick
+
+	set {_msg} to {_text}
+	loop 10 times:
+		set {_msg} to first length of {_msg}-1 characters of {_msg}
+		set {_msg} to last length of {_msg}-1 characters of {_msg}
+		if length of {_msg} > 0:
+			send action bar "%{_msg}%" to {_player}
+			wait 2 ticks
+	send action bar "" to {_player}
+
+
+
+function PrintBiomeAnnouncement(player: player, text: string):
+	if {interface::print_biome_name} is true:
+		loop length of {_text} times:
+			send title "" with subtitle first loop-number characters of {_text} to {_player} for 2 seconds with fadein 0 seconds
+			wait 3 tick
+			play sound "entity.item.pickup" with volume 0.12 and pitch random number between 1.6 and 2 to {_player}
+	#		play sound "ui.button.click" with volume 0.2 and pitch random number between 1.8 and 2 to {_player}
+
+
+
+
+
+
+#	Server MOTD
+
+on server list ping:
+	if {motd::enabled} is true:
+		set {_text} to "%{motd::line::1}%%nl%%{motd::line::2}%"
+		set the motd to {_text}
+
+function MotdReload():
+	load yaml "unlimited_adventures/AdventureCore/motd.yml" as "motd"
+
+	if yaml value "motd_line.1" from "motd" is not set:
+		wait 1 tick
+		MotdCreateConfig()
+
+	set {motd::enabled} to yaml value "enabled" from "motd"
+	set {motd::line::1} to yaml value "motd_line.1" from "motd"
+	set {motd::line::2} to yaml value "motd_line.2" from "motd"
+	save yaml "motd"
+
+function MotdCreateConfig():
+	load yaml "unlimited_adventures/AdventureCore/motd.yml" as "motd"
+	set yaml value "enabled" from "motd" to true
+	set yaml value "motd_line.1" from "motd" to "                %value of the placeholder "ui_server_name"% &f[§x&a&c&e&6&7&31.21.4&f]"
+	set yaml value "motd_line.2" from "motd" to "         §x&f&7&4&1&5&4☠ Dungeons §x&f&f&c&8&0&0🪣 New Biomes §x&9&0&e&3&4&e⭐ New Mobs §x&f&7&4&1&5&4"
+	save yaml "motd"
+
+command /motdreload:
+	permission: admin
+	trigger:
+		MotdReload()
+		send "&f &aServer MOTD reloaded!" to sender
+
+
+
+
+
+command /printtest:
+	permission: admin
+	trigger:
+		set {_text::*} to PrintText("Authorization Successful!")
+		loop {_text::*}:
+			send title "" with subtitle "%loop-value%" to player
+			wait 1 tick
+
+
+
+function PrintText(text: string, type: string = "left-right") :: objects:
+	if {_type} is "left-right":
+		loop length of {_text} times:
+			set {_msg} to first loop-number characters of {_text}
+			add {_msg} to {_final::*}
+	if {_type} is "outwards":
+		set {_msg} to {_text}
+		loop round(length of {_msg}/2) times:
+			set {_msg} to first length of {_msg}-1 characters of {_msg}
+			set {_msg} to last length of {_msg}-1 characters of {_msg}
+			if length of {_msg} > 0:
+				exit loop
+			add {_msg} to {_final::*}
+	return {_final::*}
+
+
+
+
+
+
+

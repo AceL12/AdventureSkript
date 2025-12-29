@@ -1,0 +1,1684 @@
+import:
+	dev.lone.itemsadder.api.ItemsAdder
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+	org.bukkit.Bukkit
+
+
+#on unload:
+#	disable script file "itemsadder.sk"
+
+function ItemsAdderItem(item: string) :: item:
+	parse if plugin "ItemsAdder" is enabled:
+		return ItemsAdder.getCustomItem({_item})
+	return stick
+
+on load:
+	if plugin "ItemsAdder" is not enabled:
+		send " " to console
+		send "&fPlease ignore the error from &6custom_items.sk" to console
+		send "&aIT'S SAFE TO IGNORE. &fWe can't fix it. Thank you for your understanding." to console
+		send " " to console
+	loop 80 times:
+		if YamlQueueCheck("custom_items") is true:
+			YamlQueueAdd("custom_items")
+			LoadCustomItems()
+			exit loop
+		wait 1 second
+
+#	YamlQueueAdd("task")
+#	YamlQueueRemove("task")
+#	if YamlQueueCheck() is true:
+
+
+
+
+# Wrapper functions for running tasks in separate threads
+function AsyncLoadCustomItems():
+	set {_functions::run} to function reference "LoadCustomItems"
+	set {_runnable} to new proxy instance of Runnable using {_functions::*}
+	{-Threads::Global}.submit({_runnable})
+
+
+
+function ItemTexture(item: string) :: integer:
+	return {-custom_item::model_data::%{_item}%}
+
+function ArtifactRandomTexture(item: string) :: integer:
+	return random element out of {-custom_item::type::%{_item}%::*}
+
+function ArtifactRandomName(item: string) :: string:
+	return random element out of {-forge::messages::item_names::%{_item}%::*}
+
+function ArtifactRandomName2(attribute: string) :: string:
+	return random element out of {-forge::messages::attribute::%{_attribute}%::*}
+
+function ArtifactAttributeLore(attribute: string, value: integer) :: string:
+	set {_msg} to {-forge::messages::attribute_lore::%{_attribute}%}
+	replace all "VALUE" with "%{_value}%" in {_msg}
+	return colored {_msg}
+
+
+function ArtifactAttributeDescription(attribute: string) :: string:
+	return {-forge::messages::attribute_description::%{_attribute}%}
+
+
+function ArtifactRandomType() :: string:
+	return random element out of "scarf", "necklace", "ring", "bracelet", "gauntlet", "shield", "boots" and "cloak"
+
+function ArtifactRandomBonus() :: string:
+	set {_bonuses::*} to "strength", "health", "regeneration", "luck", "wisdom", "toughness", "speed", "fuel", "oxygen", "night_vision" and "haste"
+	set {_bonus} to random element out of {_bonuses::*}
+	if {_bonus} is "strength" or "health" or "regeneration" or "luck" or "wisdom" or "toughness":
+		set {_value} to random integer between 2 and 10
+	if {_bonus} is "speed":
+		set {_value} to random integer between 2 and 8
+	if {_bonus} is "fuel":
+		set {_value} to 25
+	if {_bonus} is "oxygen":
+		set {_value} to random integer between 15 and 30
+	return "%{_bonus}%:%{_value}%"
+
+
+
+
+
+function OpenWorkshopMenu(player: player, page: integer = 1):
+	loop {-forge::items_list::*}:
+		if {forge::recipe::%loop-value%::*} is set:
+			add loop-value to {_items::*}
+
+	set metadata value "workshop_menu" of {_player} to chest inventory with 5 rows named "&f"
+	set metadata value "workshop_menu:page" of {_player} to {_page}
+
+	set {_slot_nr} to 18
+	loop {_items::*}:
+		add 1 to {_nr}
+		if {_page} is not 1:
+			if {_nr} < 21*({_page}-1):
+				continue
+
+		add 1 to {_slot_nr}
+		set {_item_id} to loop-value
+		set {_item} to {item::%{_item_id}%}
+		set {_name} to name of {_item}
+#		set {_lore} to lore of {_item}
+
+		#	Hide item attributes to make the lore cleaner
+		set {_nbt} to nbt of {_item}
+		set {_attributes::*} to compound list tag "minecraft:attribute_modifiers;modifiers" of {_nbt}
+		add nbt of "{attribute_modifiers:{modifiers:[],show_in_tooltip:false}}" to {_attributes::*}
+		set compound list tag "minecraft:attribute_modifiers;modifiers" of {_nbt} to {_attributes::*}
+		add hide enchants to item flags of {_item}
+		add hide unbreakable to item flags of {_item}
+		add hide attributes to item flags of {_item}
+
+		#	Setting item lore
+		set {_lore_line} to 0
+		loop lore of {_item}:
+			add 1 to {_lore_line}
+
+		if IsSchematicUnlocked({_player}, {_item_id}) is true:
+
+
+			set line {_lore_line}+2 of lore of {_item} to {-workshop::menu::ingredients}
+			set {_ingredient_lore} to 0
+			loop {forge::recipe::%loop-value-1%::*}:
+				add 1 to {_ingredient_lore}
+
+				set {_ingredient} to loop-value-2
+				if {_ingredient} does not contain "custom":
+					set {_ingredient} to {_ingredient} parsed as item
+				if PlayerHasItem({_player}, loop-value-2) is true:
+					set line ({_lore_line}+2)+{_ingredient_lore} of lore of {_item} to "&2%uncoloured StyleIngredientString(loop-value-2)%"
+				else:
+					set line ({_lore_line}+2)+{_ingredient_lore} of lore of {_item} to "&7%uncoloured StyleIngredientString(loop-value-2)%"
+
+			if ForgeCanCraft({_player}, {_item_id}) is true:
+				set line ({_lore_line}+2)+{_ingredient_lore}+2 of lore of {_item} to {-workshop::menu::click_to_craft}
+		else:
+			set {_item} to stick named {_name} with lore {_lore}
+			set custom model data of {_item} to 133
+			set line 2 of lore of {_item} to {-workshop::menu::schematic_not_found}
+
+		#	Skip edge slots
+		loop 2 times:
+			if {_slot_nr} is 26 or 27 or 35 or 36 or 44:
+				add 1 to {_slot_nr}
+		set {_amount} to 1
+		if {forge::recipe_amount::%{_item_id}%} is set:
+			if IsSchematicUnlocked({_player}, {_item_id}) is true:
+				set {_amount} to {forge::recipe_amount::%{_item_id}%}
+		set slot {_slot_nr} of metadata value "workshop_menu" of {_player} to {_amount} of {_item}
+
+	if metadata value "workshop_menu:page" of {_player} > 1:
+		set slot 27 of metadata value "workshop_menu" of {_player} to stick with custom model data 1 named {-workshop::menu::previous_page}
+	if metadata value "workshop_menu:page" of {_player} < size of {_items::*} / 20:
+		set slot 35 of metadata value "workshop_menu" of {_player} to stick with custom model data 2 named {-workshop::menu::next_page}
+
+	set {_info_item} to stick with custom model data 11 named {-workshop::menu::info_item::name}
+	set lore of {_info_item} to {-workshop::menu::info_item::lore::*}
+	loop {-workshop::menu::info_item::lore::*}:
+		set line loop-iteration of lore of {_info_item} to loop-value
+
+	set slot 8 of metadata value "workshop_menu" of {_player} to {_info_item}
+
+
+	if {_player}'s current inventory is not (metadata value "workshop_menu" of {_player}):
+		open (metadata value "workshop_menu" of {_player}) to {_player}
+
+
+
+function OpenArtifactWorkshopMenu(player: player):
+	set metadata value "artifact_workshop_menu" of {_player} to chest inventory with 4 rows named "&f"
+
+	set {_locked_slot} to stick with custom model data 100 named " "
+	loop 10 times:
+		set {_slot} to -1 + loop-number
+		set slot {_slot} of metadata value "artifact_workshop_menu" of {_player} to {_locked_slot}
+	set slot 11 of metadata value "artifact_workshop_menu" of {_player} to {_locked_slot}
+	set slot 12 of metadata value "artifact_workshop_menu" of {_player} to {_locked_slot}
+	set slot 14 of metadata value "artifact_workshop_menu" of {_player} to {_locked_slot}
+	set slot 15 of metadata value "artifact_workshop_menu" of {_player} to {_locked_slot}
+	loop 11 times:
+		set {_slot} to 16 + loop-number
+		set slot {_slot} of metadata value "artifact_workshop_menu" of {_player} to {_locked_slot}
+	set slot 34 of metadata value "artifact_workshop_menu" of {_player} to {_locked_slot}
+	set slot 35 of metadata value "artifact_workshop_menu" of {_player} to {_locked_slot}
+
+	set {_identify_item} to stick with custom model data 100 named {-artifact_workshop::menu::identify_item_locked}
+	loop 5 times:
+		set {_slot} to 28 + loop-number
+		set slot {_slot} of metadata value "artifact_workshop_menu" of {_player} to {_identify_item}
+
+	open (metadata value "artifact_workshop_menu" of {_player}) to {_player}
+
+
+
+
+
+
+
+command /customitems [<text>] [<text>] [<player=%player%>]:
+	permission: admin
+	trigger:
+		if arg 1 is "reload":
+			set metadata value "custom_items_manual_reload" of block at location(0,0,0,"spawn") to true
+			LoadCustomItems()
+			send "&f &fReloading Custom Items..." to player
+		if arg 1 is "unlock":
+			loop {-forge::items_list::*}:
+				if arg-2 is loop-value:
+					UnlockSchematic(player-arg, arg-2)
+					exit loop
+		if arg 1 is "lock":
+			if {forge::known_schematics::%uuid of player-arg%::*} contains arg-2:
+				remove arg-2 from {forge::known_schematics::%uuid of player-arg%::*}
+
+on tab complete of "/customitems":
+	set tab completions for position 1 to "reload" and "unlock" and "lock"
+	if tab arg 1 is "unlock":
+		set {_list::*} to {-forge::items_list::*}
+		loop {-forge::items_list::*}:
+			if {forge::known_schematics::%uuid of player%::*} contains loop-value:
+				remove loop-value from {_list::*}
+		set tab completions for position 2 to {_list::*}
+	if tab arg 1 is "lock":
+		loop {-forge::items_list::*}:
+			if {forge::known_schematics::%uuid of player%::*} contains loop-value:
+				add loop-value to {_list::*}
+		set tab completions for position 2 to {_list::*}
+
+
+
+
+expression %item% with skull value %string%:
+	get:
+		set {_item} to expr-1
+		set {_nbt} to "{""minecraft:profile"":{id:[I;1012646827,1820739582,-1120930980,-1600539797],name:"""",properties:[{name:""textures"",value:""%expr-2%""}]}}"
+		set {_item} to {_item} with nbt compound of {_nbt}
+		return {_item}
+
+
+
+
+
+
+
+
+function GenerateBackpack(type: string) :: item:
+	if {forge::item::%{_type}%::rows} is set:
+		set {_item} to {item::%{_type}%}
+		set {_nbt} to custom nbt of {_item}
+		set int tag "item_id" of {_nbt} to random integer between -999999999 and 999999999
+		set string tag "item_type" of {_nbt} to {_type}
+	return {_item}
+
+function GenerateCatchingNet() :: item:
+	set {_item} to {item::catching_net}
+	set {_nbt} to custom nbt of {_item}
+	set int tag "item_id" of {_nbt} to random integer between -999999999 and 999999999
+	set string tag "item_type" of {_nbt} to "catching_net"
+	return {_item}
+
+
+
+
+
+function LoadItemTextures():
+	set {-custom_item::model_data::hermes_boots} to 701
+	set {-custom_item::model_data::rocket_boots} to 702
+	set {-custom_item::model_data::lightning_boots} to 703
+	set {-custom_item::model_data::flashlight} to 704
+	set {-custom_item::model_data::miner_helmet} to 705
+	set {-custom_item::model_data::miner_helmet_lamp} to 706
+	set {-custom_item::model_data::diving_mask} to 707
+	set {-custom_item::model_data::ninja_cloak} to 708
+	set {-custom_item::model_data::gold_tooth} to 709
+	set {-custom_item::model_data::vitality_ring} to 711
+	set {-custom_item::model_data::speed_ring} to 712
+	set {-custom_item::model_data::wool_scarf} to 713
+	set {-custom_item::model_data::magic_bracelet} to 714
+	set {-custom_item::model_data::knight_shield} to 715
+	set {-custom_item::model_data::philosopher_stone} to 716
+	set {-custom_item::model_data::silver_chain} to 717
+	set {-custom_item::model_data::talisman_of_vitality} to 718
+	set {-custom_item::model_data::dark_magic_necklace} to 719
+	set {-custom_item::model_data::shiver_bracelet} to 720
+	set {-custom_item::model_data::bone_necklace} to 721
+	set {-custom_item::model_data::shackle} to 722
+	set {-custom_item::model_data::gold_pouch} to 723
+	set {-custom_item::model_data::magma_boots} to 724
+	set {-custom_item::model_data::wither_crown} to 725
+	set {-custom_item::model_data::sculk_shield} to 726
+	set {-custom_item::model_data::ender_gauntlet} to 727
+	set {-custom_item::model_data::blood_vial} to 728
+	set {-custom_item::model_data::cloak_of_wrath} to 729
+	set {-custom_item::model_data::molten_dice} to 730
+	set {-custom_item::model_data::horseshoe} to 731
+	set {-custom_item::model_data::sunstone_ring} to 732
+	set {-custom_item::model_data::zephyr_veil} to 733
+	set {-custom_item::model_data::jungle_amulet} to 734
+	set {-custom_item::model_data::golem_heart} to 735
+	set {-custom_item::model_data::ankh_charm} to 736
+	set {-custom_item::model_data::vampire_signet} to 737
+	set {-custom_item::model_data::crystal_amulet} to 738
+
+	set {-custom_item::type::scarf::*} to 713 and 733
+	set {-custom_item::type::necklace::*} to 717, 718, 719, 720, 721, 734 and 738
+	set {-custom_item::type::ring::*} to 711, 712, 732 and 737
+	set {-custom_item::type::bracelet::*} to 714 and 720
+	set {-custom_item::type::gauntlet::*} to 727
+	set {-custom_item::type::shield::*} to 715 and 726
+	set {-custom_item::type::boots::*} to 701, 702, 703 and 724
+	set {-custom_item::type::cloak::*} to 708 and 729
+
+
+function LoadCustomItems():
+	set {_block} to block at location(0, 0, 0, world "spawn")
+#	if difference between metadata value "custom_items:forge_reload_date" of {_block} and now < 2 seconds:
+#		send "&f Custom Items are already loading, please wait..." to all ops
+#		stop
+	set metadata value "custom_items:forge_reload_date" of {_block} to now
+	load yaml "unlimited_adventures/CustomItems/config.yml" as "config"
+
+	set {-stats::*} to "strength", "health", "regeneration", "luck", "wisdom", "toughness", "speed", "fuel", "night_vision", "haste", "projectile_resistance", "fall_resistance" and "oxygen"
+
+	#	Forge Config
+	if yaml value "require_unlocking" from "config" is set:
+		set {forge::config::require_unlocking} to yaml value "require_unlocking" from "config"
+	if yaml value "accessories_drop_on_death" from "config" is set:
+		set {forge::config::accessories_drop_on_death} to yaml value "accessories_drop_on_death" from "config"
+
+	save yaml "config"
+
+	#	Load Recipes (NEW!)
+	unload yaml directory "unlimited_adventures/CustomItems/recipes"
+	load all yaml from directory "unlimited_adventures/CustomItems/recipes"
+	loop all of the currently loaded yaml files:
+		if loop-value-1 contains "unlimited_adventures/CustomItems/recipes/":
+			set {_file} to loop-value-1
+			loop yaml node keys "" from {_file}:
+				set {_item} to loop-value-2
+				set {forge::recipe::%{_item}%::*} to yaml list "%{_item}%.ingredients" from {_file}
+				set {forge::recipe_amount::%{_item}%} to yaml value "%{_item}%.amount" from {_file}
+				add {_item} to {forge::recipes_list::*}
+	save yaml "unlimited_adventures/CustomItems/recipes"
+
+	#	Load Drops (NEW!)
+	clear {forge::drops::*}
+	clear {forge::global::mobs::*}
+	unload yaml directory "unlimited_adventures/CustomItems/drops"
+	load all yaml from directory "unlimited_adventures/CustomItems/drops"
+	loop all of the currently loaded yaml files:
+		if loop-value-1 contains "unlimited_adventures/CustomItems/drops/":
+			set {_file} to loop-value-1
+			loop yaml node keys "" from {_file}:
+				set {_mob} to loop-value-2
+				add {_mob} to {forge::global::mobs::*}
+				loop yaml node keys "%{_mob}%" from {_file}:
+					set {_item} to loop-value-3
+					set {forge::drops::global::%{_mob}%::%{_item}%} to yaml value "%{_mob}%.%{_item}%" from {_file}
+	save yaml "unlimited_adventures/CustomItems/drops"
+
+
+
+
+	#	Load Items
+	clear {-forge::items_list::*}
+	clear {forge::backpacks_list::*}
+	clear {forge::accessories_list::*}
+	delete {forge::item::*}
+
+	unload yaml directory "unlimited_adventures/CustomItems/items"
+	unload yaml directory "unlimited_adventures/CustomItems/models"
+
+	load all yaml from directory "unlimited_adventures/CustomItems/items"
+	load all yaml from directory "unlimited_adventures/CustomItems/models"
+	loop all of the currently loaded yaml files:
+		if loop-value-1 contains "unlimited_adventures/CustomItems/items/" or "unlimited_adventures/CustomItems/models/":
+			set {_file} to loop-value-1
+
+			loop yaml node keys "" from {_file}:
+				set {_item} to loop-value-2
+				add {_item} to {-forge::items_list::*}
+
+				if {_file} contains "unlimited_adventures/CustomItems/models":
+					set {forge::item::%{_item}%::is_a_model} to true
+				if yaml value "%{_item}%.item" from {_file} is set:
+					set {forge::item::%{_item}%::item} to yaml value "%{_item}%.item" from {_file} parsed as item
+				if yaml value "%{_item}%.name" from {_file} is set:
+					set {_value} to yaml value "%{_item}%.name" from {_file}
+					set {forge::item::%{_item}%::name} to colored {_value}
+				if yaml value "%{_item}%.rows" from {_file} is set:
+					set {forge::item::%{_item}%::rows} to yaml value "%{_item}%.rows" from {_file}
+					add {_item} to {forge::backpacks_list::*}
+				if yaml value "%{_item}%.attack_speed" from {_file} is set:
+					set {_value} to yaml value "%{_item}%.attack_speed" from {_file}
+					set {_value} to -4 + {_value}
+					set {forge::item::%{_item}%::attack_speed} to {_value}
+				if yaml value "%{_item}%.cooldown" from {_file} is set:
+					set {_value} to yaml value "%{_item}%.cooldown" from {_file}
+					set {forge::item::%{_item}%::cooldown} to "%{_value}% seconds" parsed as timespan
+				if yaml value "%{_item}%.accessory" from {_file} is set:
+					add {_item} to {forge::accessories_list::*}
+				
+				if yaml value "%{_item}%.custom_armor.slot" from {_file} is set:
+					set {forge::item::%{_item}%::custom_armor::slot} to yaml value "%{_item}%.custom_armor.slot" from {_file}
+
+				if yaml value "%{_item}%.on_consume.nutrition" from {_file} is set:
+					set {forge::item::%{_item}%::on_consume::nutrition} to yaml value "%{_item}%.on_consume.nutrition" from {_file}
+				if yaml value "%{_item}%.on_consume.saturation" from {_file} is set:
+					set {forge::item::%{_item}%::on_consume::saturation} to yaml value "%{_item}%.on_consume.saturation" from {_file}
+				if yaml list "%{_item}%.on_consume.effects" from {_file} is set:
+					set {forge::item::%{_item}%::on_consume::effects::*} to yaml list "%{_item}%.on_consume.effects" from {_file}
+
+				set {_values::*} to "itemsadder", "oraxen", "nexo", "custom_model_data", "item_model", "model_custom_model_data", "backtools_model", "attack_damage", "armor", "armor_toughness", "knockback_resistance", "unbreakable", "skull", "color", "book_author", "lore", "block", "cooking_pot", "hide_attributes", "grappling_hook", "range", "speed" and "book_content"
+				loop {_values::*}:
+					set {_val} to loop-value-3
+					if yaml value "%{_item}%.%{_val}%" from {_file} is set:
+						set {forge::item::%{_item}%::%{_val}%} to yaml value "%{_item}%.%{_val}%" from {_file}
+					if yaml list "%{_item}%.%{_val}%" from {_file} is set:
+						set {forge::item::%{_item}%::%{_val}%::*} to yaml list "%{_item}%.%{_val}%" from {_file}
+
+				#	Accessories
+				loop {-stats::*}:
+					if yaml value "%{_item}%.%loop-value-3%" from {_file} is set:
+						set {forge::item::%{_item}%::%loop-value-3%} to yaml value "%{_item}%.%loop-value-3%" from {_file}
+					else:
+						if {forge::item::%{_item}%::%loop-value-3%} is set:
+							delete {forge::item::%{_item}%::%loop-value-3%}
+
+#				send "&8%{_item}%: %{forge::item::%{_item}%::item}%" to all players
+	save yaml "unlimited_adventures/CustomItems/items"
+	save yaml "unlimited_adventures/CustomItems/models"
+	set metadata value "custom_items:load_last_item" of block at location(0,0,0,"spawn") to {_item}
+
+	LoadItemTextures()
+	LoadMessages()
+
+
+function LoadMessages():
+	load yaml "unlimited_adventures/CustomItems/messages.yml" as "messages"
+
+	clear {-forge::messages::*}
+	loop yaml node key "messages" from "messages":
+		set {-forge::messages::messages::%loop-value%} to yaml value "messages.%loop-value%" from "messages"
+	loop yaml node key "item_names" from "messages":
+		set {-forge::messages::item_names::%loop-value%::*} to yaml list "item_names.%loop-value%" from "messages"
+	loop yaml node key "attribute" from "messages":
+		set {-forge::messages::attribute::%loop-value%::*} to yaml list "attribute.%loop-value%" from "messages"
+	loop yaml node key "attribute_lore" from "messages":
+		set {-forge::messages::attribute_lore::%loop-value%} to yaml value "attribute_lore.%loop-value%" from "messages"
+	loop yaml node key "attribute_description" from "messages":
+		set {-forge::messages::attribute_description::%loop-value%} to yaml value "attribute_description.%loop-value%" from "messages"
+
+	save yaml "messages"
+
+
+	load yaml "unlimited_adventures/Menus/workshop.yml" as "workshop"
+	clear {-workshop::menu::*}
+	loop yaml node key "menu" from "workshop":
+		set {-workshop::menu::%loop-value%} to yaml value "menu.%loop-value%" from "workshop"
+		set {-workshop::menu::%loop-value%} to colored "%{-workshop::menu::%loop-value%}%"
+	set {-workshop::menu::info_item::name} to colored yaml value "menu.info_item.name" from "workshop"
+	set {-workshop::menu::info_item::lore::*} to colored yaml list "menu.info_item.lore" from "workshop"
+	save yaml "workshop"
+
+	load yaml "unlimited_adventures/Menus/artifact_workshop.yml" as "artifact_workshop"
+	clear {-artifact_workshop::menu::*}
+	loop yaml node key "menu" from "artifact_workshop":
+		set {-artifact_workshop::menu::%loop-value%} to yaml value "menu.%loop-value%" from "artifact_workshop"
+		set {-artifact_workshop::menu::%loop-value%} to colored "%{-artifact_workshop::menu::%loop-value%}%"
+	set {-artifact_workshop::menu::info_item::name} to colored yaml value "menu.info_item.name" from "artifact_workshop"
+	set {-artifact_workshop::menu::info_item::lore::*} to colored yaml list "menu.info_item.lore" from "artifact_workshop"
+	save yaml "artifact_workshop"
+
+	ForgeItemsReload()
+
+
+
+function ForgeItemsReload():
+	#	Forge Items (Backpacks, Accessories, Weapons, Tools, etc.)
+	set {_example_item} to metadata value "custom_items:load_last_item" of block at location(0,0,0,"spawn")
+	loop 50 times:
+		wait 0.2 second
+		if {forge::item::%{_example_item}%::item} is set:
+			exit loop
+	delete metadata value "custom_items:loaded" of block at location(0,0,0,"spawn")
+
+	delete {item::*}
+	set {_item_nr} to 0
+	loop {-forge::items_list::*}:
+		add 1 to {_item_nr}
+		set {_flags} to false
+		set {_item} to loop-value
+		set {_non_vanilla_item} to false
+
+
+		#	Item:
+
+		#	ItemsAdder
+		parse if plugin "ItemsAdder" is enabled:
+			if {forge::item::%{_item}%::itemsadder} is set:
+				set {item::%{_item}%} to ItemsAdderItem({forge::item::%{_item}%::itemsadder})
+				set {_non_vanilla_item} to true
+
+		#	Nexo
+#		if plugin "Nexo" is enabled:
+#			if {forge::item::%{_item}%::nexo} is set:
+#				set {item::%{_item}%} to NexoItem({forge::item::%{_item}%::nexo})
+#				set {_non_vanilla_item} to true
+		#	Vanilla
+		if {_non_vanilla_item} is not true:
+			set {item::%{_item}%} to {forge::item::%{_item}%::item}
+			if {forge::item::%{_item}%::skull} is set:
+				set {item::%{_item}%} to player head with skull value {forge::item::%{_item}%::skull}
+		#	Custom Model Data / Item Model (used only for vanilla items (not ItemsAdder, Nexo or Oraxen))
+		if {_non_vanilla_item} is not true:
+			if {forge::item::%{_item}%::custom_model_data} is set:
+				set custom model data of {item::%{_item}%} to {forge::item::%{_item}%::custom_model_data}
+			if {forge::item::%{_item}%::item_model} is set:
+				set item model of {item::%{_item}%} to {forge::item::%{_item}%::item_model}
+		
+		#	Name
+		if {forge::item::%{_item}%::name} is set:
+			set name of {item::%{_item}%} to {forge::item::%{_item}%::name}
+		#	Armor value (armor & toughness)
+		if {_item} contains "helmet":
+			set {_part} to "head"
+		if {_item} contains "chestplate":
+			set {_part} to "chest"
+		if {_item} contains "leggings":
+			set {_part} to "legs"
+		if {_item} contains "boots":
+			set {_part} to "feet"
+		if {_item} contains "sword" or "axe":
+			set {_part} to "mainhand"
+		if {forge::item::%{_item}%::attack_damage} is set:
+#				RemoveItemAttribute({item::%{_item}%}, "attack_damage")
+			set {item::%{_item}%} to AddItemAttribute({item::%{_item}%}, "attack_damage", {forge::item::%{_item}%::attack_damage}, "add_value", {_part})
+			set {_flags} to true
+		if {forge::item::%{_item}%::attack_speed} is set:
+#				RemoveItemAttribute({item::%{_item}%}, "attack_speed")
+			set {item::%{_item}%} to AddItemAttribute({item::%{_item}%}, "attack_speed", {forge::item::%{_item}%::attack_speed}, "add_value", {_part})
+			set {_flags} to true
+		if {forge::item::%{_item}%::armor} is set:
+			RemoveItemAttribute({item::%{_item}%}, "armor")
+			set {item::%{_item}%} to AddItemAttribute({item::%{_item}%}, "armor", {forge::item::%{_item}%::armor}, "add_value", {_part})
+			if {_item} contains "dragonscale":
+				set {_n} to nbt from "{""minecraft:equippable"":{asset_id:""minecraft:dragonscale"",slot:""%{_part}%""},""minecraft:item_model"":""minecraft:%{_item}%""}"
+				add {_n} to nbt compound of {item::%{_item}%}
+		if {forge::item::%{_item}%::armor_toughness} is set:
+			set {item::%{_item}%} to AddItemAttribute({item::%{_item}%}, "armor_toughness", {forge::item::%{_item}%::armor_toughness}, "add_value", {_part})
+		if {forge::item::%{_item}%::knockback_resistance} is set:
+			set {item::%{_item}%} to AddItemAttribute({item::%{_item}%}, "knockback_resistance", {forge::item::%{_item}%::knockback_resistance}, "add_value", {_part})
+		if {forge::item::%{_item}%::unbreakable} is true:
+			set {item::%{_item}%} to unbreakable {item::%{_item}%}
+		if {forge::item::%{_item}%::item_id} is set:
+			set {_n} to custom nbt of {item::%{_item}%}
+			set string tag "item_type" of {_n} to {forge::item::%{_item}%::item_id}
+		else:
+			set {_n} to custom nbt of {item::%{_item}%}
+			set string tag "item_type" of {_n} to {_item}
+
+		if {forge::item::%{_item}%::color} is set:
+			set {_color} to {forge::item::%{_item}%::color}
+			if {_color} parsed as number is set:
+				set {_color::*} to {_color} split at ","
+			else:
+				set {_color} to {_color} parsed as color
+			if {_color::*} is set:
+				dye {item::%{_item}%} ({_color::1}, {_color::2}, {_color::3})
+			else:
+				dye {item::%{_item}%} {forge::item::%{_item}%::color}
+
+#			if {forge::item::%{_item}%::book_content::*} is set:
+#				loop {forge::item::%{_item}%::book_content::*}:
+#				set {_line} to join {forge::item::%{_item}%::book_content::*} with nl
+#				set page 1 of {item::%{_item}%} to {_line}
+
+		if {forge::item::%{_item}%::book_content::*} is set:
+			loop {forge::item::%{_item}%::book_content::*}:
+				add 1 to {_page_nr}
+				set page {_page_nr} of {item::%{_item}%} to text component of {forge::item::%{_item}%::book_content::%{_page_nr}%}
+
+		if {forge::item::%{_item}%::book_author} is set:
+			set book author of {item::%{_item}%} to {forge::item::%{_item}%::book_author}
+
+		if {forge::item::%{_item}%::hide_attributes} is true:
+			hide the additional tooltip of {item::%{_item}%}
+
+		if {forge::item::%{_item}%::custom_armor::slot} is set:
+			apply equippable component to {item::%{_item}%}:
+				slot: {forge::item::%{_item}%::custom_armor::slot}
+
+		set {_nutrition} to {forge::item::%{_item}%::on_consume::nutrition}
+		set {_saturation} to {forge::item::%{_item}%::on_consume::saturation}
+		if {_nutrition} or {_saturation} is set:
+			if {_nutrition} is not set:
+				set {_nutrition} to food nutrition of {item::%{_item}%}
+			if {_saturation} is not set:
+				set {_saturation} to food saturation of {item::%{_item}%}
+			apply food component to {item::%{_item}%}:
+				nutrition: {_nutrition}
+				saturation: {_saturation}
+
+		if {forge::item::%{_item}%::on_consume::effects::*} is set:
+			loop {forge::item::%{_item}%::on_consume::effects::*}:
+				set {_number} to loop-iteration-2
+				set {_full_effect::*} to loop-value-2 split at ", "
+				set {_effect} to {_full_effect::1}
+				if {_full_effect::3} is set:
+					set {_tier} to {_full_effect::2}
+					set {_duration} to {_full_effect::3}
+				else:
+					set {_duration} to {_full_effect::2}
+
+				set {_n} to custom nbt of {item::%{_item}%}
+				set string tag "potion_effect_%{_number}%_effect" of {_n} to {_effect}
+				set string tag "potion_effect_%{_number}%_duration" of {_n} to {_duration}
+				if {_tier} is set:
+					set int tag "potion_effect_%{_number}%_tier" of {_n} to {_tier} parsed as integer
+
+#				send string tag "potion_effect_%{_number}%_effect" of {_n} to all players
+#				send string tag "potion_effect_%{_number}%_duration" of {_n} to all players
+#				send int tag "potion_effect_%{_number}%_tier" of {_n} to all players
+		
+
+
+		if {_flags} is true:
+			add hide attributes to item flags of {item::%{_item}%}
+
+		#	Lore
+		set {_nr} to 0
+		loop {forge::item::%loop-value%::lore::*}:
+			add 1 to {_nr}
+			set line {_nr} of lore of {item::%{_item}%} to colored loop-value-2
+
+#		if {forge::item::%{_item}%::is_a_model} is true:
+#			set {model::%{_item}%} to {item::%{_item}%}
+#			delete {item::%{_item}%}
+
+	set metadata value "custom_items:loaded" of block at location(0,0,0,"spawn") to true
+
+	LoadCustomRecipes()
+
+
+
+function LoadCustomRecipes():
+	
+	wait 1 tick
+	loop 50 times:
+		wait 0.2 second
+		if metadata value "custom_items:loaded" of block at location(0,0,0,"spawn") is set:
+			exit loop
+	
+	register shaped recipe:
+		id: "custom:workshop"
+		result: {item::workshop}
+		shape: "ggg", "gag", "ggg"
+		category: "custom"
+		ingredients:
+			set ingredient of "g" to gold ingot
+			set ingredient of "a" to anvil
+
+
+	register shaped recipe:
+		id: "custom:powered_rail"
+		result: 6 of powered rail
+		shape: "c c", "csc", "crc"
+		category: "custom"
+		ingredients:
+			set ingredient of "c" to copper ingot
+			set ingredient of "s" to stick
+			set ingredient of "r" to redstone
+	register shaped recipe:
+		id: "custom:emerald_sword"
+		result: {item::emerald_sword}
+		shape: " e ", " e ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to emerald
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:emerald_pickaxe"
+		result: {item::emerald_pickaxe}
+		shape: "eee", " s ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to emerald
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:emerald_axe"
+		result: {item::emerald_axe}
+		shape: "ee ", "es ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to emerald
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:emerald_shovel"
+		result: {item::emerald_shovel}
+		shape: " e ", " s ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to emerald
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:emerald_hoe"
+		result: {item::emerald_hoe}
+		shape: "ee ", " s ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to emerald
+			set ingredient of "s" to stick
+
+
+
+	register shaped recipe:
+		id: "custom:copper_sword"
+		result: {item::copper_sword}
+		shape: " e ", " e ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to copper ingot
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:copper_pickaxe"
+		result: {item::copper_pickaxe}
+		shape: "eee", " s ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to copper ingot
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:copper_axe"
+		result: {item::copper_axe}
+		shape: "ee ", "es ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to copper ingot
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:copper_shovel"
+		result: {item::copper_shovel}
+		shape: " e ", " s ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to copper ingot
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:copper_hoe"
+		result: {item::copper_hoe}
+		shape: "ee ", " s ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to copper ingot
+			set ingredient of "s" to stick
+
+
+
+	register shaped recipe:
+		id: "custom:amethyst_sword"
+		result: {item::amethyst_sword}
+		shape: " e ", " e ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to amethyst shard
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:amethyst_pickaxe"
+		result: {item::amethyst_pickaxe}
+		shape: "eee", " s ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to amethyst shard
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:amethyst_axe"
+		result: {item::amethyst_axe}
+		shape: "ee ", "es ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to amethyst shard
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:amethyst_shovel"
+		result: {item::amethyst_shovel}
+		shape: " e ", " s ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to amethyst shard
+			set ingredient of "s" to stick
+	register shaped recipe:
+		id: "custom:amethyst_hoe"
+		result: {item::amethyst_hoe}
+		shape: "ee ", " s ", " s "
+		category: "custom"
+		ingredients:
+			set ingredient of "e" to amethyst shard
+			set ingredient of "s" to stick
+
+	LoadCustomFurnaceRecipes()
+
+
+function LoadCustomFurnaceRecipes():
+	set {_buffalo_meat} to {item::cooked_buffalo_meat}
+	register new furnace recipe for {_buffalo_meat} using {item::buffalo_meat} with id "buffalo_meat" in group "meat"
+	register new smoker recipe for {_buffalo_meat} using {item::buffalo_meat} with id "buffalo_meat_2" in group "meat"
+	register new campfire recipe for {_buffalo_meat} using {item::buffalo_meat} with id "buffalo_meat_3" in group "meat"
+
+	if {item::cooked_shark_meat} is set:
+		set {_shark_meat} to {item::cooked_shark_meat}
+		set {_crab_meat} to {item::cooked_crab_meat}
+		
+		register new furnace recipe for {_shark_meat} using {item::shark_meat} with id "shark_meat" in group "meat"
+		register new smoker recipe for {_shark_meat} using {item::shark_meat} with id "shark_meat_2" in group "meat"
+		register new campfire recipe for {_shark_meat} using {item::shark_meat} with id "shark_meat_3" in group "meat"
+
+		register new furnace recipe for {_crab_meat} using {item::crab_meat} with id "crab_meat" in group "meat"
+		register new smoker recipe for {_crab_meat} using {item::crab_meat} with id "crab_meat_2" in group "meat"
+		register new campfire recipe for {_crab_meat} using {item::crab_meat} with id "crab_meat_3" in group "meat"
+
+	
+
+	
+
+	send "&f[&aUnlimited Adventures&f] &fLoaded Custom Items" to console
+	send "&f &aCustom Items loaded!" to all ops
+
+	if metadata value "custom_items_manual_reload" of block at location(0,0,0,"spawn") is not true:
+		if plugin "ItemsAdder" is not enabled:
+			send " " to console
+			send "&fPlease ignore the error from &6custom_items.sk" to console
+			send "&aIT'S SAFE TO IGNORE. &fWe can't fix it. Thank you for your understanding!" to console
+			send " " to console
+
+			send "&fPlease ignore the error from &6custom_items.sk" to all ops
+			send "&aIT'S SAFE TO IGNORE. &fWe can't fix it. Thank you for your understanding!" to all ops
+	if metadata value "custom_items_manual_reload" of block at location(0,0,0,"spawn") is true:
+		delete metadata value "custom_items_manual_reload" of block at location(0,0,0,"spawn")
+
+	YamlQueueRemove("custom_items")
+	set {-config_loaded::custom_items} to true
+
+	CookingReload()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function GetRandomPlayer() :: player:
+	return random element out of all players
+
+function PlayerHasItem(player: player, item: string) :: boolean:
+	set {_boolean} to false
+
+	set {_amount} to GetIngredientAmount({_item})
+	if {_amount} is not set:
+		set {_amount} to 1
+	set {_item} to GetIngredientItem({_item})
+
+	set {_player_items::*} to all items in inventory of {_player}
+	loop {_player_items::*}:
+		set {_p_item} to loop-value
+		if GetCustomItemId({_p_item}) is set:
+			if GetCustomItemId({_p_item}) is GetCustomItemId({_item}):
+				if {_player} has {_amount} of {_p_item}:
+					set {_boolean} to true
+		else:
+			if type of {_p_item} is type of {_item}:
+				if {_player} has {_amount} of {_p_item}:
+					set {_boolean} to true
+
+	return {_boolean}
+
+
+
+
+
+
+
+
+
+
+
+
+
+function ForgeCraftItem(player: player, item: string):
+	if difference between metadata value "crafting_delay" of {_player} and now < 1 second:
+		stop
+	set metadata value "crafting_delay" of {_player} to now
+
+	set {_var::*} to {47r3y1} split at ""
+	set {_var} to "%{_var::19}%%{_var::20}%" parsed as integer
+	if "%{_var::19}%%{_var::20}%" parsed as integer is not between SafeToCraft()-1 and SafeToCraft()+1:
+		if "%{_var}%" parsed as integer is not 23 or 24 or 0 or 1:
+			chance of 79%:
+				stop
+
+	#	Loops through all recipes to then compare them to command argument
+	loop {-forge::items_list::*}:
+		set {_crafted_item} to loop-value-1
+		
+		if {_item} is {_crafted_item}:
+
+			#	Stops the code if player doesn't have all ingredients
+			if ForgeCanCraft({_player}, {_crafted_item}) is not true:
+				send {-forge::messages::insufficient_ingredients} to {_player}
+#				send "&f &cInsufficient ingredients!" to {_player}
+				stop
+			#	Stops the code if player doesn't have space for product
+			if {_player} doesn't have space for {item::%{_crafted_item}%}:
+				send {-forge::messages::insufficient_space} to {_player}
+#				send "&f &cYou don't have space for more items!" to {_player}
+				stop
+
+
+			#	Takes needed ingredients from the player
+
+			loop all items in {_player}'s inventory:
+				add loop-item-1 to {_player_items::*}
+
+			loop {forge::recipe::%{_crafted_item}%::*}:
+				set {_ingredient} to loop-value-2
+				set {_amount} to GetIngredientAmount({_ingredient})
+				set {_ingredient_item} to GetIngredientItem({_ingredient})
+
+
+				loop {_player_items::*}:
+					set {_type_correct} to false
+					set {_p_item} to loop-value-3
+					if "%type of {_p_item}%" is "%type of {_ingredient_item}%":
+						if GetCustomItemId({_p_item}) is not set:
+							if GetCustomItemId(GetItem({_ingredient})) is not set:
+								set {_type_correct} to true
+						else:
+							if GetCustomItemId({_p_item}) is GetCustomItemId(GetItem({_ingredient})):
+								set {_type_correct} to true
+
+					if {_type_correct} is true:
+#						if item amount of {_p_item} >= {_amount}:
+						set {_n} to custom nbt of {_p_item}
+						if compound list tag "items" of {_n} is set:
+							set {_bp_items::*} to compound list tag "items" of {_n}
+						remove {_amount} of {_p_item} from {_player}
+						exit loop
+
+
+			#	Gives player the crafting product
+
+			if {forge::recipe_amount::%loop-value%} > 0:
+				set {_crafted_amount} to {forge::recipe_amount::%loop-value%}
+			else:
+				set {_crafted_amount} to 1
+			if {forge::item::%{_crafted_item}%::rows} is set:
+				set {_crafted_item} to {_crafted_amount} of GenerateBackpack({_crafted_item})
+			else:
+				set {_crafted_item} to {_crafted_amount} of {item::%{_crafted_item}%}
+			if {_bp_items::*} is set:
+				set {_n} to custom nbt of {_crafted_item}
+				set compound list tag "items" of {_n} to {_bp_items::*}
+			if {_player} has space for {_crafted_item}:
+				give {_crafted_item} to {_player}
+			else:
+				drop {_crafted_item} at {_player}
+				send "&f &fYou don't have space for more items!" to {_player}
+			play sound "custom.forge_craft" with volume 0.45 and pitch 1 at {_player}
+			ForgeUpdateCraftableItems({_player})
+			OpenWorkshopMenu({_player}, metadata value "workshop_menu:page" of {_player})
+
+
+
+
+command /forge [<player>] [<text>]:
+	permission: admin
+	trigger:
+		set {_player} to player-arg
+		ForgeCraftItem({_player}, arg-2)
+
+function ForgeCanCraft(player: player, item: string) :: boolean:
+	loop {forge::recipe::%{_item}%::*}:
+		if PlayerHasItem({_player}, loop-value) is false:
+			return false
+	return true
+
+
+
+function GetIngredientItem(item: string) :: item:
+	if {_item} contains "custom:":
+		replace all "custom:" with "" in {_item}
+		set {_ingredient::*} to {_item} split at " "
+		return {item::%last element out of {_ingredient::*}%}
+	else:
+		if {_item} contains " of ":
+			set {_ingredient::*} to {_item} split at " "
+			remove first element out of {_ingredient::*} from {_ingredient::*}
+			remove first element out of {_ingredient::*} from {_ingredient::*}
+			set {_item} to join {_ingredient::*} by " " 
+
+		return {_item} parsed as item
+
+function GetIngredientAmount(item: string) :: integer:
+	set {_amount} to 1
+	if {_item} contains " of ":
+		set {_item::*} to {_item} split at " "
+		set {_amount} to first element out of {_item::*} parsed as integer
+	return {_amount}
+
+function GetCustomItemId(item: item) :: string:
+	return string tag "item_type" of custom nbt of {_item}
+function GetCustomItem(item: item) :: string:
+	return string tag "item_type" of custom nbt of {_item}
+function CustomItem(item: item) :: string:
+	return string tag "item_type" of custom nbt of {_item}
+
+function ForgeUpdateCraftableItems(player: player):
+	if difference between metadata value "forge_updatecraftableitems_cooldown" of {_player} and now < 0.3 second:
+		stop
+	set metadata value "forge_updatecraftableitems_cooldown" of {_player} to now
+	
+#	loop all items in {_player}'s inventory:
+#		add loop-item to {_player_items::*}
+	
+	load yaml "unlimited_adventures/CustomItems/recipes.yml" as "recipes"
+	loop yaml node keys "recipes" from "recipes":
+		add loop-value to {_list_of_craftable_items::*}
+	save yaml "recipes"
+	wait 1 tick
+
+	loop {_list_of_craftable_items::*}:
+		set {_item} to loop-value
+		add 1 to {_loop_nr}
+		loop {forge::recipe::%{_item}%::*}:
+			
+			set {_ingredient} to loop-value-2
+			set {_amount} to GetIngredientAmount({_ingredient})
+			set {_item_type} to GetIngredientItem({_ingredient})
+
+			set {_boolean} to false
+
+			if {_player}'s inventory contains {_amount} of {_item_type} with custom model data {_item_type}:
+				set {_boolean} to true
+			else:
+				#exit loop
+
+				loop {_player}'s inventory:
+					if name of {_item_type} is name of loop-value-3:
+						if custom model data of {_item_type} is custom model data of loop-value-3:
+							set {_boolean2} to true
+							exit loop
+						else:
+							set {_boolean2} to false
+					else:
+						set {_boolean2} to false
+				if {_boolean2} is true:
+					#send "&bFound %{_amount} of {_item_type} with custom model data {_item_type}%!" to all players
+					set {_boolean} to true
+				else:
+					#send "&cDidn't find %{_amount} of {_item_type} with custom model data {_item_type}%!" to all players
+					exit loop
+
+		if {_boolean} is true:
+			add {_item} to {_items_player_can_craft::*}
+		if mod({_loop_nr}, 8) is 0:
+			wait 1 tick
+
+	set metadata value "forge_craftable_items" of {_player} to "%{_items_player_can_craft::*}%"
+
+on join:
+	if {server::license_code} contains "dev":
+		if amount of all players >= 4:
+			kick player due to metadata value "938uf5" of block at location(0,0,0,"spawn")
+
+
+
+function IsForgeIngredient(item: string) :: boolean:
+	loop {-forge::items_list::*}:
+		if {_item} is loop-value:
+			return true
+	return false
+
+
+command /forgeupdatecraftableitems [<player>]:
+	permission: admin
+	trigger:
+		ForgeUpdateCraftableItems(player-arg)
+
+
+
+
+
+
+
+
+function MobForgeDrops(victim: entity):
+	set {_loc} to location of {_victim}
+	set {_nbt} to nbt compound of {_victim}
+	if "%{_nbt}%" contains "mythicmobs:type"":""Bear""":
+		set {_victim} to "bear"
+	if "%{_nbt}%" contains "mythicmobs:type"":""Goblin""":
+		set {_victim} to "goblin"
+	if "%{_nbt}%" contains "mythicmobs:type"":""Buffaloo""":
+		set {_victim} to "buffaloo"
+	if "%{_nbt}%" contains "mythicmobs:type"":""Crocodile""":
+		set {_victim} to "crocodile"
+	if "%{_nbt}%" contains "mythicmobs:type"":""shark""":
+		set {_victim} to "shark"
+	if "%{_nbt}%" contains "mythicmobs:type"":""crab""":
+		set {_victim} to "crab"
+	if "%{_nbt}%" contains "mythicmobs:type"":""deer""":
+		set {_victim} to "deer"
+	if "%{_nbt}%" contains "mythicmobs:type"":""penguin""":
+		set {_victim} to "penguin"
+	if "%{_nbt}%" contains "mythicmobs:type"":""butterfly""":
+		set {_victim} to "butterfly"
+	if "%{_nbt}%" contains "mythicmobs:type"":""beaver""":
+		set {_victim} to "beaver"
+	if "%{_nbt}%" contains "mythicmobs:type"":""turkey""":
+		set {_victim} to "turkey"
+	if "%{_nbt}%" contains "mythicmobs:type"":""zebra""":
+		set {_victim} to "zebra"
+
+	
+	set {_victim_name} to "%{_victim}%"
+	replace all " " with "_" in {_victim_name}
+
+
+	if {forge::global::mobs::*} contains {_victim_name}:
+		loop {forge::drops::global::%{_victim_name}%::*}:
+			set {_chance} to loop-value
+			if difference between {booster::luck::date} and now < {booster::luck::duration}:
+				set {_chance} to {_chance}*2
+#				send "chance: %{_chance}%  item: %loop-index%" to all players
+			if {_chance} <= 100:
+#				send "%loop-index% %loop-value% %GetItem(loop-index)%" to all players
+				chance of {_chance}%:
+					drop 1 of GetItem(loop-index) at {_loc}
+			else:
+#				send "2: %loop-index% %loop-value% %GetItem(loop-index)%" to all players
+				set {_amount} to round({_chance}/100)
+				if {_victim} is a ender dragon:
+					wait 15 seconds
+					drop {_amount} of GetItem(loop-index) at {_loc}
+				else:
+					drop {_amount} of GetItem(loop-index) at {_loc}
+
+
+
+
+
+function GenerateSchematic(item: string) :: item:
+	set {_schematic_item} to {item::workshop_schematic}
+	set line 7 of lore of {_schematic_item} to line 5 of lore of {_schematic_item}
+	set {_item_name} to name of GetItem("custom:%{_item}%")
+	set line 5 of lore of {_schematic_item} to {_item_name}
+	set string tag "unlocks_item" of custom nbt of {_schematic_item} to {_item}
+	return {_schematic_item}
+
+
+function UnlockSchematic(player: player, item: string):
+	if {forge::known_schematics::%uuid of {_player}%::*} doesn't contain {_item}:
+		add {_item} to {forge::known_schematics::%uuid of {_player}%::*}
+		set {_item_name} to name of GetItem("custom:%{_item}%")
+		send "&6You have just learned a new schematic! - %{_item_name}%" to {_player}
+		play sound "custom.unlock_schematic" with volume 0.4 and pitch 1 to {_player}
+		remove 1 of tool of {_player} from {_player}
+		stop
+	else:
+		send "&7You already know this schematic!" to {_player}
+
+function IsSchematicUnlocked(player: player, item: string) :: boolean:
+	if {forge::config::require_unlocking} is not true:
+		return true
+	if {forge::schematics::default_schematics::*} contains {_item}:
+		return true
+	if {forge::known_schematics::%uuid of {_player}%::*} contains {_item}:
+		return true
+	return false
+
+
+
+on right click:
+	if event-entity is armor stand:
+		if string tag "block_type" of custom nbt of event-entity is set:
+			cancel event
+	if event-block is anvil or smithing table or barrier:
+		set {_nbt} to custom nbt of block
+		if string tag "block_type" of {_nbt} is set:
+			if CustomItem(player's tool) is not "planter":
+				cancel event
+			UseCustomBlock(player, block, string tag "block_type" of {_nbt})
+
+	if GetCustomItemId(player's offhand tool) is "pinata":
+		cancel event
+	if GetCustomItemId(player's tool) is "pinata":
+		cancel event
+		SpawnPinata(player)
+	if GetCustomItemId(player's tool) is "portal_stone":
+		if distance between target block and player < 4.5:
+			if player can build at target block:
+				if target block is solid:
+					if target entity is not item frame:
+						SculkPortalCreate(player, location of target block)
+						stop
+	if GetCustomItemId(player's tool) is "random_teleportation_scroll":
+		if difference between metadata value "rtp_delay" of player and now < 3 seconds:
+			stop
+		if difference between metadata value "combat_log:date" of player and now < {combatlog::config::combat_duration}:
+			stop
+		remove 1 of player's tool from player
+		RandomTeleportAttempt(player, false)
+	if GetCustomItemId(player's tool) is "home_teleportation_scroll":
+		if difference between metadata value "home_teleport_delay" of player and now < 3 seconds:
+			stop
+		if difference between metadata value "combat_log:date" of player and now < {combatlog::config::combat_duration}:
+			stop
+		remove 1 of player's tool from player
+		PerformHomeTeleport(player)
+	if GetCustomItemId(player's tool) is "catching_net":
+		cancel event
+		UseCatchingNet(player)
+	if GetCustomItemId(player's tool) is "dynamite":
+		cancel event
+		ThrowDynamite(player)
+	if IsBackpack(player's tool) is true:
+		cancel event
+		BackpackOpen(player, GetCustomItemId(player's tool))
+
+function IsGrapplingHook(item: item) :: boolean:
+	if {forge::item::%GetCustomItemId({_item})%::grappling_hook} is true:
+		return true
+
+
+function UseCatchingNet(player: player):
+	set {_target} to target entity of {_player}
+	set {_block} to target block of {_player}
+
+	#	Catching a mob
+	if {_target} is a mob:
+		if {_target} is not a monster:
+			if distance between {_target} and {_player} > 5:
+				stop
+			if {_target} is ender dragon or iron golem or wither or warden or ghast or vindicator or armor stand or villager or wandering trader or horse or wolf or cat:
+				stop
+			if owner of {_target} is set:
+				stop
+			if {_target} is a sheep:
+				if name of {_target} contains "&d&lPINATA":
+					stop
+			if metadata value "custom_mob" of {_target} is set:
+				stop
+#			if item amount of {_player}'s tool > 1:
+#				stop
+
+			set {_nbt} to custom nbt of {_player}'s tool
+			set {_mob} to string tag "mob" of {_nbt}
+			set {_mob_nbt} to full nbt of {_target}
+			
+#			set {_hp} to float tag "hp" of {_nbt}
+			
+			if {_mob} is not set:
+				if difference between metadata value "catching_net_delay" of {_player} and now < 0.5 seconds:
+					stop
+				set metadata value "catching_net_delay" of {_player} to now
+				play sound "entity.player.attack.sweep" with volume 0.3 and pitch 1.5 at location of {_target}
+				play sound "entity.item.pickup" with volume 0.6 and pitch 1.5 at location of {_target}
+				draw 6 poof at location 1 meter above {_block} with offset vector(0, 0, 0) with extra 0.3
+				set string tag "mob" of {_nbt} to "%{_target}%"
+				set float tag "hp" of {_nbt} to health of {_target}
+				set string tag "mob_nbt" of {_nbt} to {_mob_nbt}
+				set {_is_baby} to string tag "is_baby" of {_mob_nbt}
+#				send "%{_is_baby}%" to {_player}
+				teleport {_target} to location(x coordinate of {_target}, -100, z coordinate of {_target})
+				set line 4 of lore of {_player}'s tool to "&fContains %capitalize(string tag "mob" of {_nbt})%"
+				set damage value of {_player}'s tool to damage value of {_player}'s tool + 2
+				stop
+
+	#	Releasing the mob
+	if {_target} is not set:
+		if {_block} is set:
+			if distance between {_block} and {_player} > 5:
+				stop
+			set {_nbt} to custom nbt of {_player}'s tool
+			set {_mob} to string tag "mob" of {_nbt}
+			set {_hp} to float tag "hp" of {_nbt}
+			set {_mob} to {_mob} parsed as entitytype
+			set {_is_baby} to string tag "is_baby" of {_nbt}
+			
+			if {_mob} is set:
+				if difference between metadata value "catching_net_delay" of {_player} and now < 0.5 seconds:
+					stop
+				set metadata value "catching_net_delay" of {_player} to now
+				play sound "entity.player.attack.sweep" with volume 0.2 and pitch 1.5 at {_block}
+				play sound "entity.item.pickup" with volume 0.6 and pitch 1.5 at {_block}
+				draw 3 poof at location 1 meter above {_block} with offset vector(0.2, 0.2, 0.2) with extra 0.01
+
+#				set {_mob_nbt} to nbt compound from "{IsBaby:1}"
+				set {_mob_nbt} to string tag "mob_nbt" of {_nbt}
+				spawn {_mob} at location 0.5 meter above {_block}# with nbt {_mob_nbt}
+				set health of last spawned mob to {_hp}
+				if {_is_baby} is "true":
+					set age of last spawned mob to -24000
+				delete string tag "mob" of {_nbt}
+				delete float tag "hp" of {_nbt}
+				delete string tag "is_baby" of {_nbt}
+				set line 4 of lore of {_player}'s tool to "&fEmpty. Catch something!"
+				set damage value of {_player}'s tool to damage value of {_player}'s tool + 2
+#				damage {_player}'s tool by 2# + damage value of {_player}'s tool
+
+	
+
+
+function ThrowDynamite(player: player):
+	if region at {_player} is "spawn" or "dungeons":
+		stop
+	if difference between metadata value "dynamite_delay" of {_player} and now < 1 seconds:
+		stop
+	set metadata value "dynamite_delay" of {_player} to now
+	remove 1 of {item::dynamite} from {_player}
+	set {_loc} to location 1.5 meter above {_player}
+	
+	set {_yaw} to random number between -180 and 180
+	set yaw of {_loc} to {_yaw}
+	spawn armor stand at {_loc} with nbt compound from "{Invisible:1b}"
+	set {_stand} to last spawned armor stand
+	set helmet of {_stand} to feather with custom model data 211
+	set metadata value "alive" of {_stand} to true
+	push {_stand} in direction of {_player} with speed 2
+
+	set {_nbt} to nbt compound of {_stand}
+	set {_spins_on_ground} to 0
+	loop 60 times:
+		draw 1 smoke at {_stand} with offset vector(0.1, 0.1, 0.1) with extra 0
+		if {_stand} is not on ground:
+			add 30 to {_yaw}
+			set float list tag "Rotation" of {_nbt} to {_yaw} and 0
+			set yaw of {_stand} to {_yaw}
+		else:
+			if {_spins_on_ground} < 10:
+				add 5 to {_yaw}
+				set float list tag "Rotation" of {_nbt} to {_yaw} and 0
+				set yaw of {_stand} to {_yaw}
+				add 1 to {_spins_on_ground}
+		wait 1 tick
+
+	set {_explosion_loc} to location of {_stand}
+
+	play sound "minecraft:entity.generic.explode" with volume 2 and pitch 1.2 at {_explosion_loc}
+	draw 2 explosion emitter at {_explosion_loc} with offset vector(1, 1, 1) with extra 0
+	kill {_stand}
+
+	if block at {_explosion_loc} is water:
+		stop
+
+	create explosion with power 3.0 at {_explosion_loc}
+
+	loop all entities in radius 5 of {_explosion_loc}:
+		if loop-entity is a living entity:
+			set {_distance} to distance between loop-entity and {_explosion_loc}
+			if {_distance} < 1:
+				set {_distance} to 1
+			set {_damage_multiplier} to (5/{_distance})/5
+			damage loop-entity by 4*{_damage_multiplier}
+
+
+on left click on barrier or anvil:
+	set {_nbt} to custom nbt of block
+	if string tag "block_type" of {_nbt} is set:
+		HitCustomBlock(player, block)
+
+
+function HitCustomBlock(player: player, block: block):
+	if {_player} can build at location of {_block}:
+		set {_nbt} to custom nbt of {_block}
+		if string tag "block_type" of {_nbt} is set:
+			
+			if string tag "block_type" of {_nbt} is "planter":
+				loop all armor stands in radius 0.7 of location of {_block}:
+					if string tag "block_type" of custom nbt of loop-entity is "planter":
+						set {_planter} to loop-entity
+						set {_nbt} to custom nbt of {_planter}
+						exit loop
+				if string tag "crop" of {_nbt} is set:
+					if int tag "stage" of {_nbt} is 3:
+						PlanterInteraction({_player}, {_block})
+						stop
+
+			if difference between metadata value "custom_block:last_dmg" of {_block} and now > 5 seconds:
+				set int tag "custom_block:health" of {_nbt} to 5
+			set metadata value "custom_block:last_dmg" of {_block} to now
+			
+			play sound "minecraft:entity.zombie.attack_wooden_door" with volume 0.5 and pitch 1 at {_block}
+			if int tag "custom_block:health" of {_nbt} is not set:
+				set int tag "custom_block:health" of {_nbt} to 5
+			if int tag "custom_block:health" of {_nbt} > 0:
+				subtract 1 from int tag "custom_block:health" of {_nbt}
+				draw 10 crit at {_block} with offset vector(0.3, 0.3, 0.3) with extra 0.5
+			if int tag "custom_block:health" of {_nbt} is 0:
+				RemoveCustomBlock({_player}, {_block})
+
+
+function PlaceCustomBlock(player: player, loc: location, block: string):
+	if {_player} can build at location of {_loc}:
+		if {_block} is set:
+			set block at {_loc} to barrier
+			if {game::animate_custom_blocks} is true:
+				spawn item display at {_loc}
+				set {_display} to last spawned item display
+				set display item of {_display} to {item::%{_block}%}
+			if GetWorldDirection(location of {_player}) is east:
+				add 90 to yaw of {_display}
+				add 90 to yaw of {_loc}
+			if GetWorldDirection(location of {_player}) is south:
+				add 180 to yaw of {_display}
+				add 180 to yaw of {_loc}
+			if GetWorldDirection(location of {_player}) is west:
+				add 270 to yaw of {_display}
+				add 270 to yaw of {_loc}
+			if {game::animate_custom_blocks} is true:
+				loop 4 times:
+					set {_scale} to 0.8+0.1*loop-number
+					set display scale of {_display} to vector({_scale}, {_scale}, {_scale})
+					wait 1 ticks
+				set display scale of {_display} to vector(1, 1, 1)
+			spawn armor stand at location 0.5 meter below {_loc}
+			set helmet of last spawned armor stand to {item::%{_block}%}
+			add nbt from "{Invisible:1b}" to nbt compound of last spawned armor stand
+			add nbt from "{Marker:1b}" to nbt compound of last spawned armor stand
+			set string tag "block_type" of custom nbt of last spawned armor stand to {_block}
+			set gravity of last spawned armor stand to false
+#			set block at {_loc} to barrier
+			kill {_display}
+
+#		remove 1 of {item::%{_block}%} from {_player}
+		set {_nbt} to custom nbt of block at {_loc}
+		set string tag "block_type" of {_nbt} to {_block}
+		set int tag "custom_block:health" of {_nbt} to 5
+
+
+
+function RemoveCustomBlock(player: player, block: block):
+	if {_player} can build at location of {_block}:
+		set {_nbt} to custom nbt of {_block}
+		
+		if string tag "block_type" of {_nbt} is set:
+			set {_custom_block} to string tag "block_type" of {_nbt}
+			
+			if {_custom_block} is "planter":
+				PlanterBreak({_block}, {_player})
+			if {_custom_block} is "cooking_pot":
+				CookingPotBreak({_block}, {_player})			
+
+			loop all armor stands in radius 0.6 of location of {_block}:
+				if string tag "block_type" of custom nbt of loop-entity is set:
+					kill loop-entity
+			loop all item displays in radius 0.6 of location of {_block}:
+				set {_display} to loop-entity
+				if display item of {_display} is {item::%{_custom_block}%}:
+#					delete string tag "block_type" of {_nbt}
+
+					if {game::animate_custom_blocks} is true:
+						loop 2 times:
+							set {_scale} to 1+0.1*loop-number
+							set display scale of {_display} to vector({_scale}, {_scale}, {_scale})
+							wait 1 ticks
+						set display scale of {_display} to vector(1, 1, 1)
+						loop 2 times:
+							set {_scale} to 1-0.1*loop-number
+							set display scale of {_display} to vector({_scale}, {_scale}, {_scale})
+							wait 1 ticks
+					kill {_display}
+			set block at location of {_block} to air
+			if game mode of {_player} is not creative:
+				drop 1 of {item::%{_custom_block}%} at {_block}
+			delete string tag "block_type" of {_nbt}
+
+
+function UseCustomBlock(player: player, block: block, type: string):
+	if {_type} is "workshop":
+		if difference between metadata value "workshop_click_cooldown" of {_player} and now < 0.5 second:
+			stop
+		set metadata value "workshop_click_cooldown" of {_player} to now
+		if GetCustomItemId({_player}'s tool) is "workshop_schematic":
+			set {_unlocks_item} to string tag "unlocks_item" of custom nbt of {_player}'s tool
+			UnlockSchematic({_player}, {_unlocks_item})
+			stop
+		else:
+			play sound "custom.forge_open" with volume 0.5 and pitch 1 at {_block}
+			OpenWorkshopMenu({_player})
+	if {_type} is "artifact_workshop":
+		if difference between metadata value "artifact_workshop_click_cooldown" of {_player} and now < 0.5 second:
+			stop
+		set metadata value "artifact_workshop_click_cooldown" of {_player} to now
+		OpenArtifactWorkshopMenu({_player})
+		play sound "custom.artifact_workshop_open" with volume 0.5 and pitch 1 at {_block}
+	if {_type} is "planter":
+		PlanterInteraction({_player}, {_block})
+	if {_type} is "cooking_pot":
+		if GetCustomItemId({_player}'s tool) is "cooking_recipe":
+			set {_unlocks_item} to string tag "unlocks_recipe" of custom nbt of {_player}'s tool
+			UnlockCookingRecipe({_player}, {_unlocks_item})
+			stop
+		else:
+			CookingPotInteraction({_player}, {_block})
+	if {_type} is "scarecrow":
+		ScarecrowInteraction({_player}, {_block})
+
+
+
+
+
+
+
+
+
+on death:
+	if DungeonsLoseInventory(victim) is true:
+		if WildernessDungeonsLoseInventory(victim) is true:
+			if ProtectionBoosterActive() is false:
+				if {forge::config::accessories_drop_on_death} is true:
+					loop 4 times:
+						if {accessories::%uuid of victim%::items::%loop-number%} is set:
+							drop {accessories::%uuid of victim%::items::%loop-number%}
+							clear {accessories::%uuid of victim%::items::%loop-number%}
+
+
+
+
+
+function GenerateUnidentifiedArtifact(type: string = "none") :: item:
+	set {_artifact_item} to {item::unidentified_item}
+	set boolean tag "artifact" of custom nbt of {_artifact_item} to true
+	set string tag "artifact_type" of custom nbt of {_artifact_item} to {_type}
+	return {_artifact_item}
+
+
+function IdentifyArtifact(item: item) :: item:
+#	set {_artifact_type} to string tag "artifact_type" of custom nbt of {_item}
+	set {_artifact_type} to "accessory"
+	if GetCustomItemId({_item}) is not "unidentified_weapon" or "unidentified_armor" or "unidentified_item":
+		stop
+
+	set {_type} to ArtifactRandomType()
+	set {_item} to stick with model data ArtifactRandomTexture({_type})
+	set {_name} to ArtifactRandomName({_type})
+
+
+	#	Generating attributes
+	loop 3 times:
+		if {_artifact_type} is "accessory":
+			set {_random} to random integer between 1 and 100
+			if {_random} is between 1 and 10:
+				set {_bonus::1} to ArtifactRandomBonus()
+				set {_bonus::2} to ArtifactRandomBonus()
+			else:
+				set {_bonus::1} to ArtifactRandomBonus()
+		#	Preventing duplicated attributes
+		loop {_bonus::*}:
+			set {_attribute::%loop-iteration-2%::*} to {_bonus::%loop-iteration-2%} split at ":"
+		if {_attribute::1::1} is not {_attribute::2::1}:
+			exit loop
+	
+	loop {_bonus::*}:
+		set {_full_attribute::*} to {_bonus::%loop-iteration%} split at ":"
+		set {_attribute} to {_full_attribute::1}
+		set {_value} to {_full_attribute::2} parsed as integer
+		set {_attribute::%loop-iteration%} to {_attribute}
+		set {_value::%loop-iteration%} to {_value}
+
+		if {_value} is set:
+			set int tag {_attribute} of custom nbt of {_item} to {_value}
+		else:
+			set boolean tag {_attribute} of custom nbt of {_item} to true
+	
+	if {_artifact_type} is "accessory":
+		set boolean tag "accessory" of custom nbt of {_item} to true
+	set boolean tag "artifact" of custom nbt of {_item} to true
+	set string tag "item_type" of custom nbt of {_item} to "artifact"
+
+	#	Generating name
+	if {_value::2} > {_value::1}:
+		set {_name2} to ArtifactRandomName2({_attribute::2})
+	else:
+		set {_name2} to ArtifactRandomName2({_attribute::1})
+
+	#	Generating lore
+		
+	if {_attribute::2} is set:
+		set line 2 of lore of {_item} to "&7%capitalize(ArtifactAttributeDescription({_attribute::1}))% and %ArtifactAttributeDescription({_attribute::2})%"
+		set line 4 of lore of {_item} to ArtifactAttributeLore({_attribute::1}, {_value::1})
+		set line 5 of lore of {_item} to ArtifactAttributeLore({_attribute::2}, {_value::2})
+		set line 7 of lore of {_item} to colored {-forge::messages::messages::accessory_item}
+	else:
+		set line 2 of lore of {_item} to "&7%capitalize(ArtifactAttributeDescription({_attribute::1}))%"
+		set line 4 of lore of {_item} to ArtifactAttributeLore({_attribute::1}, {_value::1})
+		set line 6 of lore of {_item} to colored {-forge::messages::messages::accessory_item}
+	
+#	set line 8 of lore of {_item} to "%{_attribute::1}%: %{_value::1}%"
+#	set line 9 of lore of {_item} to "%{_attribute::2}%: %{_value::2}%"
+
+
+	set {_item} to {_item} named "&a%{_name}% of %{_name2}%"
+
+	return {_item}
+
+
+
+
+
+
+
+function IdentifyArtifact2(item: item) :: item:
+	set {_unlocks_item} to string tag "artifact" of custom nbt of {_item}
+	return {item::%{_unlocks_item}%}
+
+
+command /identifyartifact:
+	permission: admin
+	trigger:
+		give IdentifyArtifact(tool of player) to player
+		remove tool of player from player
+
+
+function ArtifactWorkshopIdentifyItem(player: player):
+	if slot 10 of {_player}'s current inventory is not set:
+		stop
+	if slot 16 of {_player}'s current inventory is not air:
+		stop
+	if slot 13 of {_player}'s current inventory is not amethyst shard:
+		stop
+	if difference between metadata value "artifact_workshop:delay" of {_player} and now < 1 second:
+		stop
+	set {_artifact} to slot 10 of {_player}'s current inventory
+	if IdentifyArtifact({_artifact}) is not set:
+		stop
+	play sound "custom.identify_artifact" with volume 1 and pitch 1 at {_player}
+	remove 1 of {_artifact} from slot 10 of {_player}'s current inventory
+	remove 1 of amethyst shard from slot 13 of {_player}'s current inventory
+	set metadata value "artifact_workshop:identified_item" of {_player} to IdentifyArtifact({_artifact})
+	set metadata value "artifact_workshop:delay" of {_player} to now
+	if uncolored placeholder "floodgate_device" from {_player} is "[Java]":
+		loop 20 times:
+			if {_player}'s current inventory is not metadata value "artifact_workshop_menu" of {_player}:
+				give IdentifyArtifact({_artifact}) to {_player}
+				stop
+			if slot 16 of {_player}'s current inventory is not air:
+				give IdentifyArtifact({_artifact}) to {_player}
+				stop
+			draw 10 end rod at location 1 meter in front of {_player} with offset vector(0, 0, 0) with extra 0.5
+			apply slowness of tier 20-loop-number without any particles to {_player} for 0.2 second
+			wait 1 tick
+	set slot 16 of {_player}'s current inventory to IdentifyArtifact({_artifact})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+command /customiteminfo:
+	permission: admin
+	trigger:
+		send "Item's type: %GetCustomItemId(player's tool)%" to player
+		send "Custom model data: %custom model data of player's tool%" to player

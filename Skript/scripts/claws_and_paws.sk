@@ -1,0 +1,72 @@
+
+function UseGrapplingHook(player: player):
+	set {_id} to GetCustomItemId({_player}'s tool)
+	set {_range} to {forge::item::%{_id}%::range}
+	if distance between {_player} and target block of {_player} < {_range}:
+		set {_cooldown} to {forge::item::%{_id}%::cooldown}
+		set {_speed} to {forge::item::%{_id}%::speed}
+		if difference between metadata value "grappling_hook::date" of {_player} and now < {_cooldown}:
+			stop
+		set metadata value "grappling_hook::date" of {_player} to now
+		set item cooldown of {_player}'s tool for {_player} to {_cooldown}
+		shoot arrow from {_player} with speed {_speed}
+		set {_arrow} to last shot arrow
+		play sound "minecraft:item.crossbow.shoot" with volume 1 and pitch 1.3 at {_player}
+		set metadata value "grappling_hook::hook" of {_arrow} to true
+		set metadata value "grappling_hook::shooter" of {_arrow} to {_player}
+		set metadata value "grappling_hook::location" of {_player} to location of {_player}
+		set metadata value "grappling_hook::shot" of {_player} to false
+		delete metadata value "grappling_hook::shot_date" of {_player}
+
+function PullPlayer(player: player):
+	play sound "custom.items.grappling_hook.pull" with volume 1 and pitch 1 to {_player}
+	set {_loc} to metadata value "grappling_hook::location" of {_player}
+	shoot arrow from location 1 meter above {_loc} with speed 3.5
+	set {_arrow} to last shot arrow
+	set metadata value "grappling_hook::passenger" of {_arrow} to {_player}
+	set metadata value "grappling_hook::transport" of {_arrow} to true
+	make {_player} ride {_arrow}
+
+on shoot:
+	if IsGrapplingHook(shooter's tool) is true:
+		set {_id} to GetCustomItemId(shooter's tool)
+		set {_range} to {forge::item::%{_id}%::range}
+		if distance between shooter and target block of shooter is not smaller than {_range}:
+			cancel event
+			stop
+		if metadata value "grappling_hook::shot" of shooter is true:
+			if difference between metadata value "grappling_hook::shot_date" of shooter and now < 10 seconds:
+				stop
+		cancel event
+		set metadata value "grappling_hook::shot" of shooter to true
+		set metadata value "grappling_hook::shot_date" of shooter to now
+		UseGrapplingHook(shooter)
+
+on projectile hit:
+	set {_arrow} to event-projectile
+	if metadata value "grappling_hook::hook" of {_arrow} is true:
+		kill {_arrow}
+		set {_player} to metadata value "grappling_hook::shooter" of {_arrow}
+		play sound "custom.items.grappling_hook.hit" with volume 3 and pitch 1 at location of {_arrow}
+		wait 6 ticks
+		PullPlayer({_player})
+
+	if metadata value "grappling_hook::transport" of {_arrow} is true:
+		set {_player} to metadata value "grappling_hook::passenger" of {_arrow}
+		loop 5 times:
+			if distance between {_player} and {_arrow} < 3:
+				loop {players::*}:
+					if loop-value-2 is {_player}:
+						stop sound "custom.items.grappling_hook.pull" for the loop-value-2
+						exit loop
+				stop sound "custom.items.grappling_hook.pull" for {_player}
+				dismount passenger from {_arrow}
+				play sound "custom.items.grappling_hook.push" with volume 1 and pitch 1 at {_player}
+				wait 2 tick
+				push {_player} upward with speed 1.2
+				set metadata value "grappling_hook::fall_resistance" of {_player} to now
+				loop 5 times:
+					draw 1 cloud at {_player} with offset vector(0, 0, 0) with extra 0.2
+					wait 1 tick
+				exit loop
+			wait 1 tick

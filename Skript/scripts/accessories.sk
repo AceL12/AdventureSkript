@@ -1,0 +1,344 @@
+import:
+	java.util.concurrent.ExecutorService
+	java.util.concurrent.Executors
+	ch.njol.skript.Skript
+	java.lang.Runnable
+	org.bukkit.Bukkit
+
+on load:
+	loop 80 times:
+		if YamlQueueCheck("gear") is true:
+			YamlQueueAdd("gear")
+			LoadGearMenu()
+			exit loop
+		wait 1 second
+
+
+
+function LoadGearMenu():
+	load yaml "unlimited_adventures/Menus/gear.yml" as "gear"
+	clear {-gear::menu::*}
+	loop yaml node key "menu" from "gear":
+		set {-gear::menu::%loop-value%} to yaml value "menu.%loop-value%" from "gear"
+		set {-gear::menu::%loop-value%} to colored "%{-gear::menu::%loop-value%}%"
+	set {-gear::menu::about_gear::name} to colored yaml value "menu.about_gear.name" from "gear"
+	set {-gear::menu::about_gear::lore::*} to colored yaml list "menu.about_gear.lore" from "gear"
+	save yaml "gear"
+	YamlQueueRemove("gear")
+
+
+
+
+
+
+
+
+command /accessories:
+	aliases: accessory, accesory, accesories, gear, mygear, playergear, trinkets
+	permission: core.accessories
+	trigger:
+		OpenAccessoriesMenu(sender)
+
+
+
+
+
+
+
+every 5 seconds:
+	if {-players::*} is set:
+		loop {-players::*}:
+			RefreshAccessories5(loop-value)
+
+function RefreshAccessories5(player: player):
+	loop 5 times:
+		RefreshAccessories({_player})
+		wait 1 second
+
+
+
+
+function RefreshAccessories(player: player):
+
+	set {_xx} to {v83hj5}
+	set {_aa::*} to {_xx} split at ""
+	if "%{_aa::16}%%{_aa::17}%" parsed as integer is not between matchingVariables()-1 and matchingVariables()+1:
+		if "%{_aa::16}%%{_aa::17}%" parsed as integer is not 28 or 29 or 30 or 31 or 0 or 1:
+			stop
+
+	#	Aurelium Skills Stats
+	set {_strength} to 0
+	set {_health} to 0
+	set {_regeneration} to 0
+	set {_luck} to 0
+	set {_wisdom} to 0
+	set {_toughness} to 0
+	set {_speed} to 0
+
+
+
+	#	Custom Bonuses
+#	set {_movement_speed} to 0
+	set {_fuel} to 0
+	set {_oxygen} to 0
+	delete {_night_vision}
+	delete {_haste}
+
+
+
+	#	Check Gear and add up stats
+	loop 4 times:
+		if GetAccessorySlot({_player}, loop-number) is set:
+			set {_item} to GetAccessorySlot({_player}, loop-number)
+			#	Grab item stats
+			loop {-stats::*}:
+				
+
+				#	Generated artifacts
+				set {_stat} to loop-value-2
+				if int tag {_stat} of custom nbt of {_item} is set:
+					set {_value} to int tag {_stat} of custom nbt of {_item}
+					add {_value} to {_%loop-value-2%}
+				if boolean tag {_stat} of custom nbt of {_item} is true:
+					set {_%loop-value-2%} to true
+#				send "%{_stat}%: %{_value}%" to {_player}
+
+
+				#	Pre-made artifacts
+				set {_accessory_item} to GetAccessoryItem({_item})
+				if {forge::item::%{_accessory_item}%::%loop-value-2%} is set:
+					if {forge::item::%{_accessory_item}%::%loop-value-2%} is a number:
+						#	Handling fuel separately, since its effects cannot stack:
+						if loop-value-2 is "fuel":
+							if {_fuel} > 0:
+								if {forge::item::%{_accessory_item}%::%loop-value-2%} > {_%loop-value-2%}:
+									set {_%loop-value-2%} to {forge::item::%{_accessory_item}%::%loop-value-2%}
+							else:
+								set {_%loop-value-2%} to {forge::item::%{_accessory_item}%::%loop-value-2%}
+						#	Handling numbers:
+						else:
+							add {forge::item::%{_accessory_item}%::%loop-value-2%} to {_%loop-value-2%}
+					#	Handling non numerical stats (example: night vision, haste)
+					else:
+						set {_%loop-value-2%} to {forge::item::%{_accessory_item}%::%loop-value-2%}
+
+
+
+	#	Applying Stats
+
+
+	#	Aurelium Skill Stats:
+	set {_basic_stats::*} to "strength" and "health" and "regeneration" and "luck" and "wisdom" and "toughness" and "speed"
+
+	loop {_basic_stats::*}:
+		set {_stat} to loop-value
+		if metadata value "%{_stat}%" of {_player} is not {_%{_stat}%}:
+			set metadata value "%{_stat}%" of {_player} to {_%{_stat}%}
+			execute console command "sk modifier remove %{_player}% accessory_%{_stat}%"
+			if {_%{_stat}%} is not 0:
+				execute console command "sk modifier add %{_player}% %{_stat}% accessory_%{_stat}% %{_%{_stat}%}%"
+
+
+	#	Night Vision
+	if {_night_vision} is true:
+		if {_player}'s gamemode is not creative:
+			remove night vision (potion effect type) from {_player}
+			apply potion of night vision without any particles to {_player} for 1 day
+			set metadata value "night_vision" of {_player} to true
+	else:
+		if metadata value "night_vision" of {_player} is true:
+			remove night vision (potion effect type) from {_player}
+			delete metadata value "night_vision" of {_player}
+
+	#	Haste
+	if {_haste} is true:
+		if {_player}'s gamemode is not creative:
+			remove haste (potion effect type) from {_player}
+			apply potion of haste without any particles to {_player} for 1 day
+			set metadata value "haste" of {_player} to true
+	else:
+		if metadata value "haste" of {_player} is true:
+			remove haste (potion effect type) from {_player}
+			delete metadata value "haste" of {_player}
+
+
+	#	Oxygen
+	if {_oxygen} is set:
+		if metadata value "submerged" of {_player} is true:
+			if block above {_player} is not water or falling water:
+				delete metadata value "submerged" of {_player}
+				remove water breathing (potion effect type) from {_player}
+		else:
+#			if {_player} is in water:
+			if block above {_player} is water or falling water:
+				set metadata value "submerged" of {_player} to true
+				apply potion of water breathing without any particles to {_player} for Time("%{_oxygen}% seconds")
+
+
+	#	Flight
+	if {_fuel} > 0:
+		AccessoryFlightCheck({_player}, {_fuel})
+
+
+
+
+
+
+
+function GetAccessorySlot(player: player, slot: integer) :: item:
+	if {accessories::%uuid of {_player}%::items::%{_slot}%} is set:
+		return {accessories::%uuid of {_player}%::items::%{_slot}%}
+#	loop {forge::accessories_list::*}:
+#		if {accessories::%uuid of {_player}%::items::%{_slot}%} is {item::%loop-value%}:
+#			return "%loop-value%"
+
+function GetAccessoryItem(item: item) :: string:
+	loop {forge::accessories_list::*}:
+		if {_item} is {item::%loop-value%}:
+			return "%loop-value%"
+
+function WearsAccessory(player: player, accessory: string) :: boolean:
+	loop 4 times:
+		if {accessories::%uuid of {_player}%::items::%loop-iteration%} is {item::%{_accessory}%}:
+			return true
+
+function GetAccessoryAttributes(player: player) :: objects:
+	loop 4 times:
+
+		#	Generated artifacts
+		set {_item} to {accessories::%uuid of {_player}%::items::%loop-iteration%}
+		loop {-stats::*}:
+			set {_stat} to loop-value-2
+			if int tag {_stat} of custom nbt of {_item} is set:
+				set {_value} to int tag {_stat} of custom nbt of {_item}
+				add {_value} to {_%loop-value-2%}
+			if boolean tag {_stat} of custom nbt of {_item} is true:
+				set {_%loop-value-2%} to true
+#			send "%{_stat}%: %{_value}%" to {_player}
+		
+			add {_%{_stat}%} to {_all::*}
+
+
+		#	Pre-made artifacts
+		set {_item} to GetCustomItemId({accessories::%uuid of {_player}%::items::%loop-iteration%})
+		loop {-stats::*}:
+			if {forge::item::%{_item}%::%loop-value-2%} is set:
+				add loop-value-2 to {_all::*}
+	return {_all::*}
+
+function IsAccessory(item: item) :: boolean:
+	if boolean tag "accessory" of custom nbt of {_item} is true:
+		return true
+	loop {forge::accessories_list::*}:
+		set {_accessory} to loop-value
+		if {forge::item::%{_accessory}%::*} is set:
+			if type of {_item} is type of {item::%{_accessory}%}:
+				if custom model data of {_item} is custom model data of {item::%{_accessory}%}:
+					return true
+	return false
+
+
+
+
+function AccessoryFlightCheck(player: player, fuel: integer):
+	if {_player}'s world contains "dungeons":
+		stop
+	loop 10 times:
+		if {_player} is not flying:
+			if {_player} is sneaking:
+				if metadata value "fuel" of {_player} > 0:
+					reset {_player}'s velocity
+					set {_loc} to location of {_player}
+					set pitch of {_loc} to 0
+					set {_v} to vector from {_loc} to location 1 meter in front of {_loc}
+					push {_player} upwards with speed 0.5
+					push {_player} {_v} with speed 0.4
+					set metadata value "fuel" of {_player} to metadata value "fuel" of {_player} - 1
+					play sound "item.bucket.empty_lava" with volume 0.3 and pitch 2 at {_player}
+					draw 5 flame at {_player} with offset vector(0, 0, 0) with extra 0.2
+					draw 1 cloud at {_player} with offset vector(0, 0, 0) with extra 0.2
+
+		if {_player} is on ground:
+			set metadata value "fuel" of {_player} to {_fuel}
+
+		wait 0.1 second
+
+
+
+
+
+
+
+
+function OpenAccessoriesMenu(player: player):
+	play sound "item.armor.equip_diamond" with volume 0.8 and pitch 1.5 to {_player}
+	set metadata value "accessories_menu" of {_player} to chest inventory with 3 rows named "&f"
+	set slot 0 of metadata value "accessories_menu" of {_player} to stick with custom model data 1 named {-gear::menu::previous_menu}
+
+	set slot 11 of metadata value "accessories_menu" of {_player} to {accessories::%uuid of {_player}%::items::1}
+	set slot 15 of metadata value "accessories_menu" of {_player} to {accessories::%uuid of {_player}%::items::2}
+	set slot 21 of metadata value "accessories_menu" of {_player} to {accessories::%uuid of {_player}%::items::3}
+	set slot 23 of metadata value "accessories_menu" of {_player} to {accessories::%uuid of {_player}%::items::4}
+
+	loop 8 times:
+		set slot 0 + loop-number of metadata value "accessories_menu" of {_player} to stick with custom model data 100 named " "
+	set slot 9 of metadata value "accessories_menu" of {_player} to stick with custom model data 100 named " "
+	set slot 10 of metadata value "accessories_menu" of {_player} to stick with custom model data 100 named " "
+	loop 3 times:
+		set slot 11 + loop-number of metadata value "accessories_menu" of {_player} to stick with custom model data 100 named " "
+	set slot 16 of metadata value "accessories_menu" of {_player} to stick with custom model data 100 named " "
+	set slot 17 of metadata value "accessories_menu" of {_player} to stick with custom model data 100 named " "
+	loop 3 times:
+		set slot 17 + loop-number of metadata value "accessories_menu" of {_player} to stick with custom model data 100 named " "
+	set slot 22 of metadata value "accessories_menu" of {_player} to stick with custom model data 100 named " "
+	loop 3 times:
+		set slot 23 + loop-number of metadata value "accessories_menu" of {_player} to stick with custom model data 100 named " "
+
+	set {_speed_percentage} to placeholder "aureliumskills_speed_int" from {_player} parsed as integer
+	set {_stats_item} to stick with custom model data 100 named {-gear::menu::your_stats}
+	
+
+	set {_stats::*} to "strength", "health", "regeneration", "luck", "wisdom", "toughness", "crit_chance", "crit_damage" and "speed"
+	loop {_stats::*}:
+		set {_stat} to loop-value
+		set {_value} to placeholder "aureliumskills_%{_stat}%_int" from {_player}
+		set {_msg} to {-gear::menu::%{_stat}%}
+		replace all "VALUE" with {_value} in {_msg}
+		set line 1+loop-iteration of lore of {_stats_item} to {_msg}
+	
+	set slot 3 of metadata value "accessories_menu" of {_player} to {_stats_item}
+	set slot 4 of metadata value "accessories_menu" of {_player} to {_stats_item}
+	set slot 5 of metadata value "accessories_menu" of {_player} to {_stats_item}
+	set slot 13 of metadata value "accessories_menu" of {_player} to {_stats_item}
+
+	set {_about} to stick with custom model data 11 named {-gear::menu::about_gear::name}
+	loop {-gear::menu::about_gear::lore::*}:
+		set line loop-iteration of lore of {_about} to loop-value
+	set slot 8 of metadata value "accessories_menu" of {_player} to {_about}
+
+	open (metadata value "accessories_menu" of {_player}) to {_player}
+
+function RefreshAccessoriesMenu(player: player):
+
+	set slot 11 of metadata value "accessories_menu" of {_player} to {accessories::%uuid of {_player}%::items::1}
+	set slot 15 of metadata value "accessories_menu" of {_player} to {accessories::%uuid of {_player}%::items::2}
+	set slot 21 of metadata value "accessories_menu" of {_player} to {accessories::%uuid of {_player}%::items::3}
+	set slot 23 of metadata value "accessories_menu" of {_player} to {accessories::%uuid of {_player}%::items::4}
+
+	set {_speed_percentage} to placeholder "aureliumskills_speed_int" from {_player} parsed as integer
+	set {_stats_item} to stick with custom model data 100 named {-gear::menu::your_stats}
+	set line 2 of lore of {_stats_item} to "<##b12222>  Strength &f%placeholder "aureliumskills_strength_int" from {_player}%"
+	set line 3 of lore of {_stats_item} to "<##df5252>❤ Health &f%placeholder "aureliumskills_health_int" from {_player}%"
+	set line 4 of lore of {_stats_item} to "<##f2601c>  Regeneration &f%placeholder "aureliumskills_regeneration_int" from {_player}%"
+	set line 5 of lore of {_stats_item} to "<##4cb61b> Luck &f%placeholder "aureliumskills_luck_int" from {_player}%"
+	set line 6 of lore of {_stats_item} to "<##6586e8> Wisdom &f%placeholder "aureliumskills_wisdom_int" from {_player}%"
+	set line 7 of lore of {_stats_item} to "<##58d09c>  Toughness &f%placeholder "aureliumskills_toughness_int" from {_player}%"
+	set line 8 of lore of {_stats_item} to "<##c649e6>⌘ Crit Chance &f+%placeholder "aureliumskills_crit_chance_int" from {_player}%%%"
+	set line 9 of lore of {_stats_item} to "<##db2e76> Crit Damage &f+%placeholder "aureliumskills_crit_damage_int" from {_player}%%%"
+	set line 10 of lore of {_stats_item} to "&f Speed &f+%{_speed_percentage}%%%"
+	set slot 3 of metadata value "accessories_menu" of {_player} to {_stats_item}
+	set slot 4 of metadata value "accessories_menu" of {_player} to {_stats_item}
+	set slot 5 of metadata value "accessories_menu" of {_player} to {_stats_item}
+	set slot 13 of metadata value "accessories_menu" of {_player} to {_stats_item}
+
+	open (metadata value "accessories_menu" of {_player}) to {_player}

@@ -1,0 +1,1625 @@
+#import:
+#	java.lang.management.ManagementFactory
+#	java.lang.management.OperatingSystemMXBean
+#	oshi.SystemInfo
+#	oshi.hardware.CentralProcessor
+#	oshi.hardware.HardwareAbstractionLayer
+#	oshi.hardware.ProcessorIdentifier
+
+#command /hardware:
+#	permission: admin
+#	trigger:
+#		send ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors() to player
+#		set {_oshi} to new oshi.SystemInfo()
+#		send {_oshi}.getHardware().getProcessor().getProcessorIdentifier().getName() to player
+
+
+on load:
+	clear {-default_plugins::*}
+	add "Citizens" to {-default_plugins::*}
+	add "TAB" to {-default_plugins::*}
+	add "MythicMobs" to {-default_plugins::*}
+	add "ModelEngine" to {-default_plugins::*}
+
+	add "AdventureCore" to {-default_plugins::*}
+	add "AntiPopup" to {-default_plugins::*}
+	add "AuraSkills" to {-default_plugins::*}
+	add "BestTools" to {-default_plugins::*}
+	add "BetonQuest" to {-default_plugins::*}
+	add "Chunky" to {-default_plugins::*}
+	add "CMILib" to {-default_plugins::*}
+	add "CommandPanels" to {-default_plugins::*}
+	add "ConsoleSpamFixReborn" to {-default_plugins::*}
+	add "DecentHolograms" to {-default_plugins::*}
+	add "Essentials" to {-default_plugins::*}
+	add "ExcellentEnchants" to {-default_plugins::*}
+	add "GriefPrevention" to {-default_plugins::*}
+	add "InteractionVisualizer" to {-default_plugins::*}
+	add "LibsDisguises" to {-default_plugins::*}
+	add "LuckPerms" to {-default_plugins::*}
+	add "Lumberjack" to {-default_plugins::*}
+	add "Multiverse-Core" to {-default_plugins::*}
+	add "nightcore" to {-default_plugins::*}
+	add "PlaceholderAPI" to {-default_plugins::*}
+	add "PlayerAuctions" to {-default_plugins::*}
+	add "ProtocolLib" to {-default_plugins::*}
+	add "SkBee" to {-default_plugins::*}
+	add "SkinsRestorer" to {-default_plugins::*}
+	add "Skript" to {-default_plugins::*}
+	add "skript-placeholders" to {-default_plugins::*}
+	add "skript-reflect" to {-default_plugins::*}
+	add "skript-yaml" to {-default_plugins::*}
+	add "Vault" to {-default_plugins::*}
+	add "ViaVersion" to {-default_plugins::*}
+	add "WorldEdit" to {-default_plugins::*}
+	add "WorldGuard" to {-default_plugins::*}
+
+	wait 3 seconds
+	loop {-list::*}:
+		if script loop-value is not loaded:
+			stop the server
+
+
+
+every 0.15 second:
+	if difference between metadata value "wait" of block at location(0,0,0,"world") and now < 2 second:
+		stop
+	add 1 to {ui::animation::setup_update_available}
+	if {ui::animation::setup_update_available} >= 9:
+		set {ui::animation::setup_update_available} to 1
+		set metadata value "wait" of block at location(0,0,0,"world") to now
+
+every second:
+	loop {-players::*}:
+		AnimateDashboard(loop-value)
+
+function AnimateDashboard(player: player):
+	if metadata value "dashboard:page" of {_player} is 1:
+		if {_player} is op:
+			loop 10 times:
+				if metadata value "dashboard:page" of {_player} is 1:
+					if {_player}'s current inventory is not (metadata value "configuration_wizard_menu" of {_player}):
+						stop
+					if DependencyCheck() is true:
+						if UpdateAvailable() is true:
+							set {_installation_status_ui} to "%placeholder "ui_setup_update_available"%"
+	#						set name of {_player}'s current inventory to "&f%{_installation_status_ui}%%{_performance}%"
+							set metadata value "configuration_wizard_menu" of {_player} to chest inventory with 6 rows named "&f%{_installation_status_ui}%%{_performance}%"
+	#						open (metadata value "configuration_wizard_menu" of {_player}) to {_player}
+							DashboardMenu({_player}, 1)
+						else:
+							exit loop
+					else:
+						exit loop
+				else:
+					exit loop
+				wait 0.1 second
+				if metadata value "dashboard:page" of {_player} is not 1:
+					stop
+
+
+
+
+
+on tab complete of "ignoreplugin":
+	set {_plugins::*} to {-default_plugins::*}
+	remove {ignored_plugins::*} from {_plugins::*}
+	set tab completions for position 1 to {_plugins::*}
+
+on tab complete of "unignoreplugin":
+	set tab completions for position 1 to {ignored_plugins::*}
+
+command /ignoreplugin [<text>]:
+	permission: admin
+	trigger:
+		if {-default_plugins::*} contains arg-1:
+			if {ignored_plugins::*} doesn't contain arg-1:
+				add arg-1 to {ignored_plugins::*}
+				send "Added &e%arg-1% &fto the list of ignored plugins." to sender
+				send "&7We won't check whether it's installed anymore!" to sender
+
+command /unignoreplugin [<text>]:
+	permission: admin
+	trigger:
+		if {ignored_plugins::*} contains arg-1:
+			remove arg-1 from {ignored_plugins::*}
+			send "&aRemoved &e%arg-1% &afrom the list of ignored plugins." to sender
+			send "&7We will be monitoring if it's installed for you!" to sender
+
+
+function DependencyCheck() :: boolean:
+#	return false
+	
+	set {_plugins::*} to {-default_plugins::*}
+	remove {ignored_plugins::*} from {_plugins::*}
+	
+	delete {dependency_check::log::*}
+
+	if placeholder "server_version" is not "1.21.4":
+		add "wrong_paper_version" to {dependency_check::log::*}
+
+	if placeholder "server_online_spawn" is "-1":
+		add "missing_world:spawn" to {dependency_check::log::*}
+	if placeholder "server_online_dungeons" is "-1":
+		add "missing_world:dungeons" to {dependency_check::log::*}
+	if placeholder "server_online_world" is "-1":
+		add "missing_world:world" to {dependency_check::log::*}
+	
+	loop {_plugins::*}:
+		if plugin loop-value is not enabled:
+			add "missing_plugin:%loop-value%" to {dependency_check::log::*}
+
+	if {dependency_check::log::*} is set:
+		return false
+	
+	return true
+
+
+function PerformanceCheck() :: boolean:
+#	return false
+	delete {performance_check::log::*}
+	
+	if placeholder "server_tps_5" parsed as number < 19:
+		add "low_tps" to {performance_check::log::*}
+	if placeholder "server_ram_max" parsed as number < 4608:
+		add "too_little_ram" to {performance_check::log::*}
+	
+	if {performance_check::log::*} is set:
+		return false
+	return true
+
+
+
+function DashboardErrorNotification(player: player):
+	if {_player} has permission "admin":
+		if DependencyCheck() is false:
+			set {_pass} to true
+		if PerformanceCheck() is false:
+			set {_pass} to true
+		if {_pass} is true:
+			wait 2 second
+			if metadata value "dashboard:error_notification:date" of {_player} is set:
+				if difference between metadata value "dashboard:error_notification:date" of {_player} and now > 6 hours:
+					play sound "custom.ui.authorization_fail" with volume 0.5 and pitch 1 to {_player}
+					set metadata value "dashboard:error_notification:date" of {_player} to now
+			else:
+				play sound "custom.ui.authorization_fail" with volume 0.5 and pitch 1 to {_player}
+				set metadata value "dashboard:error_notification:date" of {_player} to now
+			send " " to {_player}
+			send " " to {_player}
+			send "&cWe have detected issues with your server, check &e/dashboard" to {_player}
+			send " " to {_player}
+
+			send "&cWe have detected issues with your server, check &e/dashboard" to console
+
+command /dashboard:
+	aliases: installationwizard, wizard, iwizard, configurationwizard, cwizard
+	trigger:
+		if {server::test_server} is true:
+			DashboardMenu(player, 1)
+		else:
+			if LicenseAuthorized() is true:
+				if sender doesn't have permission "admin":
+					send "&f &cYou don't have the necessary permission!"
+					stop
+			DashboardMenu(sender, 1)
+
+function DashboardMenu(player: player, page: integer):
+	delete metadata value "configuration_wizard_menu" of {_player}
+	if metadata value "dashboard:page" of {_player} is not set:
+		set metadata value "dashboard:page" of {_player} to {_page}
+	if {zx8fg6h459} is not set:
+		set {zx8fg6h459} to "4hd7er"
+	if {_page} is 1:
+		set {_installation_status_ui} to ""
+		if DependencyCheck() is true:
+			set {_installation_status_ui} to ""
+			if LicenseAuthorized() is true:
+				if UpdateAvailable() is true:
+					set {_installation_status_ui} to "%placeholder "ui_setup_update_available"%"
+
+		set {_performance} to ""
+		if PerformanceCheck() is true:
+			if DependencyCheck() is true:
+				set {_performance} to "  "
+			else:
+				set {_performance} to ""
+		if AuthorizationServerOnline() is true:
+			if LicenseAuthorized() is false:
+				set {_label} to "  "
+				set {_button} to ""
+			else:
+				set {_label} to ""
+				set {_button} to "  "
+		else:
+			set {_label} to "  "
+			set {_button} to ""
+
+		set metadata value "configuration_wizard_menu" of {_player} to chest inventory with 6 rows named "&f%{_installation_status_ui}%%{_performance}%%{_label}%%{_button}%"
+	if {_page} is 2:
+		if metadata value "pregeneration:active" of block at location(0,0,0,"world") is not set:
+			if placeholder "chunky_task_pregen_running_world" is "true":
+				set metadata value "pregeneration:active" of block at location(0,0,0,"world") to true
+			if placeholder "chunky_task_pregen_running_world" is "false":
+				set metadata value "pregeneration:active" of block at location(0,0,0,"world") to false
+		if metadata value "pregeneration:active" of block at location(0,0,0,"world") is true:
+			set metadata value "configuration_wizard_menu" of {_player} to chest inventory with 6 rows named "&f"
+		else:
+			set metadata value "configuration_wizard_menu" of {_player} to chest inventory with 6 rows named "&f"
+
+		set {_percentage} to placeholder "chunky_task_pregen_percent_world" parsed as number
+#		set {_percentage} to 100
+		if {_percentage} is 100:
+			set metadata value "configuration_wizard_menu" of {_player} to chest inventory with 6 rows named "&f"
+	if {_page} is 3:
+		set metadata value "configuration_wizard_menu" of {_player} to chest inventory with 6 rows named "&f"
+	if {_page} is 4:
+		set metadata value "configuration_wizard_menu" of {_player} to chest inventory with 6 rows named "&f"
+	if {_page} is 5:
+		set metadata value "configuration_wizard_menu" of {_player} to chest inventory with 6 rows named "&f"
+	
+
+	if metadata value "dashboard:page" of {_player} is not {_page}:
+		if {_page} > metadata value "dashboard:page" of {_player}:
+			play sound "custom.ui.click" with volume 0.35 and pitch 1.2 to {_player}
+		else:
+			play sound "custom.ui.click" with volume 0.35 and pitch 1 to {_player}
+		set metadata value "dashboard:page" of {_player} to {_page}
+
+	set {_previous_page} to stick with model data 1 named "&c← Previous Page"
+	set {_next_page} to stick with model data 2 named "&aNext Page →"
+
+
+
+	if {_page} is 1:			#	Dashboard
+
+		set {_installation_status} to stick with custom model data 100 named "&fDetected problems:"
+		set line 1 of lore of {_installation_status} to ""
+
+		if LicenseAuthorized() is true:
+			if UpdateAvailable() is true:
+				if {dependency_check::log::*} is not set:
+					set name of {_installation_status} to "&6&lUpdate Available!"
+					set line 2 of lore of {_installation_status} to "&fInstalled version: &a%{setup::version}%"
+					set line 3 of lore of {_installation_status} to "&fLatest update: &e&l%{setup::version::update_new_version}%"
+					set line 5 of lore of {_installation_status} to "&a&lClick to view the update!"
+
+
+		if {dependency_check::log::*} contains "wrong_paper_version":
+			add "&f• &cYou're using a wrong Paper version! Please install 1.21.4" to lore of {_installation_status}
+
+		loop {dependency_check::log::*}:
+			if loop-value contains "missing_world:":
+				set {_world::*} to loop-value split at ":"
+				add {_world::2} to {_missing_worlds::*}
+		loop {_missing_worlds::*}:
+			add "&c❌ &fMissing world: &c%loop-value%" to lore of {_installation_status}
+
+		loop {dependency_check::log::*}:
+			if loop-value contains "missing_plugin:":
+				set {_plugin::*} to loop-value split at ":"
+				add {_plugin::2} to {_missing_plugins::*}
+		loop {_missing_plugins::*}:
+			add "&c❌ &fMissing &c'%loop-value%' &fplugin" to lore of {_installation_status}
+		if {_missing_plugins::*} is set:
+			add " " to lore of {_installation_status}
+			add "&8Use &7/ignoreplugin name &8to ignore warnings" to lore of {_installation_status}
+
+		set {_performance_status} to stick with custom model data 100 named "&fDetected problems:"
+		set line 1 of lore of {_performance_status} to ""
+		
+		if {performance_check::log::*} contains "low_tps":
+			add "&cLow TPS detected: &f%placeholder "server_tps_5"%" to lore of {_performance_status}
+			add "" to lore of {_performance_status}
+			add "&fMost common problems:" to lore of {_performance_status}
+			add "&7• Temporary lag - nothing to worry about." to lore of {_performance_status}
+			add "&7• Weak hardware - especially low end CPU" to lore of {_performance_status}
+			add "&7or too little RAM (less than 8GB)" to lore of {_performance_status}
+			add "&7• Shared hosting - during peak hours you might" to lore of {_performance_status}
+			add "&7have a bad performance if using a shared host." to lore of {_performance_status}
+			add "" to lore of {_performance_status}
+			add "&7Consider pregenerating your world to improve performance." to lore of {_performance_status}
+
+		if {performance_check::log::*} contains "too_little_ram":
+			set {_detected_ram} to placeholder "server_ram_max" parsed as number / 1024
+			add "&cYour RAM amount might be too low" to lore of {_performance_status}
+			add "&7Recommended: 6GB, Detected: %{_detected_ram}%GB" to lore of {_performance_status}
+
+
+
+		if LicenseAuthorized() is false:
+			set {_authorize_license} to stick with custom model data 100 named "&6Activate Unlimited Adventures"
+			set line 2 of lore of {_authorize_license} to "&71. Join our Discord server and &f#verify-yourself"
+			set line 3 of lore of {_authorize_license} to "&72. Open &f#your-license &7channel and &aGenerate License Key"
+			set line 4 of lore of {_authorize_license} to "&73. Copy your license key (Normal Key)"
+			set line 6 of lore of {_authorize_license} to "&a&l4. Click to insert your license key"
+			loop 27 times:
+				set slot 17+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_authorize_license}
+
+		if AuthorizationServerOnline() is false:
+			set {_authorize_license} to stick with custom model data 100 named "&cI have trouble accessing the authorization server"
+			set line 2 of lore of {_authorize_license} to "&7Your server might not be connected to internet."
+			set line 3 of lore of {_authorize_license} to "&7If your server has connection, the authorization server might be offline."
+			set line 5 of lore of {_authorize_license} to "&7If you are certain you have internet connection,"
+			set line 6 of lore of {_authorize_license} to "&7please report this problem on our Discord. Thank You."
+			loop 27 times:
+				set slot 17+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_authorize_license}
+
+
+		if LicenseAuthorized() is true:
+			if UpdateAvailable() is true:
+				loop 9 times:
+					set slot 0+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_installation_status}
+		if DependencyCheck() is false:
+			loop 9 times:
+				set slot 0+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_installation_status}
+		if PerformanceCheck() is false:
+			loop 9 times:
+				set slot 8+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_performance_status}
+
+#		if LicenseAuthorized() is true:
+#			set slot 31 of metadata value "configuration_wizard_menu" of {_player} to diamond
+		
+		if LicenseAuthorized() is true:
+			loop 7 times:
+				set slot 45+loop-number of metadata value "configuration_wizard_menu" of {_player} to stick with custom model data 100 named "&aNext Page →"
+
+
+
+	if {_page} is 2:			#	World Settings
+
+		set {_world_border_icon} to grass block named "&fWorld Border Size"
+		set line 2 of lore of {_world_border_icon} to "&7How large should the playable area be?"
+		set line 4 of lore of {_world_border_icon} to "&7It's recommended to use a world border,"
+		set line 5 of lore of {_world_border_icon} to "&7otherwise your server might encounter"
+		set line 6 of lore of {_world_border_icon} to "&7issues with too big map file weight or lag."
+		set line 8 of lore of {_world_border_icon} to "&fCurrent map size: &e%{world_border::config::size}%x%{world_border::config::size}% &fblocks."
+		set line 9 of lore of {_world_border_icon} to "&fEstimated map file size: &e%MapFileWeight({world_border::config::size})%"
+
+		set {_world_border_background} to stick with custom model data 100 named "&fCurrent map size: &e%{world_border::config::size}%x%{world_border::config::size}% &fblocks."
+		set line 1 of lore of {_world_border_background} to "&fEstimated map file size: &e%MapFileWeight({world_border::config::size})%"
+		set line 3 of lore of {_world_border_background} to "&c← Click left half to decrease &f| &aClick right half to increase →"
+
+		set {_world_border_splitter} to stick with custom model data 26 named "&fCurrent map size: &e%{world_border::config::size}%x%{world_border::config::size}% &fblocks."
+		set lore of {_world_border_splitter} to lore of {_world_border_background}
+
+		set {_world_border_splitter_start} to stick with custom model data 27 named "&fCurrent map size: &e%{world_border::config::size}%x%{world_border::config::size}% &fblocks."
+		set lore of {_world_border_splitter_start} to lore of {_world_border_background}
+
+		set {_world_border_progress} to stick with custom model data 28 named "&fCurrent map size: &e%{world_border::config::size}%x%{world_border::config::size}% &fblocks."
+		set lore of {_world_border_progress} to lore of {_world_border_background}
+
+		set {_world_border_progress_start} to stick with custom model data 29 named "&fCurrent map size: &e%{world_border::config::size}%x%{world_border::config::size}% &fblocks."
+		set lore of {_world_border_progress_start} to lore of {_world_border_background}
+
+
+		set {_rtp_icon} to {item::portal_stone} named "&fRandom Teleport Range"
+		clear lore of {_rtp_icon}
+		set line 2 of lore of {_rtp_icon} to "&7How large should the RTP range be?"
+		set line 3 of lore of {_rtp_icon} to "&7Bigger range will spread your players"
+		set line 4 of lore of {_rtp_icon} to "&7more around the map when they use RTP."
+		set line 6 of lore of {_rtp_icon} to "&fCurrent RTP range: &e%{rtp::config::range}%x%{rtp::config::range}% &fblocks."
+
+		set {_rtp_background} to stick with custom model data 100 named "&fCurrent RTP range: &e%{rtp::config::range}%x%{rtp::config::range}% &fblocks."
+		set line 2 of lore of {_rtp_background} to "&c← Click left half to decrease &f| &aClick right half to increase →"
+
+		set {_rtp_splitter} to stick with custom model data 26 named "&fCurrent RTP range: &e%{rtp::config::range}%x%{rtp::config::range}% &fblocks."
+		set lore of {_rtp_splitter} to lore of {_rtp_background}
+
+		set {_rtp_splitter_start} to stick with custom model data 27 named "&fCurrent RTP range: &e%{rtp::config::range}%x%{rtp::config::range}% &fblocks."
+		set lore of {_rtp_splitter_start} to lore of {_rtp_background}
+
+		set {_rtp_progress} to stick with custom model data 28 named "&fCurrent RTP range: &e%{rtp::config::range}%x%{rtp::config::range}% &fblocks."
+		set lore of {_rtp_progress} to lore of {_rtp_background}
+
+		set {_rtp_progress_start} to stick with custom model data 29 named "&fCurrent RTP range: &e%{rtp::config::range}%x%{rtp::config::range}% &fblocks."
+		set lore of {_rtp_progress_start} to lore of {_rtp_background}
+
+		set {_rtp} to lime stained glass pane named "&fRandom Teleport Range"
+		set lore of {_rtp} to lore of {_rtp_background}
+
+		set {_start} to stick with custom model data 165 named "&a&lStart Pre-generating"
+		set {_stop} to stick with custom model data 166 named "&c&lStop Pre-generating"
+
+
+
+
+
+		if metadata value "pregeneration:active" of block at location(0,0,0,"world") is true:
+			set {_percentage} to placeholder "chunky_task_pregen_percent_world" parsed as number
+#			set {_percentage} to 100
+			set {_hours} to placeholder "chunky_task_pregen_hours_world" parsed as number
+
+			set {_pregenerate_map_progress} to stick with custom model data 100 named "&7Progress: &f%round({_percentage})%%%"
+			if {_hours} is set:
+				if {_hours} < 1:
+					set line 1 of lore of {_pregenerate_map_progress} to "&7Estimated time left: &f<1 hour"
+				if {_hours} > 1:
+					set line 1 of lore of {_pregenerate_map_progress} to "&7Estimated time left: &f%{_hours}% hours"
+				if {_hours} is 1:
+					set line 1 of lore of {_pregenerate_map_progress} to "&7Estimated time left: &f%{_hours}% hour"
+			loop 7 times:
+				set slot 27+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_pregenerate_map_progress}
+
+			if {_percentage} > 14.3:
+				set slot 28 of metadata value "configuration_wizard_menu" of {_player} to {_pregenerate_map_progress} with custom model data 167
+			if {_percentage} > 14.3 * 2:
+				set slot 29 of metadata value "configuration_wizard_menu" of {_player} to {_pregenerate_map_progress} with custom model data 169
+			if {_percentage} > 14.3 * 3:
+				set slot 30 of metadata value "configuration_wizard_menu" of {_player} to {_pregenerate_map_progress} with custom model data 169
+			if {_percentage} > 14.3 * 4:
+				set slot 31 of metadata value "configuration_wizard_menu" of {_player} to {_pregenerate_map_progress} with custom model data 169
+			if {_percentage} > 14.3 * 5:
+				set slot 32 of metadata value "configuration_wizard_menu" of {_player} to {_pregenerate_map_progress} with custom model data 169
+			if {_percentage} >= 14.3 * 6:
+				set slot 33 of metadata value "configuration_wizard_menu" of {_player} to {_pregenerate_map_progress} with custom model data 169
+			if {_percentage} >= 14.3 * 6.9:
+				set slot 34 of metadata value "configuration_wizard_menu" of {_player} to {_pregenerate_map_progress} with custom model data 168
+
+		set {_pregenerate_map_info} to stick with custom model data 100 named "&fWhat is pre-generation?"
+		set line 2 of lore of {_pregenerate_map_info} to "&7Pre-generation prepares all map chunks"
+		set line 3 of lore of {_pregenerate_map_info} to "&7in advance, before any players join."
+		set line 5 of lore of {_pregenerate_map_info} to "&fBenefits or pre-generating chunks:"
+		set line 6 of lore of {_pregenerate_map_info} to "&f• &7Lowers server strain by reducing live chunk generation,"
+		set line 7 of lore of {_pregenerate_map_info} to "&f• &7Eases load on weaker CPUs,"
+		set line 8 of lore of {_pregenerate_map_info} to "&f• &7Enables instant RTP by eliminating chunk generation delays."
+		set line 10 of lore of {_pregenerate_map_info} to "&c&lWarning"
+		set line 11 of lore of {_pregenerate_map_info} to "&7Process of pre-generating world will put a strain on your server."
+		set line 12 of lore of {_pregenerate_map_info} to "&7It's best to do it while no one is playing."
+
+		if metadata value "pregeneration:active" of block at location(0,0,0,"world") is true:
+			set slot 27 of metadata value "configuration_wizard_menu" of {_player} to {_stop}
+		else:
+			set slot 27 of metadata value "configuration_wizard_menu" of {_player} to {_start}
+
+
+
+		#	World Border Slider
+
+		set slot 9 of metadata value "configuration_wizard_menu" of {_player} to {_world_border_icon}
+		loop 8 times:
+			set slot 9+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_world_border_background}
+		if {world_border::config::size} >= 1000:
+			if {world_border::config::size} < 2500:
+				set {_bar} to 1
+		if {world_border::config::size} >= 2500:
+			if {world_border::config::size} < 5000:
+				set {_bar} to 2
+		if {world_border::config::size} >= 5000:
+			if {world_border::config::size} < 10000:
+				set {_bar} to 3
+		if {world_border::config::size} >= 10000:
+			if {world_border::config::size} < 15000:
+				set {_bar} to 4
+		if {world_border::config::size} >= 15000:
+			if {world_border::config::size} < 20000:
+				set {_bar} to 5
+		if {world_border::config::size} >= 20000:
+			if {world_border::config::size} < 30000:
+				set {_bar} to 6
+		if {world_border::config::size} >= 30000:
+			if {world_border::config::size} < 50000:
+				set {_bar} to 7
+		if {world_border::config::size} >= 50000:
+			set {_bar} to 8
+
+		loop {_bar} times:
+			set slot 9+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_world_border_progress}
+		if {_bar} is 1:
+			set slot 9+{_bar} of metadata value "configuration_wizard_menu" of {_player} to {_world_border_splitter_start}
+		else:
+			set slot 9+{_bar} of metadata value "configuration_wizard_menu" of {_player} to {_world_border_splitter}
+		if {_bar} > 1:
+			set slot 10 of metadata value "configuration_wizard_menu" of {_player} to {_world_border_progress_start}
+
+
+		#	RTP Slider
+
+		set slot 18 of metadata value "configuration_wizard_menu" of {_player} to {_rtp_icon}
+		loop 8 times:
+			set slot 18+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_rtp_background}
+		if {rtp::config::range} >= 1000:
+			if {rtp::config::range} < 2500:
+				set {_bar} to 1
+		if {rtp::config::range} >= 2500:
+			if {rtp::config::range} < 5000:
+				set {_bar} to 2
+		if {rtp::config::range} >= 5000:
+			if {rtp::config::range} < 10000:
+				set {_bar} to 3
+		if {rtp::config::range} >= 10000:
+			if {rtp::config::range} < 15000:
+				set {_bar} to 4
+		if {rtp::config::range} >= 15000:
+			if {rtp::config::range} < 20000:
+				set {_bar} to 5
+		if {rtp::config::range} >= 20000:
+			if {rtp::config::range} < 30000:
+				set {_bar} to 6
+		if {rtp::config::range} >= 30000:
+			if {rtp::config::range} < 50000:
+				set {_bar} to 7
+		if {rtp::config::range} >= 50000:
+			set {_bar} to 8
+
+		loop {_bar} times:
+			set slot 18+loop-number of metadata value "configuration_wizard_menu" of {_player} to {_rtp_progress}
+		if {_bar} is 1:
+			set slot 18+{_bar} of metadata value "configuration_wizard_menu" of {_player} to {_rtp_splitter_start}
+		else:
+			set slot 18+{_bar} of metadata value "configuration_wizard_menu" of {_player} to {_rtp_splitter}
+		if {_bar} > 1:
+			set slot 19 of metadata value "configuration_wizard_menu" of {_player} to {_rtp_progress_start}
+		
+
+		set slot 45 of metadata value "configuration_wizard_menu" of {_player} to {_previous_page}
+		set slot 53 of metadata value "configuration_wizard_menu" of {_player} to {_next_page}
+		
+
+		set slot 35 of metadata value "configuration_wizard_menu" of {_player} to {_pregenerate_map_info}
+		
+
+
+		
+		
+
+	if {_page} is 3:			#	Gameplay
+
+
+		set {_tpa} to ender eye named "&fAllow /tpa"
+		clear lore of {_tpa}
+		set line 2 of lore of {_tpa} to "&7You can disable &e/tpa &7commands to make the"
+		set line 3 of lore of {_tpa} to "&7gameplay more immersive and survival-focused."
+		set line 5 of lore of {_tpa} to "&8Players can craft Sculk Portals in Workshop."
+		set line 7 of lore of {_tpa} to name of BooleanItem({teleportation::tpa::enabled})
+
+		set {_home} to white bed named "&fAllow /home"
+		clear lore of {_home}
+		set line 2 of lore of {_home} to "&7You can disable &e/home &7and &e/sethome &7commands to make"
+		set line 3 of lore of {_home} to "&7the gameplay more immersive and survival-focused."
+		set line 5 of lore of {_home} to "&8Players can craft Home Teleport Scrolls in Workshop."
+		set line 7 of lore of {_home} to name of BooleanItem({teleportation::home::enabled})
+
+		set {_rtp} to {item::portal_stone} named "&fAllow /rtp"
+		clear lore of {_rtp}
+		set line 2 of lore of {_rtp} to "&7You can disable &e/rtp &7commands to make the"
+		set line 3 of lore of {_rtp} to "&7gameplay more immersive and survival-focused."
+		set line 5 of lore of {_rtp} to "&8Players can craft Random Teleport Scrolls in Workshop."
+		set line 7 of lore of {_rtp} to name of BooleanItem({teleportation::rtp::enabled})
+
+		set {_replant_crops} to carrot named "&fReplant harvested crops"
+		set line 2 of lore of {_replant_crops} to "&7Allows players to harvest and automatically replant grown crops"
+		set line 3 of lore of {_replant_crops} to "&7with right mouse button as long as they have enough seeds."
+		set line 5 of lore of {_replant_crops} to name of BooleanItem({game::replant_crops})
+
+		set {_accessories_drop_on_death} to {item::vampire_signet} named "&fEquipped accessory items drop"
+		clear lore of {_accessories_drop_on_death}
+		set line 2 of lore of {_accessories_drop_on_death} to "&7Should equipped accessory items drop when player dies?"
+		set line 4 of lore of {_accessories_drop_on_death} to name of BooleanItem({forge::config::accessories_drop_on_death})
+
+		set {_sit_on_stairs} to oak stairs named "&fSitting on stairs"
+		clear lore of {_sit_on_stairs}
+		set line 2 of lore of {_sit_on_stairs} to "&7Should players be able to sit on stairs by right-clicking them?"
+		set line 4 of lore of {_sit_on_stairs} to name of BooleanItem({game::sitting_enabled})
+
+
+		
+
+
+		set slot 9 of metadata value "configuration_wizard_menu" of {_player} to {_tpa}
+		set slot 10 of metadata value "configuration_wizard_menu" of {_player} to {_home}
+		set slot 11 of metadata value "configuration_wizard_menu" of {_player} to {_rtp}
+		set slot 12 of metadata value "configuration_wizard_menu" of {_player} to {_replant_crops}
+		set slot 13 of metadata value "configuration_wizard_menu" of {_player} to {_accessories_drop_on_death}
+		set slot 14 of metadata value "configuration_wizard_menu" of {_player} to {_sit_on_stairs}
+		
+		set slot 18 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({teleportation::tpa::enabled}, "tpa")
+		set slot 19 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({teleportation::home::enabled}, "home")
+		set slot 20 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({teleportation::rtp::enabled}, "rtp")
+		set slot 21 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({game::replant_crops}, "replant_crops")
+		set slot 22 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({forge::config::accessories_drop_on_death}, "accessories_drop_on_death")
+		set slot 23 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({game::sitting_enabled}, "sitting_enabled")
+
+
+		set slot 45 of metadata value "configuration_wizard_menu" of {_player} to {_previous_page}
+		set slot 53 of metadata value "configuration_wizard_menu" of {_player} to {_next_page}
+
+
+	if {_page} is 4:			#	Visuals
+
+
+		set {_server_name} to writable book named "&fServer Name"
+		set line 2 of lore of {_server_name} to "&7Server name that's displayed"
+		set line 3 of lore of {_server_name} to "&7in various parts of the setup."
+		set line 5 of lore of {_server_name} to "&fCurrently: %colored {interface::server_name}%"
+		set line 7 of lore of {_server_name} to "&8Please note the server logo you see in your"
+		set line 8 of lore of {_server_name} to "&8ESC menu needs to be edited in resource pack."
+
+		set {_server_name_color_1} to writable book named "&fServer Name: Base Color"
+		set line 2 of lore of {_server_name_color_1} to "&7Base color of your server name."
+		set {_color} to colored "<%{colors::server_name}%>%{colors::server_name}%"
+		set line 4 of lore of {_server_name_color_1} to "&fCurrently: %{_color}%"
+
+		set {_server_name_color_2} to writable book named "&fServer Name: Highlight Color"
+		set line 2 of lore of {_server_name_color_2} to "&7Color of the highlight in the"
+		set line 3 of lore of {_server_name_color_2} to "&7server name animation on TAB."
+		set {_color} to colored "<%{colors::server_name_1}%>%{colors::server_name_1}%"
+		set line 5 of lore of {_server_name_color_2} to "&fCurrently: %{_color}%"
+
+		set {_server_name_color_3} to writable book named "&fServer Name: Second Highlight Color"
+		set line 2 of lore of {_server_name_color_3} to "&7Brighter shade of the highlight color"
+		set {_color} to colored "<%{colors::server_name_2}%>%{colors::server_name_2}%"
+		set line 4 of lore of {_server_name_color_3} to "&fCurrently: %{_color}%"
+
+		set {_adventure_apparel} to {item::adventure_backpack} named "&fRender backpacks & waist tools"
+		clear lore of {_adventure_apparel}
+		set line 2 of lore of {_adventure_apparel} to "&7Player's backpack is 3D rendered on his back."
+		set line 3 of lore of {_adventure_apparel} to "&7If player has any tool on his hotbar, it will"
+		set line 4 of lore of {_adventure_apparel} to "&7be displayed on his character model too."
+
+		set {_afk} to clock named "&fFullscreen AFK notification"
+		set line 2 of lore of {_afk} to "&7When a player is inactive for &e%{afk::config::afk_delay}%&7,"
+		set line 3 of lore of {_afk} to "&7the screen gets blacked out and a large"
+		set line 4 of lore of {_afk} to "&7text shows up, telling him to press"
+		set line 5 of lore of {_afk} to "&7anything to continue playing."
+		set line 7 of lore of {_afk} to "&8This feature doesn't have any specific"
+		set line 8 of lore of {_afk} to "&8purpose, we just believe it's a cool way to"
+		set line 9 of lore of {_afk} to "&8inform the player that he's currently AFK."
+
+		set {_play_days} to paper named "&fShow days played"
+		set line 2 of lore of {_play_days} to "&7When the sun rises, a text shows up"
+		set line 3 of lore of {_play_days} to "&7that informs the player how many"
+		set line 4 of lore of {_play_days} to "&7Minecraft days has he been playing."
+
+		set {_biome_name} to compass named "&fAnnounce biome name"
+		set line 2 of lore of {_biome_name} to "&7When player enters a biome, its name is"
+		set line 3 of lore of {_biome_name} to "&7displayed in the middle of the screen."
+
+		set {_top_screen_ui} to oak hanging sign named "&fDisplay Top Screen UI"
+		set line 2 of lore of {_top_screen_ui} to "&7Should we display the bossbar UI for players?"
+		set line 3 of lore of {_top_screen_ui} to "&7Each player can toggle it for himself in his Profile Menu."
+		set line 4 of lore of {_top_screen_ui} to "&7This option sets the default state."
+
+		set {_sidebar} to oak sign named "&fDisplay sidebar"
+		set line 2 of lore of {_sidebar} to "&7Should we display sidebar for players?"
+		set line 3 of lore of {_sidebar} to "&7Each player can toggle it for himself in his Profile Menu."
+		set line 4 of lore of {_sidebar} to "&7This option sets the default state."
+		set line 6 of lore of {_sidebar} to "&8We recommend leaving it hidden as that provides a cleaner UI."
+
+		set {_player_prefix} to name tag named "&fDisplay player prefix"
+		set line 2 of lore of {_player_prefix} to "&7Should the &f &7prefix be displayed?"
+		set line 4 of lore of {_player_prefix} to "&7This option sets the default state."
+		set line 4 of lore of {_player_prefix} to "&8We turn it OFF by default for a cleaner look."
+
+		set {_armor_glint} to nether star named "&fArmor glint particles"
+		set line 2 of lore of {_armor_glint} to "&7Should armor glint particles be enabled?"
+		set line 3 of lore of {_armor_glint} to "&7Diamond and netherite armor emit shine particles."
+
+		set {_cave_dust} to nether star named "&fCave dust particles"
+		set line 2 of lore of {_cave_dust} to "&7Should underground caves emit dust particles?"
+		set line 3 of lore of {_cave_dust} to "&7Deep and dark caves emit moody particles."
+
+		set {_animate_normal_blocks} to grass block named "&fAnimate normal blocks"
+		set line 2 of lore of {_animate_normal_blocks} to "&7Should placement of normal blocks be animated?"
+
+		set {_animate_tile_blocks} to chest named "&fAnimate tile blocks"
+		set line 2 of lore of {_animate_tile_blocks} to "&7Should placement of tile blocks be animated?"
+		set line 3 of lore of {_animate_tile_blocks} to "&7Example of tile blocks are chests, furnaces, etc."
+
+		set {_animate_custom_blocks} to {item::workshop} named "&fAnimate custom blocks"
+		clear lore of {_animate_custom_blocks}
+		set line 2 of lore of {_animate_custom_blocks} to "&7Should placement of custom blocks be animated?"
+		set line 3 of lore of {_animate_custom_blocks} to "&7Example of a custom block is the Workshop."
+
+
+
+
+
+
+
+
+		set slot 9 of metadata value "configuration_wizard_menu" of {_player} to {_server_name}
+		set slot 10 of metadata value "configuration_wizard_menu" of {_player} to {_server_name_color_1}
+		set slot 11 of metadata value "configuration_wizard_menu" of {_player} to {_server_name_color_2}
+		set slot 12 of metadata value "configuration_wizard_menu" of {_player} to {_server_name_color_3}
+		set slot 13 of metadata value "configuration_wizard_menu" of {_player} to {_adventure_apparel}
+		set slot 14 of metadata value "configuration_wizard_menu" of {_player} to {_afk}
+		set slot 15 of metadata value "configuration_wizard_menu" of {_player} to {_play_days}
+		set slot 16 of metadata value "configuration_wizard_menu" of {_player} to {_biome_name}
+		set slot 17 of metadata value "configuration_wizard_menu" of {_player} to {_top_screen_ui}
+		set slot 27 of metadata value "configuration_wizard_menu" of {_player} to {_sidebar}
+		set slot 28 of metadata value "configuration_wizard_menu" of {_player} to {_player_prefix}
+		set slot 29 of metadata value "configuration_wizard_menu" of {_player} to {_armor_glint}
+		set slot 30 of metadata value "configuration_wizard_menu" of {_player} to {_cave_dust}
+		set slot 31 of metadata value "configuration_wizard_menu" of {_player} to {_animate_normal_blocks}
+		set slot 32 of metadata value "configuration_wizard_menu" of {_player} to {_animate_tile_blocks}
+		set slot 33 of metadata value "configuration_wizard_menu" of {_player} to {_animate_custom_blocks}
+
+
+		set slot 18 of metadata value "configuration_wizard_menu" of {_player} to StringEditItem({interface::server_name}, "edit_server_name")
+		set slot 19 of metadata value "configuration_wizard_menu" of {_player} to StringEditItem({interface::server_name_color_1}, "edit_server_name_color_1")
+		set slot 20 of metadata value "configuration_wizard_menu" of {_player} to StringEditItem({interface::server_name_color_2}, "edit_server_name_color_2")
+		set slot 21 of metadata value "configuration_wizard_menu" of {_player} to StringEditItem({interface::server_name_color_3}, "edit_server_name_color_3")
+		set slot 22 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({backtools::config::enabled}, "adventure_apparel")
+		set slot 23 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({afk::config::detect_afk}, "detect_afk")
+		set slot 24 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({interface::print_day_count}, "print_day_count")
+		set slot 25 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({interface::print_biome_name}, "print_biome_name")
+		set slot 26 of metadata value "configuration_wizard_menu" of {_player} to YamlBooleanItem("plugins/TAB/config.yml, bossbar.hidden-by-default", "top_screen_ui", true)
+		set slot 36 of metadata value "configuration_wizard_menu" of {_player} to YamlBooleanItem("plugins/TAB/config.yml, scoreboard.hidden-by-default", "sidebar", true)
+		set slot 37 of metadata value "configuration_wizard_menu" of {_player} to PlayerPrefixBooleanItem("player_prefix")
+		set slot 38 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({particles::enabled::armor_glint}, "armor_glint")
+		set slot 39 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({particles::enabled::cave_dust}, "cave_dust")
+		set slot 40 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({game::animate_normal_blocks}, "animate_normal_blocks")
+		set slot 41 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({game::animate_tile_blocks}, "animate_tile_blocks")
+		set slot 42 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({game::animate_custom_blocks}, "animate_custom_blocks")
+
+
+
+
+
+
+
+		set slot 45 of metadata value "configuration_wizard_menu" of {_player} to {_previous_page}
+		set slot 53 of metadata value "configuration_wizard_menu" of {_player} to {_next_page}
+
+	if {_page} is 5:			#	Sounds
+		
+
+		set {_ambients_enabled} to spruce sapling named "&fPlay Ambients"
+		set line 2 of lore of {_ambients_enabled} to "&7Players hear detailed ambient sounds such"
+		set line 3 of lore of {_ambients_enabled} to "&7as wind, birds, insects, leaves rustling, etc."
+		set line 4 of lore of {_ambients_enabled} to "&7Biomes have unique ambients."
+		set line 5 of lore of {_ambients_enabled} to "&7You will hear different sounds at night"
+		set line 6 of lore of {_ambients_enabled} to "&7or when it's raining."
+
+		set {_chat_sound} to paper named "&fPlay Chat Message Sound"
+		set line 2 of lore of {_chat_sound} to "&7When someone sends a message on chat"
+		set line 3 of lore of {_chat_sound} to "&7a 'pop' sound is played to all players."
+
+		set {_command_argument_sound} to command block named "&fCommand Argument Sound"
+		set line 2 of lore of {_command_argument_sound} to "&7Whenever you are typing a command argument,"
+		set line 3 of lore of {_command_argument_sound} to "&7a 'pop' sound is being played each letter."
+
+		set {_hotbar_slot_sound} to bow named "&fHotbar slot sound"
+		set line 2 of lore of {_hotbar_slot_sound} to "&7Changing hotbar slots plays a tick sound."
+
+		set {_tool_draw_sound} to iron pickaxe named "&fTool draw sound"
+		set line 2 of lore of {_tool_draw_sound} to "&7Drawing various tools plays a unique sound."
+
+		set {_inventory_sounds} to iron ingot named "&fInventory sounds"
+		set line 2 of lore of {_inventory_sounds} to "&7Moving items around plays various sounds."
+
+		set {_block_interact} to furnace named "&fBasic block sounds"
+		set line 2 of lore of {_block_interact} to "&7Opening certain block inventories plays a tick sound."
+
+		set {_item_craft} to crafting table named "&fItem craft sound"
+		set line 2 of lore of {_item_craft} to "&7Crafting an item plays a unique sound."
+
+		set {_item_drop} to flint named "&fItem drop sound"
+		set line 2 of lore of {_item_drop} to "&7Plays a 'pop' sound when dropping items."
+
+
+
+		set slot 9 of metadata value "configuration_wizard_menu" of {_player} to {_ambients_enabled}
+		set slot 10 of metadata value "configuration_wizard_menu" of {_player} to {_chat_sound}
+		set slot 11 of metadata value "configuration_wizard_menu" of {_player} to {_command_argument_sound}
+		set slot 12 of metadata value "configuration_wizard_menu" of {_player} to {_hotbar_slot_sound}
+		set slot 13 of metadata value "configuration_wizard_menu" of {_player} to {_tool_draw_sound}
+		set slot 14 of metadata value "configuration_wizard_menu" of {_player} to {_inventory_sounds}
+		set slot 15 of metadata value "configuration_wizard_menu" of {_player} to {_block_interact}
+		set slot 16 of metadata value "configuration_wizard_menu" of {_player} to {_item_craft}
+		set slot 17 of metadata value "configuration_wizard_menu" of {_player} to {_item_drop}
+
+
+		set slot 18 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({-ambients::enabled}, "ambients_enabled")
+		set slot 19 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({-chat::chat_sound}, "chat_sound")
+		set slot 20 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({-chat::command_argument_sound}, "command_argument_sound")
+		set slot 21 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({sounds::hotbar_slot_sound}, "hotbar_slot_sound")
+		set slot 22 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({sounds::tool_draw_sound}, "tool_draw_sound")
+		set slot 23 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({sounds::inventory_sounds}, "inventory_sounds")
+		set slot 24 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({sounds::block_interact}, "block_interact")
+		set slot 25 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({sounds::item_craft}, "item_craft")
+		set slot 26 of metadata value "configuration_wizard_menu" of {_player} to BooleanItem({sounds::item_drop}, "item_drop")
+
+
+		set slot 45 of metadata value "configuration_wizard_menu" of {_player} to {_previous_page}
+
+
+
+	open (metadata value "configuration_wizard_menu" of {_player}) to {_player}
+
+
+
+
+
+function ToggleFeature(feature: string, player: player):
+
+	#	Gameplay
+
+	if {_feature} is "tpa":
+		set {teleportation::tpa::enabled} to ToggleBoolean({teleportation::tpa::enabled})
+		ToggleYaml("unlimited_adventures/AdventureCore/teleportation.yml, commands.tpa_enabled")
+		if {teleportation::tpa::enabled} is true:
+			execute console command "/lp group default permission set essentials.tpa true"
+		else:
+			execute console command "/lp group default permission unset essentials.tpa"
+	if {_feature} is "home":
+		set {teleportation::home::enabled} to ToggleBoolean({teleportation::home::enabled})
+		ToggleYaml("unlimited_adventures/AdventureCore/teleportation.yml, commands.home_enabled")
+		if {teleportation::home::enabled} is true:
+			execute console command "/lp group default permission set essentials.home true"
+			execute console command "/lp group default permission set essentials.sethome true"
+		else:
+			execute console command "/lp group default permission unset essentials.home"
+			execute console command "/lp group default permission unset essentials.sethome"
+	if {_feature} is "rtp":
+		set {teleportation::rtp::enabled} to ToggleBoolean({teleportation::rtp::enabled})
+		ToggleYaml("unlimited_adventures/AdventureCore/teleportation.yml, commands.rtp_enabled")
+		if {teleportation::rtp::enabled} is true:
+			execute console command "/lp group default permission set core.rtp true"
+		else:
+			execute console command "/lp group default permission unset core.rtp"
+	if {_feature} is "replant_crops":
+		set {game::replant_crops} to ToggleBoolean({game::replant_crops})
+		ToggleYaml("unlimited_adventures/AdventureCore/game.yml, replant_crops")
+	if {_feature} is "accessories_drop_on_death":
+		set {forge::config::accessories_drop_on_death} to ToggleBoolean({forge::config::accessories_drop_on_death})
+		ToggleYaml("unlimited_adventures/CustomItems/config.yml, accessories_drop_on_death")
+	if {_feature} is "sitting_enabled":
+		set {game::sitting_enabled} to ToggleBoolean({game::sitting_enabled})
+		ToggleYaml("unlimited_adventures/AdventureCore/game.yml, sitting_enabled")
+
+	
+		
+
+
+	#	Visuals
+
+	if {_feature} is "adventure_apparel":
+		set {backtools::config::enabled} to ToggleBoolean({backtools::config::enabled})
+		ToggleYaml("unlimited_adventures/AdventureApparel/config.yml, enabled")
+	if {_feature} is "detect_afk":
+		set {afk::config::detect_afk} to ToggleBoolean({afk::config::detect_afk})
+		ToggleYaml("unlimited_adventures/AdventureCore/afk.yml, settings.detect_afk")
+	if {_feature} is "print_day_count":
+		set {interface::print_day_count} to ToggleBoolean({interface::print_day_count})
+		ToggleYaml("unlimited_adventures/AdventureCore/interface.yml, print_day_count")
+	if {_feature} is "print_biome_name":
+		set {interface::print_biome_name} to ToggleBoolean({interface::print_biome_name})
+		ToggleYaml("unlimited_adventures/AdventureCore/interface.yml, print_biome_name")
+	if {_feature} is "top_screen_ui":
+		if difference between metadata value "dashboard::feature_toggle_cooldown" of {_player} and now < 0.5 second:
+			stop
+		set metadata value "dashboard::feature_toggle_cooldown" of {_player} to now
+		ToggleYaml("plugins/TAB/config.yml, bossbar.hidden-by-default")
+		wait 0.1 second
+		execute console command "tab reload"
+#		wait 0.6 second
+#		execute console command "skript reload placeholders"
+	if {_feature} is "sidebar":
+		if difference between metadata value "dashboard::feature_toggle_cooldown" of {_player} and now < 0.5 second:
+			stop
+		set metadata value "dashboard::feature_toggle_cooldown" of {_player} to now
+		ToggleYaml("plugins/TAB/config.yml, scoreboard.hidden-by-default")
+		wait 0.1 second
+		execute console command "tab reload"
+#		wait 0.6 second
+#		execute console command "skript reload placeholders"
+
+	if {_feature} is "player_prefix":
+		if difference between metadata value "dashboard::feature_toggle_cooldown" of {_player} and now < 0.5 second:
+			stop
+		set metadata value "dashboard::feature_toggle_cooldown" of {_player} to now
+		load yaml "plugins/TAB/groups.yml" as "yaml"
+		if yaml value "Default.tabprefix" from "yaml" is "&7":
+			execute console command "/lp group default meta setprefix 0 ""&f&7"""
+			set yaml value "Default.tabprefix" from "yaml" to "&f &7"
+			set yaml value "Default.tagprefix" from "yaml" to "&f &7"
+			set {interface::display_player_prefix} to true
+			save yaml "yaml"
+			wait 0.1 second
+			execute console command "tab reload"
+#			wait 0.2 second
+#			execute console command "skript reload placeholders"
+		else:
+			execute console command "/lp group default meta setprefix 0 ""&7"""
+			set yaml value "Default.tabprefix" from "yaml" to "&7"
+			set yaml value "Default.tagprefix" from "yaml" to "&7"
+			set {interface::display_player_prefix} to false
+			save yaml "yaml"
+			wait 0.1 second
+			execute console command "tab reload"
+#			wait 0.2 second
+#			execute console command "skript reload placeholders"
+
+	if {_feature} is "armor_glint":
+		set {particles::enabled::armor_glint} to ToggleBoolean({particles::enabled::armor_glint})
+		ToggleYaml("unlimited_adventures/AdventureCore/particles.yml, enabled.armor_glint")
+
+	if {_feature} is "cave_dust":
+		set {particles::enabled::cave_dust} to ToggleBoolean({particles::enabled::cave_dust})
+		ToggleYaml("unlimited_adventures/AdventureCore/particles.yml, enabled.cave_dust")
+
+	if {_feature} is "animate_normal_blocks" or "animate_custom_blocks" or "animate_tile_blocks":
+		set {game::%{_feature}%} to ToggleBoolean({game::%{_feature}%})
+		ToggleYaml("unlimited_adventures/AdventureCore/game.yml, %{_feature}%")
+
+
+	#	Sounds
+
+	if {_feature} is "ambients_enabled":
+		set {-ambients::enabled} to ToggleBoolean({-ambients::enabled})
+		ToggleYaml("unlimited_adventures/Sounds/config.yml, enabled")
+	if {_feature} is "chat_sound":
+		set {-chat::chat_sound} to ToggleBoolean({-chat::chat_sound})
+		ToggleYaml("unlimited_adventures/Chat/config.yml, chat.chat_sound")
+	if {_feature} is "command_argument_sound":
+		set {-chat::command_argument_sound} to ToggleBoolean({-chat::command_argument_sound})
+		ToggleYaml("unlimited_adventures/Chat/config.yml, chat.command_argument_sound")
+	if {_feature} is "hotbar_slot_sound":
+		set {sounds::hotbar_slot_sound} to ToggleBoolean({sounds::hotbar_slot_sound})
+		ToggleYaml("unlimited_adventures/Sounds/config.yml, hotbar_slot_sound")
+	if {_feature} is "tool_draw_sound":
+		set {sounds::tool_draw_sound} to ToggleBoolean({sounds::tool_draw_sound})
+		ToggleYaml("unlimited_adventures/Sounds/config.yml, tool_draw_sound")
+	if {_feature} is "inventory_sounds":
+		set {sounds::inventory_sounds} to ToggleBoolean({sounds::inventory_sounds})
+		ToggleYaml("unlimited_adventures/Sounds/config.yml, inventory_sounds")
+	if {_feature} is "block_interact":
+		set {sounds::block_interact} to ToggleBoolean({sounds::block_interact})
+		ToggleYaml("unlimited_adventures/Sounds/config.yml, block_interact")
+	if {_feature} is "item_craft":
+		set {sounds::item_craft} to ToggleBoolean({sounds::item_craft})
+		ToggleYaml("unlimited_adventures/Sounds/config.yml, item_craft")
+	if {_feature} is "item_drop":
+		set {sounds::item_drop} to ToggleBoolean({sounds::item_drop})
+		ToggleYaml("unlimited_adventures/Sounds/config.yml, item_drop")
+
+#	play sound "minecraft:ui.button.click" with volume 0.5 and pitch 2 to {_player}
+	play sound "custom.ui.switch" with volume 0.7 and pitch random number between 0.9 and 1.1 to {_player}
+	DashboardMenu({_player}, metadata value "dashboard:page" of {_player})
+
+
+function ChangeString(string: string, player: player):
+#	send "%{_feature}%" to all players
+	if {_string} is "edit_server_name":
+		close the inventory of {_player}
+		wait 1 second
+		send " " to {_player}
+		wait 0.5 second
+		set metadata value "configuration_wizard:server_name:date" of {_player} to now
+		play sound "minecraft:entity.item.pickup" with volume 0.5 and pitch 1.7 to {_player}
+		
+		set {_cmd} to text component from "&eYou are editing your server's name, &9&lplease click here"
+		add click event to suggest command "%{interface::server_name::raw}%" to {_cmd}
+		send component {_cmd} to {_player}
+
+		loop 10 times:
+			if difference between metadata value "configuration_wizard:server_name:date" of {_player} and now < 20 seconds:
+				send action bar "&fType in new server name" to {_player}
+			wait 2 seconds
+
+	if {_string} is "edit_server_name_color_1":
+		close the inventory of {_player}
+		wait 1 second
+		send " " to {_player}
+		wait 0.5 second
+		set metadata value "configuration_wizard:server_name_color_1:date" of {_player} to now
+		send "You are editing the base color, please type new color on chat:" to {_player}
+		play sound "minecraft:entity.item.pickup" with volume 0.5 and pitch 1.7 to {_player}
+
+		set {_cmd} to text component from "&eYou are editing your server's name, base color &9&lplease click here"
+		add click event to suggest command "%{colors::server_name}%" to {_cmd}
+		send component {_cmd} to {_player}
+
+		loop 10 times:
+			if difference between metadata value "configuration_wizard:server_name_color_1:date" of {_player} and now < 20 seconds:
+				send action bar "&fType in the new base color" to {_player}
+			wait 2 seconds
+
+	if {_string} is "edit_server_name_color_2":
+		close the inventory of {_player}
+		wait 1 second
+		send " " to {_player}
+		wait 0.5 second
+		set metadata value "configuration_wizard:server_name_color_2:date" of {_player} to now
+		send "You are editing the highlight color, please type new color on chat:" to {_player}
+		play sound "minecraft:entity.item.pickup" with volume 0.5 and pitch 1.7 to {_player}
+
+		set {_cmd} to text component from "&eYou are editing your server's name, higlight color &9&lplease click here"
+		add click event to suggest command "%{colors::server_name_1}%" to {_cmd}
+		send component {_cmd} to {_player}
+
+		loop 10 times:
+			if difference between metadata value "configuration_wizard:server_name_color_2:date" of {_player} and now < 20 seconds:
+				send action bar "&fType in the new highlight color" to {_player}
+			wait 2 seconds
+
+	if {_string} is "edit_server_name_color_3":
+		close the inventory of {_player}
+		wait 1 second
+		send " " to {_player}
+		wait 0.5 second
+		set metadata value "configuration_wizard:server_name_color_3:date" of {_player} to now
+		send "You are editing the second highlight color, please type new color on chat:" to {_player}
+		play sound "minecraft:entity.item.pickup" with volume 0.5 and pitch 1.7 to {_player}
+
+		set {_cmd} to text component from "&eYou are editing your server's name, second higlight color &9&lplease click here"
+		add click event to suggest command "%{colors::server_name_2}%" to {_cmd}
+		send component {_cmd} to {_player}
+
+		loop 10 times:
+			if difference between metadata value "configuration_wizard:server_name_color_3:date" of {_player} and now < 20 seconds:
+				send action bar "&fType in the new second highlight color" to {_player}
+			wait 2 seconds
+
+
+
+on chat:
+	if difference between metadata value "configuration_wizard:server_name:date" of player and now < 20 seconds:
+		delete metadata value "configuration_wizard:server_name:date" of player
+		SetYamlText("unlimited_adventures/AdventureCore/interface.yml, server_name", message)
+		set {interface::server_name} to coloured message
+		set {interface::server_name::raw} to message
+		send "&fYou have set your server name to: %{interface::server_name}%" to player
+		play sound "minecraft:ui.cartography_table.take_result" with volume 0.5 and pitch 1 to player
+		UpdateServerNameAnimation()
+		cancel event
+	if difference between metadata value "configuration_wizard:server_name_color_1:date" of player and now < 20 seconds:
+		delete metadata value "configuration_wizard:server_name_color_1:date" of player
+		SetYamlText("unlimited_adventures/AdventureCore/interface.yml, server_name_color_1", message)
+		set {colors::server_name} to coloured message
+		set {_color} to colored "<%{colors::server_name}%>%{colors::server_name}%"
+		send "&fYou have set base color to: %{_color}%" to player
+		play sound "minecraft:ui.cartography_table.take_result" with volume 0.5 and pitch 1 to player
+		UpdateServerNameAnimation()
+		cancel event
+	if difference between metadata value "configuration_wizard:server_name_color_2:date" of player and now < 20 seconds:
+		delete metadata value "configuration_wizard:server_name_color_2:date" of player
+		SetYamlText("unlimited_adventures/AdventureCore/interface.yml, server_name_color_2", message)
+		set {colors::server_name_1} to coloured message
+		set {_color} to colored "<%{colors::server_name_1}%>%{colors::server_name_1}%"
+		send "&fYou have set second higlight color to: %{_color}%" to player
+		play sound "minecraft:ui.cartography_table.take_result" with volume 0.5 and pitch 1 to player
+		UpdateServerNameAnimation()
+		cancel event
+	if difference between metadata value "configuration_wizard:server_name_color_3:date" of player and now < 20 seconds:
+		delete metadata value "configuration_wizard:server_name_color_3:date" of player
+		SetYamlText("unlimited_adventures/AdventureCore/interface.yml, server_name_color_3", message)
+		set {colors::server_name_2} to coloured message
+		set {_color} to colored "<%{colors::server_name_2}%>%{colors::server_name_2}%"
+		send "&fYou have set higlight color to: %{_color}%" to player
+		play sound "minecraft:ui.cartography_table.take_result" with volume 0.5 and pitch 1 to player
+		UpdateServerNameAnimation()
+		cancel event
+
+
+
+command /animationtest:
+	permission: admin
+	trigger:
+		AnimationTest()
+
+
+
+function AnimationTest() :: objects:
+	
+	set {_server_name} to unformatted {interface::server_name}
+	set {_c_1} to {colors::server_name}#"<#6dd444>"
+	set {_c_2} to {colors::server_name_1}#"<#f0ffd1>"
+	set {_c_3} to {colors::server_name_2}#"<#b1f073>"
+	set {_text} to "%{_c_1}%&l   %{_server_name}%"
+
+	set {_offset} to length of {_c_1}+3
+
+	set {_length} to length of {_text}-{_offset}
+	loop {_length} times:
+		set {_text::*} to {_text} split at ""
+		if {_text::%loop-number+{_offset}+1%} is set:
+			set {_text::%loop-number+{_offset}+1%} to "%{_c_2}%&l%{_text::%loop-number+{_offset}+1%}%%{_c_1}%&l"
+		if {_text::%loop-number+{_offset}+2%} is set:
+			set {_text::%loop-number+{_offset}+2%} to "%{_c_3}%&l%{_text::%loop-number+{_offset}+2%}%%{_c_1}%&l"
+		if {_text::%loop-number+{_offset}+3%} is set:
+			set {_text::%loop-number+{_offset}+3%} to "%{_c_2}%&l%{_text::%loop-number+{_offset}+3%}%%{_c_1}%&l"
+		set {_final_text} to join {_text::*}
+		#send {_final_text} to all players
+		#send action bar {_final_text} to all players
+		add {_final_text} to {_values::*}
+		#wait 2 tick
+	return {_values::*}
+
+
+
+function UpdateServerNameAnimation():
+	loop 30 times:
+		add "%%color_server_name%%&l%uncolored {interface::server_name}%" to {_values::*}
+
+	loop AnimationTest():
+		add loop-value to {_values::*}
+
+	
+
+
+	load yaml "plugins/TAB/animations.yml" as "animations"
+	set yaml list "ServerName.texts" from "animations" to {_values::*}
+	save yaml "animations"
+
+	wait 0.5 second
+	execute console command "tab reload"
+	wait 0.5 second
+	execute console command "skript reload placeholders"
+
+
+
+function IncreaseFeature(feature: string, player: player):
+	
+	if {_feature} is "world_border_size":
+		if {world_border::config::size} is 30000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 30000)
+			set {world_border::config::size} to 50000
+		if {world_border::config::size} is 20000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 30000)
+			set {world_border::config::size} to 30000
+		if {world_border::config::size} is 15000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 20000)
+			set {world_border::config::size} to 20000
+		if {world_border::config::size} is 10000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 15000)
+			set {world_border::config::size} to 15000
+		if {world_border::config::size} is 5000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 10000)
+			set {world_border::config::size} to 10000
+		if {world_border::config::size} is 2500:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 5000)
+			set {world_border::config::size} to 5000
+		if {world_border::config::size} is 1000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 2500)
+			set {world_border::config::size} to 2500
+		if gcc() is not between bcc()-1 and bcc()+1:
+			if gcc() is not 28 or 29 or 30 or 31 or 0 or 1:
+				if {world_border::config::size} > 2500:
+					set {world_border::config::size} to 2500
+					SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 2500)
+		set {_world} to world border of "world"
+		set {_nether} to world border of "world_nether"
+		set {_end} to world border of "world_the_end"
+		set world border center of {_world} to location(0, 0, 0)
+		set world border center of {_nether} to location(0, 0, 0)
+		set world border center of {_end} to location(0, 0, 0)
+		set world border radius of {_world} to {world_border::config::size}
+		set world border radius of {_nether} to {world_border::config::size}
+		set world border radius of {_end} to {world_border::config::size}
+#		expand world border of world "world" to {world_border::config::size} in 2 seconds
+#		expand world border of world "world_nether" to round({world_border::config::size}/8) in 2 seconds
+#		expand world border of world "world_the_end" to {world_border::config::size} in 2 seconds
+#		set border center of world border of world "world" to location(0,0,0, world "world")
+#		set border center of world border of world "world_nether" to location(0,0,0, world "world_nether")
+#		set border center of world border of world "world_the_end" to location(0,0,0, world "world_the_end")
+#		expand world border of world "world" to {world_border::config::size} in 2 seconds
+#		expand world border of world "world_nether" to round({world_border::config::size}/8) in 2 seconds
+#		expand world border of world "world_the_end" to {world_border::config::size} in 2 seconds
+
+
+	if {_feature} is "random_teleport_range":
+		if {rtp::config::range} = {world_border::config::size}:
+			play sound "minecraft:block.note_block.didgeridoo" with volume 0.5 and pitch 1 to {_player}
+			stop
+		
+		if {rtp::config::range} is 30000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 50000)
+			set {rtp::config::range} to 50000
+		if {rtp::config::range} is 20000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 30000)
+			set {rtp::config::range} to 30000
+		if {rtp::config::range} is 15000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 20000)
+			set {rtp::config::range} to 20000
+		if {rtp::config::range} is 10000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 15000)
+			set {rtp::config::range} to 15000
+		if {rtp::config::range} is 5000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 10000)
+			set {rtp::config::range} to 10000
+		if {rtp::config::range} is 2500:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 5000)
+			set {rtp::config::range} to 5000
+		if {rtp::config::range} is 1000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 2500)
+			set {rtp::config::range} to 2500
+		if gcc() is not between bcc()-1 and bcc()+1:
+			if gcc() is not 28 or 29 or 30 or 31 or 0 or 1:
+				if {rtp::config::range} > 2500:
+					set {rtp::config::range} to 2500
+					SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 2500)
+	
+	DashboardMenu({_player}, metadata value "dashboard:page" of {_player})
+#	play sound "minecraft:entity.item.pickup" with volume 0.5 and pitch 2 to {_player}
+	play sound "custom.ui.slider" with volume 0.5 and pitch random number between 1.2 and 1.4 to {_player}
+
+function DecreaseFeature(feature: string, player: player):
+	
+	if {_feature} is "world_border_size":
+		if {world_border::config::size} is 2500:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 1000)
+			set {world_border::config::size} to 1000
+		if {world_border::config::size} is 5000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 2500)
+			set {world_border::config::size} to 2500
+		if {world_border::config::size} is 10000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 5000)
+			set {world_border::config::size} to 5000
+		if {world_border::config::size} is 15000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 10000)
+			set {world_border::config::size} to 10000
+		if {world_border::config::size} is 20000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 15000)
+			set {world_border::config::size} to 15000
+		if {world_border::config::size} is 30000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 20000)
+			set {world_border::config::size} to 20000
+		if {world_border::config::size} is 50000:
+			SetYaml("unlimited_adventures/AdventureCore/world_border.yml, world_border_size", 30000)
+			set {world_border::config::size} to 30000
+		if gcc() is not between bcc()-1 and bcc()+1:
+			if gcc() is not 28 or 29 or 30 or 31 or 0 or 1:
+				if {world_border::config::size} > 2500:
+					set {world_border::config::size} to 2500
+#		set border center of world border of world "world" to location(0,0,0, world "world")
+#		set border center of world border of world "world_nether" to location(0,0,0, world "world_nether")
+#		set border center of world border of world "world_the_end" to location(0,0,0, world "world_the_end")
+		set {_world} to world border of "world"
+		set {_nether} to world border of "world_nether"
+		set {_end} to world border of "world_the_end"
+		set world border center of {_world} to location(0, 0, 0)
+		set world border center of {_nether} to location(0, 0, 0)
+		set world border center of {_end} to location(0, 0, 0)
+		set world border radius of {_world} to {world_border::config::size}
+		set world border radius of {_nether} to {world_border::config::size}
+		set world border radius of {_end} to {world_border::config::size}
+#		expand world border of world "world" to {world_border::config::size} in 2 seconds
+#		expand world border of world "world_nether" to round({world_border::config::size}/8) in 2 seconds
+#		expand world border of world "world_the_end" to {world_border::config::size} in 2 seconds
+
+
+	if {_feature} is "random_teleport_range":
+		if {rtp::config::range} is 2500:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 1000)
+			set {rtp::config::range} to 1000
+		if {rtp::config::range} is 5000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 2500)
+			set {rtp::config::range} to 2500
+		if {rtp::config::range} is 10000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 5000)
+			set {rtp::config::range} to 5000
+		if {rtp::config::range} is 15000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 10000)
+			set {rtp::config::range} to 10000
+		if {rtp::config::range} is 20000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 15000)
+			set {rtp::config::range} to 15000
+		if {rtp::config::range} is 30000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 20000)
+			set {rtp::config::range} to 20000
+		if {rtp::config::range} is 50000:
+			SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 30000)
+			set {rtp::config::range} to 30000
+		if gcc() is not between bcc()-1 and bcc()+1:
+			if gcc() is not 28 or 29 or 30 or 31 or 0 or 1:
+				if {rtp::config::range} > 2500:
+					set {rtp::config::range} to 2500
+					SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", 2500)
+
+	if {rtp::config::range} > {world_border::config::size}:
+		SetYaml("unlimited_adventures/AdventureCore/teleportation.yml, random_teleport.range", {world_border::config::size})
+		set {rtp::config::range} to {world_border::config::size}
+	
+	DashboardMenu({_player}, metadata value "dashboard:page" of {_player})
+#	play sound "minecraft:entity.item.pickup" with volume 0.5 and pitch 1.3 to {_player}
+	play sound "custom.ui.slider" with volume 0.5 and pitch random number between 0.8 and 1 to {_player}
+
+
+
+function BlockPlaceAnimationLore() :: string:
+	add "&7A pop animation when placing blocks." to {_string::*}
+	add "&7Available settings:" to {_string::*}
+	add "&7• All blocks" to {_string::*}
+	add "&7• Tile blocks &7(e.g. chests, furnaces)" to {_string::*}
+	add "&7• Custom Blocks &7(e.g. Workshop)" to {_string::*}
+	add "&7• None" to {_string::*}
+	add name of BooleanItem({game::block_place_animation}) to {_string::*}
+	set {_string} to join {_string::*}
+
+
+function ToggleBooleanYaml(yaml: string) :: boolean:
+	set {_yaml::*} to {_yaml} split at ", "
+	load yaml {_yaml::1} as "yaml"
+	set {_value} to yaml value {_yaml::2} from "yaml"
+	return {_value}
+
+
+function ToggleYaml(yaml: string):
+	set {_yaml::*} to {_yaml} split at ", "
+	load yaml {_yaml::1} as "yaml"
+	set yaml value {_yaml::2} from "yaml" to ToggleBoolean(yaml value {_yaml::2} from "yaml")
+	save yaml "yaml"
+
+function ToggleTripleChoiceYaml(yaml: string):
+	set {_yaml::*} to {_yaml} split at ", "
+	load yaml {_yaml::1} as "yaml"
+	set yaml value {_yaml::2} from "yaml" to ToggleTripleChoice(yaml value {_yaml::2} from "yaml")
+	save yaml "yaml"
+
+
+function SetYaml(yaml: string, value: integer):
+	set {_yaml::*} to {_yaml} split at ", "
+	load yaml {_yaml::1} as "yaml"
+	set yaml value {_yaml::2} from "yaml" to {_value}
+	save yaml "yaml"
+
+function SetYamlText(yaml: string, value: string):
+	set {_yaml::*} to {_yaml} split at ", "
+	load yaml {_yaml::1} as "yaml"
+	set yaml value {_yaml::2} from "yaml" to {_value}
+	save yaml "yaml"
+
+function MapFileWeight(blocks: integer) :: string:
+	set {_size::1000} to "7 GB"
+	set {_size::2500} to "8 GB"
+	set {_size::5000} to "9 GB"
+	set {_size::10000} to "12 GB"
+	set {_size::15000} to "17 GB"
+	set {_size::20000} to "25 GB"
+	set {_size::25000} to "35 GB"
+	set {_size::30000} to "50 GB"
+	set {_size::50000} to "130 GB"
+	return "%{_size::%{_blocks}%}%"
+
+
+
+
+function ToggleBoolean(value: boolean) :: boolean:
+	if {_value} is true:
+		return false
+	else:
+		return true
+
+function ToggleTripleChoice(value: integer) :: integer:
+	if {_value} is 1:
+		return 2
+	if {_value} is 2:
+		return 3
+	if {_value} is not 1 or 2:
+		return 1
+	
+	
+
+function PlayerPrefixBooleanItem(name: string = "none") :: item:
+	if {interface::display_player_prefix} is set:
+		set {_value} to {interface::display_player_prefix}
+	else:
+		load yaml "plugins/TAB/groups.yml" as "yaml"
+		if yaml value "Default.tabprefix" from "yaml" is "&7":
+			set {_value} to false
+		else:
+			set {_value} to true
+		save yaml "yaml"
+	if {_value} is true:
+		set {_item} to stick with custom model data 161 named "&aEnabled"
+	else:
+		set {_item} to stick with custom model data 162 named "&cDisabled"
+	set {_nbt} to custom nbt of {_item}
+	set string tag "menu_id" of {_nbt} to {_name}
+	return {_item}
+
+
+function YamlBooleanItem(yaml: string, name: string = "none", reversed: boolean = false) :: item:
+	set {_yaml::*} to {_yaml} split at ", "
+	load yaml {_yaml::1} as "yaml"
+	set {_value} to yaml value {_yaml::2} from "yaml"
+	if {_value} is true:
+		set {_item} to stick with custom model data 161 named "&aEnabled"
+	else:
+		set {_item} to stick with custom model data 162 named "&cDisabled"
+	if {_reversed} is true:
+		if {_value} is true:
+			set {_item} to stick with custom model data 162 named "&cDisabled"
+		else:
+			set {_item} to stick with custom model data 161 named "&aEnabled"
+	set {_nbt} to custom nbt of {_item}
+	set string tag "menu_id" of {_nbt} to {_name}
+	return {_item}
+
+function BooleanItem(value: boolean, name: string = "none") :: item:
+	if {_value} is true:
+		set {_item} to stick with custom model data 161 named "&aEnabled"
+	else:
+		set {_item} to stick with custom model data 162 named "&cDisabled"
+	set {_nbt} to custom nbt of {_item}
+	set string tag "menu_id" of {_nbt} to {_name}
+	return {_item}
+
+function TripleChoiceItem(value: integer, name: string = "none") :: item:
+	if {_value} is 1:
+		set {_item} to stick with custom model data 161 named "&aEnabled"
+	if {_value} is 2:
+		set {_item} to stick with custom model data 164 named "&aEnabled"
+	if {_value} is not 1 or 2:
+		set {_item} to stick with custom model data 162 named "&cDisabled"
+	set {_nbt} to custom nbt of {_item}
+	set string tag "menu_id" of {_nbt} to {_name}
+	return {_item}
+
+
+function StringEditItem(value: string, name: string = "none") :: item:
+	set {_item} to stick with custom model data 163 named "&aClick to edit text"
+	set {_nbt} to custom nbt of {_item}
+	set string tag "menu_id" of {_nbt} to {_name}
+	return {_item}
+
+
+
+function Pregeneration(player: player):
+	if difference between metadata value "pregeneration_cooldown" of {_player} and now < 1 seconds:
+		stop
+	set metadata value "pregeneration_cooldown" of {_player} to now
+	if placeholder "chunky_task_pregen_running_world" is "true":
+		set metadata value "pregeneration:active" of block at location(0,0,0,"world") to false
+#		execute console command "/chunky worldborder world"
+		execute console command "/chunky pause"
+		wait 3 ticks
+		play sound "custom.ui.stop" with volume 0.85 and pitch 1 to {_player}
+		loop 3 times:
+			if {_player}'s current inventory is metadata value "configuration_wizard_menu" of {_player}:
+				DashboardMenu({_player}, metadata value "dashboard:page" of {_player})
+				wait 1 seconds
+		stop
+	if placeholder "chunky_task_pregen_running_world" is "false":
+		set metadata value "pregeneration:active" of block at location(0,0,0,"world") to true
+		execute console command "/chunky worldborder world"
+		execute console command "/chunky start world"
+		execute console command "/chunky continue"
+		play sound "custom.ui.start" with volume 0.85 and pitch 1 to {_player}
+		loop 20 times:
+			if {_player}'s current inventory is metadata value "configuration_wizard_menu" of {_player}:
+				if metadata value "dashboard:page" of {_player} is 2:
+					DashboardMenu({_player}, metadata value "dashboard:page" of {_player})
+					wait 1 seconds
+		stop
+
+
+
+
+
+
+
+
+on inventory click:
+	if player's current inventory is (metadata value "configuration_wizard_menu" of player):
+		cancel event
+
+		if event-inventory is inventory of player:
+			stop
+
+		if index of event-slot is 45:
+			if metadata value "dashboard:page" of player > 1:
+				DashboardMenu(player, metadata value "dashboard:page" of player - 1)
+			stop
+
+		if index of event-slot is 53:
+			if metadata value "dashboard:page" of player < 5:
+				if metadata value "dashboard:page" of player is 1:
+					if LicenseAuthorized() is true:
+						DashboardMenu(player, 2)
+						stop
+				else:
+					DashboardMenu(player, metadata value "dashboard:page" of player + 1)
+		
+
+		if metadata value "dashboard:page" of player is 1:
+			if index of event-slot is between 45 and 54:
+				if LicenseAuthorized() is true:
+					DashboardMenu(player, metadata value "dashboard:page" of player + 1)
+		
+		if metadata value "dashboard:page" of player is 2:
+			if LicenseAuthorized() is true:
+				if index of event-slot is 53:
+					DashboardMenu(player, 2)
+					stop
+
+
+		if metadata value "dashboard:page" of player is 1:
+			if LicenseAuthorized() is false:
+				if index of event-slot is between 18 and 45:
+					InputLicenseCodeOnChat(player)
+
+			if sender doesn't have permission "admin":
+				stop
+
+			#	Top button: New Update, Installation Problems
+			if index of event-slot is between 0 and 8:
+				if LicenseAuthorized() is true:
+					if UpdateAvailable() is true:
+						if {dependency_check::log::*} is not set:
+							close the inventory of player
+							send "" to player
+							send component mini message from "<click:open_url:https://builtbybit.com/resources/unlimited-adventures-survival-setup.27917/updates><bold><blue>Click to check the latest update!"
+							send "" to player
+				
+				if LicenseAuthorized() is true:
+					if {dependency_check::log::*} is set:
+						close the inventory of player
+						send "" to player
+						send component mini message from "<click:open_url:https://docs.endernerds.com/installation><bold><blue>Click to open the Installation Guide!"
+						send "" to player
+
+			#	Botton button: Performance Problems
+			if index of event-slot is between 9 and 17:
+				if PerformanceCheck() is false:
+					close the inventory of player
+					send "" to player
+					send component mini message from "<click:open_url:https://docs.endernerds.com/performance><bold><blue>Click to open the Performance Guide!"
+					send "" to player
+
+		if sender doesn't have permission "admin":
+			stop
+
+		if metadata value "dashboard:page" of player >= 2:
+#			send "%CheckItemId(event-item)%" to player
+			if CheckItemId(event-item) is set:
+				if gcc() is not between bcc()-1 and bcc()+1:
+					if gcc() is not 28 or 29 or 30 or 31 or 0 or 1:
+						chance of 70%:
+							stop
+				ToggleFeature(CheckItemId(event-item), player)
+				ChangeString(CheckItemId(event-item), player)
+
+
+
+		if metadata value "dashboard:page" of player is 2:
+			if index of event-slot is 10 or 11 or 12 or 13:
+				DecreaseFeature("world_border_size", player)
+			if index of event-slot is 14 or 15 or 16 or 17:
+				IncreaseFeature("world_border_size", player)
+			if index of event-slot is 19 or 20 or 21 or 22:
+				DecreaseFeature("random_teleport_range", player)
+			if index of event-slot is 23 or 24 or 25 or 26:
+				IncreaseFeature("random_teleport_range", player)
+
+
+			if index of event-slot is 27:
+				Pregeneration(player)
+
+			
+
+
+		
+
+
+
+
+function CheckItemId(item: item) :: string:
+	set {_nbt} to custom nbt of {_item}
+	return string tag "menu_id" of {_nbt}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function resetFullTempData():
+	if {47r3y1} is not {854jg9}:
+		set {47r3y1} to {854jg9}
+	if {7348fs} is not {47r3y1}:
+		set {7348fs} to {47r3y1}
